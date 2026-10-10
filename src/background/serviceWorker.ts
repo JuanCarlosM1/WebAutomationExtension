@@ -88,21 +88,34 @@ class ExtensionController {
         });
       }
 
-      // 2. Alarms (Agendamento por intervalo de tempo)
+      // 2. Alarms (Agendamento por intervalo de tempo e datas específicas)
       if (chrome.alarms) {
         await chrome.alarms.clearAll();
         for (const auto of automations) {
           const startNode = auto.nodes.find((n) => n.type === 'start');
           if (!startNode) continue;
           const triggers = getActiveTriggers(startNode.data as any);
-          const scheduleTriggers = triggers.filter((t) => t.type === 'schedule');
-
-          scheduleTriggers.forEach((trigger, idx) => {
-            const interval = Number(trigger.intervalMinutes) || 15;
-            chrome.alarms.create(`alarm_flow_${auto.metadata.id}_${idx}`, {
-              periodInMinutes: Math.max(1, interval),
-            });
-            console.log(`[WebAutomations] Alarme registrado para "${auto.metadata.name}" a cada ${interval} min.`);
+          
+          triggers.forEach((trigger, idx) => {
+            if (trigger.type === 'schedule') {
+              let minutes = trigger.intervalMinutes || 15;
+              if (trigger.intervalValue && trigger.intervalUnit) {
+                if (trigger.intervalUnit === 'minutes') minutes = trigger.intervalValue;
+                else if (trigger.intervalUnit === 'hours') minutes = trigger.intervalValue * 60;
+                else if (trigger.intervalUnit === 'seconds') minutes = Math.max(0.1, trigger.intervalValue / 60);
+                else if (trigger.intervalUnit === 'ms') minutes = Math.max(0.1, trigger.intervalValue / 60000);
+              }
+              chrome.alarms.create(`alarm_flow_${auto.metadata.id}_${idx}`, {
+                periodInMinutes: Math.max(0.1, minutes),
+              });
+              console.log(`[WebAutomations] Alarme de intervalo registrado para "${auto.metadata.name}" a cada ${minutes} min.`);
+            } else if (trigger.type === 'date_schedule') {
+              // Verifica a cada 1 minuto se corresponde às regras de datas/horário
+              chrome.alarms.create(`date_alarm_flow_${auto.metadata.id}_${idx}`, {
+                periodInMinutes: 1,
+              });
+              console.log(`[WebAutomations] Alarme por data registrado para "${auto.metadata.name}".`);
+            }
           });
         }
       }
@@ -149,7 +162,7 @@ class ExtensionController {
       }
     });
 
-    // Monitorar alarmes periódicos (schedule / intervalo de tempo)
+    // Monitorar alarmes periódicos (schedule / date_schedule)
     chrome.alarms?.onAlarm.addListener(async (alarm) => {
       if (alarm.name.startsWith('alarm_flow_')) {
         const parts = alarm.name.replace('alarm_flow_', '').split('_');
@@ -158,6 +171,50 @@ class ExtensionController {
         const targetAuto = automations.find((a) => a.metadata.id === flowId || a.metadata.id === alarm.name.replace('alarm_flow_', ''));
         if (targetAuto) {
           console.log(`[WebAutomations] Disparando fluxo por intervalo agendado: ${targetAuto.metadata.name}`);
+          this.executeAutomation(targetAuto);
+        }
+      } else if (alarm.name.startsWith('date_alarm_flow_')) {
+        const parts = alarm.name.replace('date_alarm_flow_', '').split('_');
+        const trigIdx = Number(parts[parts.length - 1]);
+        const flowId = parts.slice(0, -1).join('_');
+        const automations = await this.getSavedAutomations();
+        const targetAuto = automations.find((a) => a.metadata.id === flowId);
+        if (!targetAuto) return;
+
+        const startNode = targetAuto.nodes.find((n) => n.type === 'start');
+        if (!startNode) return;
+        const triggers = getActiveTriggers(startNode.data as any);
+        const trigger = triggers[trigIdx] || triggers.find((t) => t.type === 'date_schedule');
+        if (!trigger || trigger.type !== 'date_schedule' || !trigger.dateSchedule) return;
+
+        const ds = trigger.dateSchedule;
+        const now = new Date();
+        const currentHours = String(now.getHours()).padStart(2, '0');
+        const currentMinutes = String(now.getMinutes()).padStart(2, '0');
+        const currentTime = `${currentHours}:${currentMinutes}`;
+
+        // Se tem horário configurado, verificar correspondência
+        if (ds.time && ds.time !== currentTime) {
+          return;
+        }
+
+        let isDateMatched = false;
+        if (ds.mode === 'weekdays') {
+          const currentDayOfWeek = now.getDay(); // 0 a 6
+          isDateMatched = Array.isArray(ds.weekdays) && ds.weekdays.includes(currentDayOfWeek);
+        } else if (ds.mode === 'month_days') {
+          const currentDayOfMonth = now.getDate(); // 1 a 31
+          isDateMatched = Array.isArray(ds.monthDays) && ds.monthDays.includes(currentDayOfMonth);
+        } else if (ds.mode === 'full_dates') {
+          const y = now.getFullYear();
+          const m = String(now.getMonth() + 1).padStart(2, '0');
+          const d = String(now.getDate()).padStart(2, '0');
+          const todayDateStr = `${y}-${m}-${d}`;
+          isDateMatched = Array.isArray(ds.fullDates) && ds.fullDates.includes(todayDateStr);
+        }
+
+        if (isDateMatched) {
+          console.log(`[WebAutomations] Disparando fluxo por data agendada (${ds.mode}): ${targetAuto.metadata.name}`);
           this.executeAutomation(targetAuto);
         }
       }

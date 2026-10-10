@@ -10,6 +10,9 @@
 
 import { AnyAutomationNode, AutomationEdge, WebAutomationGraph } from '../../../../BibliotecaDeDev/src/types/schema';
 import { BLOCK_CATALOG } from './blockCatalog';
+import { CodeEditorComponent } from './codeEditorComponent';
+import { CanvasPathUtils } from './canvasPathUtils';
+import { CanvasMinimap } from './canvasMinimap';
 
 export interface CanvasManagerCallbacks {
   getGraph: () => WebAutomationGraph;
@@ -18,6 +21,7 @@ export interface CanvasManagerCallbacks {
   onNodeSelect: (nodeId: string | undefined) => void;
   showToast: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void;
   showModalDialog: (title: string, message: string, icon?: string) => void;
+  onOpenNodeModal?: (nodeId: string) => void;
 }
 
 export class CanvasManager {
@@ -27,15 +31,64 @@ export class CanvasManager {
   private panStart = { x: 0, y: 0 };
 
   private isDraggingNode = false;
+  private selectedEdgeId?: string;
   private connectingFromNodeId?: string;
   private connectingHandle?: string;
   private isCtrlConnectionMode: boolean = false;
   private activeMoveHandler?: (e: MouseEvent) => void;
   private activeUpHandler?: (e: MouseEvent) => void;
+  private minimap: CanvasMinimap;
 
   constructor(private callbacks: CanvasManagerCallbacks) {
+    this.minimap = new CanvasMinimap({
+      getNodes: () => this.callbacks.getGraph().nodes,
+      getEdges: () => this.callbacks.getGraph().edges,
+      getSelectedNodeId: () => this.callbacks.getSelectedNodeId(),
+      getZoom: () => this.zoom,
+      getPanOffset: () => ({ ...this.panOffset }),
+      onNavigate: (newPanX, newPanY) => {
+        this.panOffset.x = newPanX;
+        this.panOffset.y = newPanY;
+        this.updateCanvasTransform();
+      },
+    });
+
     this.initCanvasEvents();
-    this.initMinimapEvents();
+  }
+
+  public getSelectedEdgeId(): string | undefined {
+    return this.selectedEdgeId;
+  }
+
+  public setSelectedEdgeId(edgeId: string | undefined): void {
+    this.selectedEdgeId = edgeId;
+    this.highlightSelectedEdge();
+  }
+
+  public deleteEdge(edgeId: string): void {
+    const graph = this.callbacks.getGraph();
+    const edgeExists = graph.edges.some((ed) => ed.id === edgeId);
+    if (!edgeExists) return;
+
+    graph.edges = graph.edges.filter((ed) => ed.id !== edgeId);
+    if (this.selectedEdgeId === edgeId) {
+      this.selectedEdgeId = undefined;
+    }
+    this.renderEdges();
+    this.renderMinimap();
+    this.callbacks.showToast('Ligação excluída!', 'info');
+  }
+
+  private highlightSelectedEdge(): void {
+    const paths = document.querySelectorAll('.edges-svg-layer path');
+    paths.forEach((p) => {
+      if (p.getAttribute('stroke') === 'transparent') return;
+      if (p.getAttribute('data-edge-id') === this.selectedEdgeId) {
+        p.classList.add('selected-edge');
+      } else {
+        p.classList.remove('selected-edge');
+      }
+    });
   }
 
   public getZoom(): number {
@@ -137,6 +190,7 @@ export class CanvasManager {
       nodeEl.style.left = `${node.position.x}px`;
       nodeEl.style.top = `${node.position.y}px`;
       nodeEl.id = `rendered_${node.id}`;
+      nodeEl.dataset.id = node.id;
 
       let outputsHtml = '';
       const isMultiOutput = ['if_element_exists', 'while_loop', 'for_loop', 'try_catch', 'switch'].includes(node.type);
@@ -214,6 +268,35 @@ export class CanvasManager {
 
       nodeEl.className = `graph-node ${catClass} ${selectedNodeId === node.id ? 'selected' : ''}`;
 
+      // Botão ou prévia de código no corpo do nó se for bloco com código JS, HTML ou CSS
+      let codeBadgeHtml = '';
+      const hasJsRule = (rules: any[]) => Array.isArray(rules) && rules.some((r) => r.evaluationMode === 'js_eval');
+      const isCodeNode = ['inject_javascript', 'inject_html', 'inject_css', 'web_component'].includes(node.type) ||
+        (node.type === 'for_loop' && (node.data as any).loopType === 'js_generator') ||
+        (node.type === 'set_variable' && (node.data as any).evaluationType === 'js_eval') ||
+        (node.type === 'while_loop' && hasJsRule((node.data as any).rules)) ||
+        (node.type === 'switch' && Array.isArray((node.data as any).cases) && (node.data as any).cases.some((c: any) => hasJsRule(c.rules)));
+
+      if (isCodeNode) {
+        const langMap: Record<string, { label: string; color: string }> = {
+          inject_javascript: { label: 'Editar JS', color: '#f59e0b' },
+          inject_html: { label: 'Editar HTML', color: '#ec4899' },
+          inject_css: { label: 'Editar CSS', color: '#06b6d4' },
+          web_component: { label: 'Editar Componente', color: '#8b5cf6' },
+          for_loop: { label: 'Editar JS', color: '#f59e0b' },
+          set_variable: { label: 'Editar Expressão JS', color: '#f59e0b' },
+          while_loop: { label: 'Editar Condição JS', color: '#f59e0b' },
+          switch: { label: 'Editar Condição JS', color: '#f59e0b' },
+        };
+        const meta = langMap[node.type] || { label: 'Editar Código', color: '#6366f1' };
+        codeBadgeHtml = `
+          <button class="node-edit-code-btn" data-id="${node.id}" style="margin-top: 6px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.12); color: ${meta.color}; border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            <span>${meta.label}</span>
+          </button>
+        `;
+      }
+
       nodeEl.innerHTML = `
         <div class="node-handle node-handle-input" data-node-id="${node.id}" data-handle-type="input" title="Conectar entrada aqui"></div>
         <div class="graph-node-header">
@@ -221,11 +304,17 @@ export class CanvasManager {
             <span class="graph-node-icon">${nodeIcon}</span>
             <span class="graph-node-title-text">${node.data.label || node.type}</span>
           </div>
-          <button class="btn-xs delete-node-btn" data-id="${node.id}">✕</button>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <button class="btn-xs expand-node-btn" data-id="${node.id}" title="Expandir configurações deste bloco em tela cheia" style="padding: 2px 5px; font-size: 10px; display: inline-flex; align-items: center; justify-content: center;">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+            </button>
+            <button class="btn-xs delete-node-btn" data-id="${node.id}" title="Excluir bloco">✕</button>
+          </div>
         </div>
         <div class="graph-node-body">
           Tipo: <strong>${node.type}</strong>
           <div class="graph-node-desc-preview" style="margin-top: 4px; font-size: 10px; color: #94a3b8; font-style: italic; display: ${node.data.description ? 'block' : 'none'}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${node.data.description || ''}</div>
+          ${codeBadgeHtml}
         </div>
         ${!isMultiOutput ? `<div class="node-handle node-handle-output" data-node-id="${node.id}" data-handle="default" title="Conectar próxima etapa"></div>` : ''}
         ${outputsHtml}
@@ -311,63 +400,177 @@ export class CanvasManager {
           };
 
           const onConnectingUp = (upEvt: MouseEvent) => {
-            // Se o mouse foi solto fora de um handle de entrada, cancela imediatamente
             const targetEl = upEvt.target as HTMLElement;
-            const isTargetInHandle = targetEl?.classList.contains('node-handle-input');
+            // 1. Tenta encontrar a porta de entrada sob o cursor diretamente
+            let inHandleTarget = (targetEl?.closest('.node-handle-input') as HTMLElement | null)
+              || (document.elementFromPoint(upEvt.clientX, upEvt.clientY)?.closest('.node-handle-input') as HTMLElement | null);
 
-            if (!isTargetInHandle) {
-              this.cancelConnection();
+            // 2. Se soltou no corpo do bloco ou próximo ao bloco, encontra a porta de entrada (.node-handle-input) daquele bloco
+            if (!inHandleTarget) {
+              const nodeUnderCursor = (targetEl?.closest('.graph-node') as HTMLElement | null)
+                || (document.elementFromPoint(upEvt.clientX, upEvt.clientY)?.closest('.graph-node') as HTMLElement | null);
+              if (nodeUnderCursor) {
+                inHandleTarget = nodeUnderCursor.querySelector('.node-handle-input') as HTMLElement | null;
+              }
             }
+
+            // 3. Se ainda não encontrou, busca por proximidade (raio de 30px) de qualquer handle de entrada
+            if (!inHandleTarget) {
+              const allInputs = document.querySelectorAll('.node-handle-input');
+              let closestHandle: HTMLElement | null = null;
+              let minDistance = 35; // tolerância de 35px para snap perfeito no centro
+              allInputs.forEach((h) => {
+                const rect = (h as HTMLElement).getBoundingClientRect();
+                const centerHx = rect.left + rect.width / 2;
+                const centerHy = rect.top + rect.height / 2;
+                const dist = Math.hypot(upEvt.clientX - centerHx, upEvt.clientY - centerHy);
+                if (dist < minDistance) {
+                  minDistance = dist;
+                  closestHandle = h as HTMLElement;
+                }
+              });
+              if (closestHandle) {
+                inHandleTarget = closestHandle;
+              }
+            }
+
+            if (inHandleTarget) {
+              const targetNodeEl = inHandleTarget.closest('.graph-node, .canvas-node') as HTMLElement | null;
+              const targetNodeId = targetNodeEl?.dataset.id
+                || inHandleTarget.dataset.nodeId
+                || (targetNodeEl?.id ? targetNodeEl.id.replace('rendered_', '') : null);
+
+              if (targetNodeId && this.connectingFromNodeId) {
+                if (this.connectingFromNodeId === targetNodeId) {
+                  this.callbacks.showModalDialog(
+                    'Operação Inválida',
+                    'Não é permitido conectar um bloco diretamente a ele mesmo.',
+                    '⚠️'
+                  );
+                  this.callbacks.showToast('Não é possível conectar um bloco a si mesmo.', 'warning');
+                  this.cancelConnection();
+                  return;
+                }
+
+                // ID único para permitir múltiplas conexões a partir do mesmo ou para o mesmo bloco
+                const timestamp = Date.now().toString(36);
+                const randomPart = Math.random().toString(36).substring(2, 6);
+                const edgeId = `e_${this.connectingFromNodeId}_${this.connectingHandle || 'default'}_${targetNodeId}_${timestamp}_${randomPart}`;
+
+                graph.edges.push({
+                  id: edgeId,
+                  source: this.connectingFromNodeId,
+                  target: targetNodeId,
+                  sourceHandle: this.connectingHandle || 'default',
+                });
+                this.callbacks.showToast('Ligação conectada com sucesso!', 'info');
+
+                // Remove linha temporária imediatamente e renderiza as arestas finais perfeitamente fixadas no centro dos handles
+                this.cancelConnection();
+                this.renderEdges();
+                this.renderMinimap();
+                return;
+              }
+            }
+
+            // Se o mouse foi solto fora de um handle de entrada, cancela e remove a linha temporária
+            this.cancelConnection();
           };
 
           this.activeMoveHandler = onConnectingMove;
           this.activeUpHandler = onConnectingUp;
 
+          document.getElementById('canvasContainer')?.classList.add('connecting-in-progress');
           window.addEventListener('mousemove', onConnectingMove);
           window.addEventListener('mouseup', onConnectingUp);
         });
       });
 
-      // Conectar no Handle de Entrada
-      const inHandle = nodeEl.querySelector('.node-handle-input');
-      inHandle?.addEventListener('mouseup', (e: MouseEvent) => {
+      // Botão direto no nó para abrir editor de código sobre o canvas
+      nodeEl.querySelector('.node-edit-code-btn')?.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (this.connectingFromNodeId) {
-          if (this.connectingFromNodeId === node.id) {
-            this.callbacks.showModalDialog(
-              'Operação Inválida',
-              'Não é permitido conectar um bloco diretamente a ele mesmo.',
-              '⚠️'
-            );
-            this.callbacks.showToast('Não é possível conectar um bloco a si mesmo.', 'warning');
-            this.cancelConnection();
-          } else {
-            const edgeId = `e_${this.connectingFromNodeId}_${this.connectingHandle || 'default'}_${node.id}`;
-            const alreadyConnected = graph.edges.some(
-              (edge) => edge.source === this.connectingFromNodeId && edge.target === node.id && edge.sourceHandle === this.connectingHandle
-            );
+        this.callbacks.setSelectedNodeId(node.id);
+        this.callbacks.onNodeSelect(node.id);
 
-            if (alreadyConnected) {
-              this.callbacks.showToast('Estes dois blocos já estão conectados!', 'warning');
-            } else {
-              graph.edges.push({
-                id: edgeId,
-                source: this.connectingFromNodeId,
-                target: node.id,
-                sourceHandle: this.connectingHandle || 'default',
-              });
-              this.renderEdges();
-              this.renderMinimap();
-              this.callbacks.showToast('Ligação conectada com sucesso!', 'info');
-            }
-
-            // Regra estrita: se não estiver com CTRL/Meta pressionado, finaliza imediatamente
-            const keepConnecting = this.isCtrlConnectionMode || e.ctrlKey || e.metaKey;
-            if (!keepConnecting) {
-              this.cancelConnection();
-            }
-          }
+        const data = node.data as any;
+        if (node.type === 'inject_javascript') {
+          CodeEditorComponent.openCodeModal({
+            title: `Código JavaScript - ${data.label || 'Injetar JS'}`,
+            language: 'javascript',
+            value: data.code || 'console.log("Olá");',
+            onSave: (val) => {
+              data.code = val;
+              this.callbacks.onNodeSelect(node.id);
+              this.callbacks.showToast('Código JS salvo!', 'success');
+            },
+          });
+        } else if (node.type === 'inject_html') {
+          CodeEditorComponent.openCodeModal({
+            title: `Código HTML - ${data.label || 'Injetar HTML'}`,
+            language: 'html',
+            value: data.html || '',
+            onSave: (val) => {
+              data.html = val;
+              this.callbacks.onNodeSelect(node.id);
+              this.callbacks.showToast('Código HTML salvo!', 'success');
+            },
+          });
+        } else if (node.type === 'inject_css') {
+          CodeEditorComponent.openCodeModal({
+            title: `Código CSS - ${data.label || 'Injetar CSS'}`,
+            language: 'css',
+            value: data.css || '',
+            onSave: (val) => {
+              data.css = val;
+              this.callbacks.onNodeSelect(node.id);
+              this.callbacks.showToast('Código CSS salvo!', 'success');
+            },
+          });
+        } else if (node.type === 'for_loop') {
+          CodeEditorComponent.openCodeModal({
+            title: `Código JS Gerador - ${data.label || 'Loop For'}`,
+            language: 'javascript',
+            value: data.jsExpression || '',
+            onSave: (val) => {
+              data.jsExpression = val;
+              this.callbacks.onNodeSelect(node.id);
+              this.callbacks.showToast('Expressão JS salva!', 'success');
+            },
+          });
+        } else if (node.type === 'set_variable') {
+          CodeEditorComponent.openCodeModal({
+            title: `Expressão JavaScript - ${data.label || data.varName || 'Definir Variável'}`,
+            language: 'javascript',
+            value: data.valueExpression || '',
+            onSave: (val) => {
+              data.valueExpression = val;
+              this.callbacks.onNodeSelect(node.id);
+              this.callbacks.showToast('Expressão JS salva!', 'success');
+            },
+          });
+        } else if (node.type === 'while_loop' || node.type === 'switch' || node.type === 'web_component') {
+          // Para blocos com múltiplas partes ou regras condicionais, abre o modal centralizado do bloco
+          this.callbacks.onOpenNodeModal?.(node.id);
         }
+      });
+
+      // Expandir nó em modal centralizado
+      nodeEl.querySelector('.expand-node-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.callbacks.setSelectedNodeId(node.id);
+        this.callbacks.onNodeSelect(node.id);
+        this.callbacks.onOpenNodeModal?.(node.id);
+      });
+
+      // Duplo clique no nó também expande em tela centralizada
+      nodeEl.addEventListener('dblclick', (e) => {
+        if ((e.target as HTMLElement).closest('.delete-node-btn') ||
+            (e.target as HTMLElement).closest('.node-handle') ||
+            (e.target as HTMLElement).closest('.node-edit-code-btn')) return;
+        e.stopPropagation();
+        this.callbacks.setSelectedNodeId(node.id);
+        this.callbacks.onNodeSelect(node.id);
+        this.callbacks.onOpenNodeModal?.(node.id);
       });
 
       // Deletar nó
@@ -419,6 +622,7 @@ export class CanvasManager {
     this.connectingFromNodeId = undefined;
     this.connectingHandle = undefined;
     this.isCtrlConnectionMode = false;
+    document.getElementById('canvasContainer')?.classList.remove('connecting-in-progress');
     document.querySelectorAll('.connecting-source').forEach((el) => el.classList.remove('connecting-source'));
   }
 
@@ -483,13 +687,45 @@ export class CanvasManager {
       else if (edge.sourceHandle === 'loop_body' || edge.sourceHandle === 'try_body') strokeColor = '#38bdf8';
       else if (edge.sourceHandle && edge.sourceHandle.startsWith('case_')) strokeColor = '#f59e0b';
 
+      // 1. Linha invisível mais grossa para facilitar o clique com o mouse na corda
+      const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      hitPath.setAttribute('d', pathData);
+      hitPath.setAttribute('fill', 'none');
+      hitPath.setAttribute('stroke', 'transparent');
+      hitPath.setAttribute('stroke-width', '20');
+      hitPath.setAttribute('stroke-linecap', 'round');
+      hitPath.setAttribute('data-edge-id', edge.id);
+      hitPath.style.cursor = 'pointer';
+
+      // 2. Linha visual da corda
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', pathData);
       path.setAttribute('fill', 'none');
       path.setAttribute('stroke', strokeColor);
       path.setAttribute('stroke-width', '2.5');
       path.setAttribute('stroke-linecap', 'round');
+      path.setAttribute('data-edge-id', edge.id);
       path.style.cursor = 'pointer';
+
+      if (this.selectedEdgeId === edge.id) {
+        path.classList.add('selected-edge');
+      }
+
+      // Função para selecionar a corda
+      const selectThisEdge = (e: MouseEvent) => {
+        e.stopPropagation();
+        if (this.selectedEdgeId === edge.id) return;
+        this.callbacks.setSelectedNodeId(undefined);
+        document.querySelectorAll('.graph-node').forEach((el) => el.classList.remove('selected'));
+        this.callbacks.onNodeSelect(undefined);
+        this.setSelectedEdgeId(edge.id);
+        this.callbacks.showToast('Ligação selecionada. Pressione Delete para remover.', 'info');
+      };
+
+      hitPath.addEventListener('click', selectThisEdge);
+      hitPath.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation());
+      path.addEventListener('click', selectThisEdge);
+      path.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation());
 
       // Badge visual de deletar (botão ✕)
       const deleteBadge = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -518,16 +754,17 @@ export class CanvasManager {
 
       const deleteThisEdge = (e: MouseEvent) => {
         e.stopPropagation();
-        graph.edges = graph.edges.filter((ed) => ed.id !== edge.id);
-        this.renderEdges();
-        this.renderMinimap();
-        this.callbacks.showToast('Ligação excluída!', 'info');
+        this.deleteEdge(edge.id);
       };
 
       deleteBadge.addEventListener('click', deleteThisEdge);
       deleteBadge.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation());
 
+      // svgEdges desenha a linha de clique hitPath e a linha visual (z-index 5, atrás dos blocos para nunca cobrir handles)
+      svgEdges.appendChild(hitPath);
       svgEdges.appendChild(path);
+
+      // svgControls recebe o badge de deletar (z-index 25, acima dos blocos para fácil exclusão)
       if (svgControls) {
         svgControls.appendChild(deleteBadge);
       } else {
@@ -537,46 +774,7 @@ export class CanvasManager {
   }
 
   public generateOrthogonalPath(x1: number, y1: number, x2: number, y2: number): { pathData: string; midX: number; midY: number } {
-    const r = 10;
-
-    if (x2 >= x1 + 30) {
-      const midX = (x1 + x2) / 2;
-      const midY = (y1 + y2) / 2;
-
-      if (Math.abs(y2 - y1) <= r * 2) {
-        return {
-          pathData: `M ${x1} ${y1} L ${x2} ${y2}`,
-          midX,
-          midY,
-        };
-      }
-
-      if (y2 > y1) {
-        return {
-          pathData: `M ${x1} ${y1} L ${midX - r} ${y1} Q ${midX} ${y1} ${midX} ${y1 + r} L ${midX} ${y2 - r} Q ${midX} ${y2} ${midX + r} ${y2} L ${x2} ${y2}`,
-          midX,
-          midY,
-        };
-      } else {
-        return {
-          pathData: `M ${x1} ${y1} L ${midX - r} ${y1} Q ${midX} ${y1} ${midX} ${y1 - r} L ${midX} ${y2 + r} Q ${midX} ${y2} ${midX + r} ${y2} L ${x2} ${y2}`,
-          midX,
-          midY,
-        };
-      }
-    } else {
-      const margin = 24;
-      const startX = x1 + margin;
-      const endX = x2 - margin;
-      const midY = (y1 + y2) / 2;
-
-      const pathData = `M ${x1} ${y1} L ${startX - r} ${y1} Q ${startX} ${y1} ${startX} ${y1 > y2 ? y1 - r : y1 + r} L ${startX} ${midY + (y1 > y2 ? r : -r)} Q ${startX} ${midY} ${startX - r} ${midY} L ${endX + r} ${midY} Q ${endX} ${midY} ${endX} ${y1 > y2 ? midY - r : midY + r} L ${endX} ${y2 + (y1 > y2 ? r : -r)} Q ${endX} ${y2} ${endX + r} ${y2} L ${x2} ${y2}`;
-      return {
-        pathData,
-        midX: (startX + endX) / 2,
-        midY,
-      };
-    }
+    return CanvasPathUtils.generateOrthogonalPath(x1, y1, x2, y2);
   }
 
   public renderTemporaryEdge(x1: number, y1: number, x2: number, y2: number): void {
@@ -601,102 +799,7 @@ export class CanvasManager {
   }
 
   public renderMinimap(): void {
-    const minimapSvg = document.getElementById('minimapSvg');
-    const indicator = document.getElementById('minimapIndicator');
-    const minimapBody = document.getElementById('minimapBody');
-    const canvas = document.getElementById('canvasContainer');
-    if (!minimapSvg || !indicator || !minimapBody || !canvas) return;
-
-    minimapSvg.innerHTML = '';
-
-    const graph = this.callbacks.getGraph();
-    const nodes = graph.nodes;
-    if (nodes.length === 0) {
-      indicator.style.display = 'none';
-      return;
-    }
-    indicator.style.display = 'block';
-
-    const mmWidth = minimapBody.clientWidth || 190;
-    const mmHeight = minimapBody.clientHeight || 108;
-
-    const canvasRect = canvas.getBoundingClientRect();
-    const visibleLeft = -this.panOffset.x / this.zoom;
-    const visibleTop = -this.panOffset.y / this.zoom;
-    const visibleRight = visibleLeft + canvasRect.width / this.zoom;
-    const visibleBottom = visibleTop + canvasRect.height / this.zoom;
-
-    let minX = Math.min(visibleLeft, ...nodes.map((n) => n.position.x));
-    let minY = Math.min(visibleTop, ...nodes.map((n) => n.position.y));
-    let maxX = Math.max(visibleRight, ...nodes.map((n) => n.position.x + 220));
-    let maxY = Math.max(visibleBottom, ...nodes.map((n) => n.position.y + 120));
-
-    const padding = 150;
-    minX -= padding;
-    minY -= padding;
-    maxX += padding;
-    maxY += padding;
-
-    const graphWidth = maxX - minX || 1;
-    const graphHeight = maxY - minY || 1;
-
-    const scaleX = mmWidth / graphWidth;
-    const scaleY = mmHeight / graphHeight;
-    const mmScale = Math.min(scaleX, scaleY);
-
-    const offsetX = (mmWidth - graphWidth * mmScale) / 2;
-    const offsetY = (mmHeight - graphHeight * mmScale) / 2;
-
-    const toMmX = (x: number) => (x - minX) * mmScale + offsetX;
-    const toMmY = (y: number) => (y - minY) * mmScale + offsetY;
-
-    // Conexões no minimapa
-    graph.edges.forEach((edge) => {
-      const src = nodes.find((n) => n.id === edge.source);
-      const tgt = nodes.find((n) => n.id === edge.target);
-      if (!src || !tgt) return;
-
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      line.setAttribute('x1', String(toMmX(src.position.x + 110)));
-      line.setAttribute('y1', String(toMmY(src.position.y + 45)));
-      line.setAttribute('x2', String(toMmX(tgt.position.x + 110)));
-      line.setAttribute('y2', String(toMmY(tgt.position.y + 45)));
-      line.setAttribute('stroke', '#6366f1');
-      line.setAttribute('stroke-width', '1.2');
-      line.setAttribute('opacity', '0.6');
-      minimapSvg.appendChild(line);
-    });
-
-    // Nós no minimapa
-    const selectedId = this.callbacks.getSelectedNodeId();
-    nodes.forEach((node) => {
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      const nx = toMmX(node.position.x);
-      const ny = toMmY(node.position.y);
-      const nw = Math.max(8, 210 * mmScale);
-      const nh = Math.max(5, 75 * mmScale);
-
-      rect.setAttribute('x', String(nx));
-      rect.setAttribute('y', String(ny));
-      rect.setAttribute('width', String(nw));
-      rect.setAttribute('height', String(nh));
-      rect.setAttribute('rx', '2');
-      rect.setAttribute('fill', selectedId === node.id ? '#818cf8' : '#334155');
-      rect.setAttribute('stroke', selectedId === node.id ? '#c7d2fe' : '#475569');
-      rect.setAttribute('stroke-width', '1');
-      minimapSvg.appendChild(rect);
-    });
-
-    // Retângulo da área visível
-    const indX = toMmX(visibleLeft);
-    const indY = toMmY(visibleTop);
-    const indW = (canvasRect.width / this.zoom) * mmScale;
-    const indH = (canvasRect.height / this.zoom) * mmScale;
-
-    indicator.style.left = `${Math.max(0, indX)}px`;
-    indicator.style.top = `${Math.max(0, indY)}px`;
-    indicator.style.width = `${Math.min(mmWidth, indW)}px`;
-    indicator.style.height = `${Math.min(mmHeight, indH)}px`;
+    this.minimap.render();
   }
 
   private initCanvasEvents(): void {
@@ -719,12 +822,15 @@ export class CanvasManager {
       if (
         (e.target as HTMLElement).closest('.graph-node') ||
         (e.target as HTMLElement).closest('.canvas-floating-controls') ||
-        (e.target as HTMLElement).closest('.canvas-minimap')
+        (e.target as HTMLElement).closest('.canvas-minimap') ||
+        (e.target as HTMLElement).closest('.edge-delete-badge') ||
+        (e.target as SVGElement).tagName?.toLowerCase() === 'path'
       ) {
         return;
       }
 
       this.callbacks.setSelectedNodeId(undefined);
+      this.setSelectedEdgeId(undefined);
       document.querySelectorAll('.graph-node').forEach((el) => el.classList.remove('selected'));
       this.callbacks.onNodeSelect(undefined);
 
@@ -775,68 +881,6 @@ export class CanvasManager {
 
     document.getElementById('btnZoomReset')?.addEventListener('click', () => {
       this.resetTransform();
-    });
-  }
-
-  private initMinimapEvents(): void {
-    const minimap = document.getElementById('canvasMinimap');
-    const minimapBody = document.getElementById('minimapBody');
-    const canvas = document.getElementById('canvasContainer');
-    if (!minimap || !minimapBody || !canvas) return;
-
-    const navigateToMinimapPoint = (e: MouseEvent) => {
-      const graph = this.callbacks.getGraph();
-      const nodes = graph.nodes;
-      if (nodes.length === 0) return;
-
-      const bodyRect = minimapBody.getBoundingClientRect();
-      const clickX = e.clientX - bodyRect.left;
-      const clickY = e.clientY - bodyRect.top;
-
-      const mmWidth = bodyRect.width;
-      const mmHeight = bodyRect.height;
-      const canvasRect = canvas.getBoundingClientRect();
-
-      const visibleLeft = -this.panOffset.x / this.zoom;
-      const visibleTop = -this.panOffset.y / this.zoom;
-      const visibleRight = visibleLeft + canvasRect.width / this.zoom;
-      const visibleBottom = visibleTop + canvasRect.height / this.zoom;
-
-      let minX = Math.min(visibleLeft, ...nodes.map((n) => n.position.x)) - 150;
-      let minY = Math.min(visibleTop, ...nodes.map((n) => n.position.y)) - 150;
-      let maxX = Math.max(visibleRight, ...nodes.map((n) => n.position.x + 220)) + 150;
-      let maxY = Math.max(visibleBottom, ...nodes.map((n) => n.position.y + 120)) + 150;
-
-      const graphWidth = maxX - minX || 1;
-      const graphHeight = maxY - minY || 1;
-      const mmScale = Math.min(mmWidth / graphWidth, mmHeight / graphHeight);
-      const offsetX = (mmWidth - graphWidth * mmScale) / 2;
-      const offsetY = (mmHeight - graphHeight * mmScale) / 2;
-
-      const targetWorldX = minX + (clickX - offsetX) / mmScale;
-      const targetWorldY = minY + (clickY - offsetY) / mmScale;
-
-      this.panOffset.x = canvasRect.width / 2 - targetWorldX * this.zoom;
-      this.panOffset.y = canvasRect.height / 2 - targetWorldY * this.zoom;
-
-      this.updateCanvasTransform();
-    };
-
-    minimapBody.addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      navigateToMinimapPoint(e);
-
-      const onMinimapMove = (moveEvt: MouseEvent) => {
-        navigateToMinimapPoint(moveEvt);
-      };
-
-      const onMinimapUp = () => {
-        window.removeEventListener('mousemove', onMinimapMove);
-        window.removeEventListener('mouseup', onMinimapUp);
-      };
-
-      window.addEventListener('mousemove', onMinimapMove);
-      window.addEventListener('mouseup', onMinimapUp);
     });
   }
 }

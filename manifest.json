@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WebAutomations - Visual Engine & Editor",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Motor de automação web em grafos (.webautomation.json) com editor visual drag-and-drop e suporte a MCP.",
   "permissions": [
     "activeTab",

@@ -26,10 +26,13 @@ class VisualEditorApp {
     this.graph = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
 
     // 1. Inicializar ColorPickerManager
-    this.colorPickerManager = new ColorPickerManager({
-      getGraph: () => this.graph,
-      showToast: (msg, type) => showToast(msg, type),
-    });
+    this.colorPickerManager = new ColorPickerManager(
+      () => this.graph,
+      (msg, type) => showToast(msg, type),
+      () => {
+        this.canvasManager.render();
+      }
+    );
 
     // 2. Inicializar InspectorManager
     this.inspectorManager = new InspectorManager(
@@ -60,6 +63,9 @@ class VisualEditorApp {
       },
       showToast: (msg, type) => showToast(msg, type),
       showModalDialog: (title, msg, icon) => showModalDialog(title, msg, icon),
+      onOpenNodeModal: (nodeId) => {
+        this.inspectorManager.openExpandedModal(nodeId);
+      },
     });
 
     // 4. Inicializar WorkflowTabManager
@@ -331,13 +337,19 @@ class VisualEditorApp {
         return;
       }
 
-      // 2. Apagar bloco selecionado ao apertar Delete ou Backspace (fora de campos de digitação)
-      if (e.key === 'Delete' || e.key === 'Del') {
+      // 2. Apagar bloco ou ligação (corda) selecionada ao apertar Delete ou Backspace (fora de campos de digitação)
+      if (e.key === 'Delete' || e.key === 'Del' || e.key === 'Backspace') {
         const target = e.target as HTMLElement;
         const isEditingText = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
-        if (!isEditingText && this.currentView === 'studio' && this.selectedNodeId) {
-          e.preventDefault();
-          this.canvasManager.deleteNode(this.selectedNodeId);
+        if (!isEditingText && this.currentView === 'studio') {
+          const selectedEdge = this.canvasManager.getSelectedEdgeId();
+          if (selectedEdge) {
+            e.preventDefault();
+            this.canvasManager.deleteEdge(selectedEdge);
+          } else if (this.selectedNodeId) {
+            e.preventDefault();
+            this.canvasManager.deleteNode(this.selectedNodeId);
+          }
         }
       }
     });
@@ -423,6 +435,12 @@ class VisualEditorApp {
       this.selectedNodeId = undefined;
       document.querySelectorAll('.graph-node').forEach((el) => el.classList.remove('selected'));
       this.inspectorManager.renderInspector();
+    });
+
+    document.getElementById('btnExpandInspectorModal')?.addEventListener('click', () => {
+      if (this.selectedNodeId) {
+        this.inspectorManager.openExpandedModal(this.selectedNodeId);
+      }
     });
 
     // Resizer Left (Biblioteca de Blocos)

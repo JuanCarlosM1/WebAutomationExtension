@@ -44,14 +44,31 @@ export const BLOCK_CATALOG: BlockCategory[] = [
         title: 'Switch (Condicional)',
         desc: 'Desvia fluxo por condição ou código JS',
         icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>',
-        defaultData: { label: 'Condição', executionMode: 'first_match', cases: [{ id: 'case_1', label: 'Caso 1', evaluationMode: 'comparison', leftOperand: '{{status}}', operator: 'equals', rightOperand: '200' }], hasDefaultBranch: true },
+        defaultData: {
+          label: 'Condição',
+          executionMode: 'first_match',
+          cases: [
+            {
+              id: 'case_1',
+              label: 'Caso 1',
+              logicalOperator: 'and',
+              rules: [{ id: 'rule_1', evaluationMode: 'comparison', leftOperand: '{{status}}', operator: 'equals', rightOperand: '200' }],
+            },
+          ],
+          hasDefaultBranch: true,
+        },
       },
       {
         type: 'while_loop',
         title: 'Loop While',
         desc: 'Enquanto condição ou JS for verdadeiro',
         icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>',
-        defaultData: { label: 'Loop While', evaluationMode: 'comparison', leftOperand: '{{i}}', operator: 'less_than', rightOperand: '10', maxIterations: 100 },
+        defaultData: {
+          label: 'Loop While',
+          logicalOperator: 'and',
+          rules: [{ id: 'rule_1', evaluationMode: 'comparison', leftOperand: '{{i}}', operator: 'less_than', rightOperand: '10' }],
+          maxIterations: 100,
+        },
       },
       {
         type: 'for_loop',

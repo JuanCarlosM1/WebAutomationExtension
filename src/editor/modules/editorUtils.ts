@@ -4,9 +4,18 @@
 
 import { WebAutomationGraph } from '../../../../BibliotecaDeDev/src/types/schema';
 
+const lastToastMessages: Map<string, number> = new Map();
+
 export function showToast(message: string, type: 'info' | 'success' | 'error' | 'warning' = 'info'): void {
   const container = document.getElementById('toastContainer');
   if (!container) return;
+
+  const now = Date.now();
+  const lastTime = lastToastMessages.get(message);
+  if (lastTime && now - lastTime < 1500) {
+    return; // Evita toasts duplicados disparados em sequência imediata
+  }
+  lastToastMessages.set(message, now);
 
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;

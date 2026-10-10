@@ -162,6 +162,27 @@ var StateManager = class {
         return false;
     }
   }
+  /**
+   * Avalia uma única regra de condição (seja comparação de valores ou expressão JS)
+   */
+  evaluateConditionRule(rule) {
+    const mode = rule.evaluationMode || (rule.jsExpression && !rule.operator ? "js_eval" : "comparison");
+    if (mode === "js_eval") {
+      return Boolean(this.evaluateJsExpression(rule.jsExpression || ""));
+    }
+    return this.evaluateCondition(rule.leftOperand, rule.operator, rule.rightOperand);
+  }
+  /**
+   * Avalia um grupo de regras com operador lógico 'and' ou 'or'
+   */
+  evaluateRulesGroup(rules, logicalOperator = "and") {
+    if (!rules || rules.length === 0)
+      return true;
+    if (logicalOperator === "or") {
+      return rules.some((r) => this.evaluateConditionRule(r));
+    }
+    return rules.every((r) => this.evaluateConditionRule(r));
+  }
 };
 
 // ../BibliotecaDeDev/src/engine/ExecutionContext.ts
@@ -397,7 +418,9 @@ var ExecutionEngine = class {
         break;
       await context.checkPausePoint();
       let conditionPassed = false;
-      if (data.evaluationMode === "js_eval" || data.jsExpression && !data.operator) {
+      if (Array.isArray(data.rules) && data.rules.length > 0) {
+        conditionPassed = context.state.evaluateRulesGroup(data.rules, data.logicalOperator || "and");
+      } else if (data.evaluationMode === "js_eval" || data.jsExpression && !data.operator) {
         conditionPassed = Boolean(context.state.evaluateJsExpression(data.jsExpression || ""));
       } else {
         conditionPassed = context.state.evaluateCondition(
@@ -539,7 +562,9 @@ var SwitchNodeHandler = class {
     const { cases, hasDefaultBranch } = node.data;
     for (const testCase of cases) {
       let passed = false;
-      if (testCase.evaluationMode === "js_eval" || testCase.jsExpression && !testCase.operator) {
+      if (Array.isArray(testCase.rules) && testCase.rules.length > 0) {
+        passed = context.state.evaluateRulesGroup(testCase.rules, testCase.logicalOperator || "and");
+      } else if (testCase.evaluationMode === "js_eval" || testCase.jsExpression && !testCase.operator) {
         const result = context.state.evaluateJsExpression(testCase.jsExpression || "");
         passed = Boolean(result);
       } else {
@@ -1297,13 +1322,29 @@ var ExtensionController = class {
           if (!startNode)
             continue;
           const triggers = getActiveTriggers(startNode.data);
-          const scheduleTriggers = triggers.filter((t) => t.type === "schedule");
-          scheduleTriggers.forEach((trigger, idx) => {
-            const interval = Number(trigger.intervalMinutes) || 15;
-            chrome.alarms.create(`alarm_flow_${auto.metadata.id}_${idx}`, {
-              periodInMinutes: Math.max(1, interval)
-            });
-            console.log(`[WebAutomations] Alarme registrado para "${auto.metadata.name}" a cada ${interval} min.`);
+          triggers.forEach((trigger, idx) => {
+            if (trigger.type === "schedule") {
+              let minutes = trigger.intervalMinutes || 15;
+              if (trigger.intervalValue && trigger.intervalUnit) {
+                if (trigger.intervalUnit === "minutes")
+                  minutes = trigger.intervalValue;
+                else if (trigger.intervalUnit === "hours")
+                  minutes = trigger.intervalValue * 60;
+                else if (trigger.intervalUnit === "seconds")
+                  minutes = Math.max(0.1, trigger.intervalValue / 60);
+                else if (trigger.intervalUnit === "ms")
+                  minutes = Math.max(0.1, trigger.intervalValue / 6e4);
+              }
+              chrome.alarms.create(`alarm_flow_${auto.metadata.id}_${idx}`, {
+                periodInMinutes: Math.max(0.1, minutes)
+              });
+              console.log(`[WebAutomations] Alarme de intervalo registrado para "${auto.metadata.name}" a cada ${minutes} min.`);
+            } else if (trigger.type === "date_schedule") {
+              chrome.alarms.create(`date_alarm_flow_${auto.metadata.id}_${idx}`, {
+                periodInMinutes: 1
+              });
+              console.log(`[WebAutomations] Alarme por data registrado para "${auto.metadata.name}".`);
+            }
           });
         }
       }
@@ -1350,6 +1391,47 @@ var ExtensionController = class {
         const targetAuto = automations.find((a) => a.metadata.id === flowId || a.metadata.id === alarm.name.replace("alarm_flow_", ""));
         if (targetAuto) {
           console.log(`[WebAutomations] Disparando fluxo por intervalo agendado: ${targetAuto.metadata.name}`);
+          this.executeAutomation(targetAuto);
+        }
+      } else if (alarm.name.startsWith("date_alarm_flow_")) {
+        const parts = alarm.name.replace("date_alarm_flow_", "").split("_");
+        const trigIdx = Number(parts[parts.length - 1]);
+        const flowId = parts.slice(0, -1).join("_");
+        const automations = await this.getSavedAutomations();
+        const targetAuto = automations.find((a) => a.metadata.id === flowId);
+        if (!targetAuto)
+          return;
+        const startNode = targetAuto.nodes.find((n) => n.type === "start");
+        if (!startNode)
+          return;
+        const triggers = getActiveTriggers(startNode.data);
+        const trigger = triggers[trigIdx] || triggers.find((t) => t.type === "date_schedule");
+        if (!trigger || trigger.type !== "date_schedule" || !trigger.dateSchedule)
+          return;
+        const ds = trigger.dateSchedule;
+        const now = /* @__PURE__ */ new Date();
+        const currentHours = String(now.getHours()).padStart(2, "0");
+        const currentMinutes = String(now.getMinutes()).padStart(2, "0");
+        const currentTime = `${currentHours}:${currentMinutes}`;
+        if (ds.time && ds.time !== currentTime) {
+          return;
+        }
+        let isDateMatched = false;
+        if (ds.mode === "weekdays") {
+          const currentDayOfWeek = now.getDay();
+          isDateMatched = Array.isArray(ds.weekdays) && ds.weekdays.includes(currentDayOfWeek);
+        } else if (ds.mode === "month_days") {
+          const currentDayOfMonth = now.getDate();
+          isDateMatched = Array.isArray(ds.monthDays) && ds.monthDays.includes(currentDayOfMonth);
+        } else if (ds.mode === "full_dates") {
+          const y = now.getFullYear();
+          const m = String(now.getMonth() + 1).padStart(2, "0");
+          const d = String(now.getDate()).padStart(2, "0");
+          const todayDateStr = `${y}-${m}-${d}`;
+          isDateMatched = Array.isArray(ds.fullDates) && ds.fullDates.includes(todayDateStr);
+        }
+        if (isDateMatched) {
+          console.log(`[WebAutomations] Disparando fluxo por data agendada (${ds.mode}): ${targetAuto.metadata.name}`);
           this.executeAutomation(targetAuto);
         }
       }

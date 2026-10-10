@@ -88,6 +88,10 @@
         </div>
 
         <div class="header-actions">
+          <button id="btnClearCanvas" class="btn btn-danger" title="Limpar todos os nós e ligações do fluxo">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <span>Limpar Canvas</span>
+          </button>
           <button id="btnOpenFlowPalette" class="btn btn-secondary" title="Gerenciar grupo de cores personalizadas do fluxo">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
             <span>Cores do Fluxo</span>
@@ -175,9 +179,6 @@
             <button id="btnZoomIn" title="Aumentar Zoom">+</button>
             <button id="btnZoomReset" title="Resetar Zoom e Posição">100%</button>
             <button id="btnZoomOut" title="Diminuir Zoom">-</button>
-            <button id="btnClearCanvas" title="Limpar Nós do Canvas">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            </button>
           </div>
         </section>
 
@@ -191,9 +192,14 @@
               <h3 style="font-size: 13px; font-weight: 700; color: var(--text-main);">Propriedades</h3>
               <p style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">Configurações do bloco selecionado</p>
             </div>
-            <button id="btnToggleSidebarRight" class="sidebar-toggle-btn" title="Fechar Propriedades">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <button id="btnExpandInspectorModal" class="sidebar-toggle-btn" title="Expandir em tela cheia centralizada">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+              </button>
+              <button id="btnToggleSidebarRight" class="sidebar-toggle-btn" title="Fechar Propriedades">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
           </div>
 
           <div class="tab-content active" id="tabProperties" style="display: block; flex: 1; overflow-y: auto; padding: 16px;">
