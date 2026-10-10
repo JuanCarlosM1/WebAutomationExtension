@@ -1,0 +1,13 @@
+{
+  "name": "@webautomations/browser-extension",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Chrome Extension for WebAutomations",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.1",
+    "typescript": "^5.3.3"
+  }
+}

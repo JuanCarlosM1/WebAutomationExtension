@@ -1,0 +1,111 @@
+import { WebAutomationGraph } from '../../../BibliotecaDeDev/src/types/schema';
+
+export const DEFAULT_AUTOMATION: WebAutomationGraph = {
+  schemaVersion: '1.0.0',
+  metadata: {
+    id: 'auto_wiki_scraping_default',
+    name: 'Pesquisa e Extração na Wikipedia',
+    description: 'Navega até a Wikipedia, pesquisa por Inteligência Artificial com digitação humana, aguarda o carregamento e extrai o título.',
+    version: '1.0.0',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    tags: ['wikipedia', 'scraping', 'demo'],
+  },
+  settings: {
+    stopOnError: true,
+    defaultTimeoutMs: 15000,
+    logLevel: 'info',
+    parallelBranchesEnabled: false,
+  },
+  variables: {
+    termoPesquisa: 'Inteligência Artificial',
+    tituloArtigo: '',
+  },
+  nodes: [
+    {
+      id: 'node_start',
+      type: 'start',
+      category: 'flow_logic',
+      position: { x: 50, y: 180 },
+      data: {
+        label: 'Iniciar Demonstração',
+        triggerType: 'manual',
+      },
+    },
+    {
+      id: 'node_navigate',
+      type: 'navigate',
+      category: 'browser_navigation',
+      position: { x: 300, y: 180 },
+      data: {
+        label: 'Acessar Wikipedia',
+        url: 'https://pt.wikipedia.org/wiki/Wikip%C3%A9dia:P%C3%A1gina_principal',
+        waitUntil: 'domcontentloaded',
+        timeoutMs: 15000,
+      },
+    },
+    {
+      id: 'node_type',
+      type: 'type_input',
+      category: 'dom_interaction',
+      position: { x: 550, y: 180 },
+      data: {
+        label: 'Digitar Busca',
+        selector: 'input.cdx-text-input__input, input[name="search"]',
+        selectorType: 'css',
+        text: '{{termoPesquisa}}',
+        mode: 'human_typing',
+        minTypingDelayMs: 40,
+        maxTypingDelayMs: 120,
+        clearBeforeTyping: true,
+        pressEnterAfter: true,
+      },
+    },
+    {
+      id: 'node_wait',
+      type: 'wait_for_element',
+      category: 'dom_interaction',
+      position: { x: 800, y: 180 },
+      data: {
+        label: 'Aguardar Artigo',
+        selector: '#firstHeading',
+        selectorType: 'css',
+        state: 'visible',
+        timeoutMs: 10000,
+      },
+    },
+    {
+      id: 'node_extract',
+      type: 'extract_data',
+      category: 'data_network',
+      position: { x: 1050, y: 180 },
+      data: {
+        label: 'Extrair Título',
+        selector: '#firstHeading',
+        selectorType: 'css',
+        extractType: 'innerText',
+        saveToVar: 'tituloArtigo',
+      },
+    },
+    {
+      id: 'node_inject_banner',
+      type: 'inject_html',
+      category: 'injection_customization',
+      position: { x: 1300, y: 180 },
+      data: {
+        label: 'Notificação na Página',
+        html: '<div style="position:fixed; top:20px; right:20px; z-index:999999; background:linear-gradient(135deg, #4f46e5, #9333ea); color:white; padding:16px 22px; border-radius:12px; font-family:sans-serif; font-size:14px; font-weight:bold; box-shadow:0 10px 30px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.3); animation: slideIn 0.5s ease;">⚡ WebAutomations: Artigo Extraído com Sucesso!</div>',
+        targetSelector: 'body',
+        position: 'beforeend',
+      },
+    },
+  ],
+  edges: [
+    { id: 'e1', source: 'node_start', target: 'node_navigate' },
+    { id: 'e2', source: 'node_navigate', target: 'node_type' },
+    { id: 'e3', source: 'node_type', target: 'node_wait' },
+    { id: 'e4', source: 'node_wait', target: 'node_extract' },
+    { id: 'e5', source: 'node_extract', target: 'node_inject_banner' },
+  ],
+  viewport: { x: 0, y: 0, zoom: 1 },
+};

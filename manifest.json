@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "WebAutomations - Visual Engine & Editor",
+  "version": "0.1.0",
+  "description": "Motor de automação web em grafos (.webautomation.json) com editor visual drag-and-drop e suporte a MCP.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs",
+    "storage",
+    "downloads",
+    "webNavigation",
+    "contextMenus",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dist/contentDriver.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "WebAutomations Control"
+  },
+  "options_ui": {
+    "page": "editor.html",
+    "open_in_tab": true
+  },
+  "commands": {
+    "run_default_automation": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+U",
+        "mac": "Command+Shift+U"
+      },
+      "description": "Disparar automação configurada"
+    }
+  }
+}

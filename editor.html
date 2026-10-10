@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visual Flow Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="src/editor/editor.css" />
+</head>
+<body>
+  <div id="app" class="app-container">
+
+    <!-- ========================================== -->
+    <!-- WORKFLOW TABS BAR (NAVEGAÇÃO POR ABAS)    -->
+    <!-- ========================================== -->
+    <nav class="app-tabs-bar" id="appTabsBar">
+      <!-- Aba Início: tamanho menor, sempre visível e fixada à esquerda -->
+      <button class="app-tab-item tab-home active" id="tabHomeBtn" title="Tela Inicial (Gerenciador de Fluxos)">
+        <span class="tab-home-icon" style="display:inline-flex;align-items:center;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </span>
+        <span class="tab-label">Início</span>
+      </button>
+      <!-- Container das abas de workflows abertos -->
+      <div class="workflow-tabs-scroll" id="workflowTabsContainer"></div>
+      <!-- Botão para criar novo fluxo direto pela barra de abas -->
+      <button class="app-tab-add" id="btnTabNewFlow" title="Criar Novo Fluxo">+</button>
+    </nav>
+
+    <!-- ========================================== -->
+    <!-- 1. VIEW DASHBOARD (PÁGINA INICIAL DE FLUXOS) -->
+    <!-- ========================================== -->
+    <div id="viewDashboard" class="view-section active">
+      <header class="top-bar">
+        <div class="brand-section">
+          <div class="logo-badge">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <div>
+            <h1 class="flow-title">WebAutomations Studio</h1>
+            <span class="flow-badge">Gerenciador de Automações</span>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <button id="btnDashboardImport" class="btn btn-secondary">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Importar .json
+          </button>
+          <button id="btnCreateNewFlow" class="btn btn-primary">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Novo Fluxo
+          </button>
+        </div>
+      </header>
+
+      <div class="dashboard-content">
+        <div class="dashboard-hero">
+          <div>
+            <h2>Meus Fluxos de Automação</h2>
+            <p>Gerencie, execute e edite suas automações web com facilidade.</p>
+          </div>
+          <div class="search-box">
+            <input type="text" id="dashboardSearchInput" placeholder="Pesquisar automação..." />
+          </div>
+        </div>
+
+        <!-- Grid de Cards de Automação -->
+        <div class="automations-grid" id="automationsGrid">
+          <!-- Cards injetados via JavaScript -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 2. VIEW VISUAL FLOW STUDIO (EDITOR DE GRAFO) -->
+    <!-- ========================================== -->
+    <div id="viewStudio" class="view-section">
+      <!-- Top Navigation Header -->
+      <header class="top-bar">
+        <div class="brand-section">
+          <div>
+            <input type="text" id="flowTitleInput" class="flow-title-edit" value="Minha Automação" />
+            <span class="flow-badge" id="flowStatusBadge">.webautomation.json</span>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <button id="btnOpenFlowPalette" class="btn btn-secondary" title="Gerenciar grupo de cores personalizadas do fluxo">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+            <span>Cores do Fluxo</span>
+          </button>
+          <button id="btnSaveFlow" class="btn btn-secondary" title="Salvar Alterações (Ctrl+S)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <span id="saveButtonLabel">Salvar</span>
+          </button>
+          <button id="btnExportJson" class="btn btn-secondary" title="Exportar para arquivo .webautomation.json">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Exportar
+          </button>
+          <button id="btnRunFlow" class="btn btn-primary" title="Executar este fluxo no navegador">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Executar Fluxo
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Workspace -->
+      <main class="workspace" id="mainWorkspace">
+        <!-- Barra de Atividades Vertical Esquerda (Sempre visível para alternar menus) -->
+        <div class="activity-bar-left" id="activityBarLeft">
+          <button id="btnActivityBlocks" class="activity-btn active" title="Exibir / Ocultar Biblioteca de Blocos">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            <span class="activity-tooltip">Blocos</span>
+          </button>
+        </div>
+
+        <!-- Left Sidebar: Library of Blocks -->
+        <aside class="sidebar-library" id="sidebarLibrary">
+          <div class="sidebar-header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <h3>Biblioteca de Blocos</h3>
+                <p>Clique ou arraste para adicionar ao fluxo</p>
+              </div>
+              <button id="btnToggleSidebarLeft" class="sidebar-toggle-btn" title="Recolher Biblioteca">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="search-bar">
+            <input type="text" id="blockSearchInput" placeholder="Buscar bloco..." />
+          </div>
+
+          <div class="block-categories-list" id="categoriesContainer">
+            <!-- Categorias e Blocos injetados dinamicamente -->
+          </div>
+        </aside>
+
+        <!-- Divisor redimensionável esquerdo -->
+        <div class="sidebar-resizer" id="resizerLeft" title="Arraste para redimensionar a Biblioteca de Blocos"></div>
+
+        <!-- Center: Graph Canvas -->
+        <section class="canvas-container" id="canvasContainer">
+          <!-- Viewport transformável para Pan e Zoom suaves -->
+          <div class="canvas-viewport" id="canvasViewport">
+            <svg class="edges-svg-layer" id="edgesLayer"></svg>
+            <div class="canvas-nodes-layer" id="nodesLayer"></div>
+            <svg class="edges-controls-svg-layer" id="edgesControlsLayer"></svg>
+          </div>
+
+          <div class="canvas-overlay-watermark">WebAutomations Canvas</div>
+
+          <!-- Minimapa da Automação -->
+          <div class="canvas-minimap" id="canvasMinimap" title="Minimapa da Automação (Clique ou arraste para navegar)">
+            <div class="minimap-header">
+              <span>MINIMAPA</span>
+            </div>
+            <div class="minimap-body" id="minimapBody">
+              <svg class="minimap-svg" id="minimapSvg"></svg>
+              <div class="minimap-viewport-indicator" id="minimapIndicator"></div>
+            </div>
+          </div>
+
+          <!-- Floating Controls -->
+          <div class="canvas-floating-controls">
+            <button id="btnZoomIn" title="Aumentar Zoom">+</button>
+            <button id="btnZoomReset" title="Resetar Zoom e Posição">100%</button>
+            <button id="btnZoomOut" title="Diminuir Zoom">-</button>
+            <button id="btnClearCanvas" title="Limpar Nós do Canvas">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </section>
+
+        <!-- Divisor redimensionável direito -->
+        <div class="sidebar-resizer" id="resizerRight" title="Arraste para redimensionar o painel de Propriedades"></div>
+
+        <!-- Right Sidebar: Properties Inspector (Aparece apenas quando um bloco for selecionado) -->
+        <aside class="sidebar-inspector collapsed" id="sidebarInspector">
+          <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border-subtle);">
+            <div>
+              <h3 style="font-size: 13px; font-weight: 700; color: var(--text-main);">Propriedades</h3>
+              <p style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">Configurações do bloco selecionado</p>
+            </div>
+            <button id="btnToggleSidebarRight" class="sidebar-toggle-btn" title="Fechar Propriedades">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+
+          <div class="tab-content active" id="tabProperties" style="display: block; flex: 1; overflow-y: auto; padding: 16px;">
+            <div id="noSelectionMessage" class="empty-state">
+              <p>Selecione um bloco no canvas para configurar seus parâmetros.</p>
+            </div>
+            <form id="nodePropertiesForm" class="node-form hidden">
+              <!-- Campos gerados dinamicamente -->
+            </form>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <input type="file" id="jsonFileInput" accept=".json,.webautomation.json" style="display: none;" />
+  <script type="module" src="dist/editorApp.js"></script>
+</body>
+</html>
