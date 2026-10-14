@@ -129,7 +129,7 @@ export class InspectorInputHelpers {
   ): void {
     const group = document.createElement('div');
     group.className = 'form-group';
-    group.innerHTML = `<label>${labelText}</label><textarea>${value ?? ''}</textarea>`;
+    group.innerHTML = `<label>${labelText}</label><textarea rows="4" style="min-height: 84px; line-height: 1.4; resize: vertical;">${value ?? ''}</textarea>`;
     group.querySelector('textarea')?.addEventListener('input', (e: any) => onChange(e.target.value));
     container.appendChild(group);
   }

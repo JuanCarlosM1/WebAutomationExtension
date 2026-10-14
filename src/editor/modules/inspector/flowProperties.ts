@@ -236,40 +236,31 @@ export class FlowPropertiesRenderer {
       const groupEl = document.createElement('div');
       groupEl.style.cssText = 'background: #080d1a; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px;';
 
-      // Header do grupo com seletor TODAS (E) ou QUALQUER UMA (OU)
+      // Header do grupo: apenas o nome do grupo editável, sem instruções
       const groupHeader = document.createElement('div');
-      groupHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
+      groupHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; gap: 8px;';
 
-      const titleAndLogic = document.createElement('div');
-      titleAndLogic.style.cssText = 'display: flex; align-items: center; gap: 6px;';
-      titleAndLogic.innerHTML = `
-        <span style="font-size: 11px; font-weight: 700; color: #cbd5e1;">( Grupo #${gIdx + 1}:</span>
-      `;
-
-      const logicSelect = document.createElement('select');
-      logicSelect.style.cssText = 'padding: 2px 6px; font-size: 10px; font-weight: 600; background: #172033; color: #93c5fd; border: 1px solid #3b82f6; border-radius: 4px; cursor: pointer;';
-      logicSelect.innerHTML = `
-        <option value="and" ${(group.logicalOperator || 'and') === 'and' ? 'selected' : ''}>Satisfazer TODAS (E / AND)</option>
-        <option value="or" ${group.logicalOperator === 'or' ? 'selected' : ''}>Satisfazer QUALQUER UMA (OU / OR)</option>
-      `;
-      logicSelect.addEventListener('change', (e: any) => {
-        group.logicalOperator = e.target.value;
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = group.name || group.label || `Grupo ${gIdx + 1}`;
+      nameInput.className = 'group-name-input';
+      nameInput.placeholder = `Grupo ${gIdx + 1}`;
+      nameInput.style.cssText = 'background: #172033; border: 1px solid #243049; color: #f1f5f9; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; outline: none; flex: 1; max-width: 220px;';
+      nameInput.addEventListener('focus', () => { nameInput.style.borderColor = '#6366f1'; });
+      nameInput.addEventListener('blur', () => { nameInput.style.borderColor = '#243049'; });
+      nameInput.addEventListener('input', (e: any) => {
+        group.name = e.target.value;
+        group.label = e.target.value;
         ctx.onNodeDataChanged();
       });
-      titleAndLogic.appendChild(logicSelect);
 
-      const closeBracketSpan = document.createElement('span');
-      closeBracketSpan.style.cssText = 'font-size: 11px; font-weight: 700; color: #cbd5e1;';
-      closeBracketSpan.textContent = ')';
-      titleAndLogic.appendChild(closeBracketSpan);
-
-      groupHeader.appendChild(titleAndLogic);
+      groupHeader.appendChild(nameInput);
 
       if (dataObj.conditionGroups.length > 1) {
         const delGroupBtn = document.createElement('button');
         delGroupBtn.type = 'button';
-        delGroupBtn.innerHTML = '&times; Excluir Grupo';
-        delGroupBtn.style.cssText = 'background: transparent; color: #ef4444; border: none; font-size: 10px; font-weight: 600; cursor: pointer;';
+        delGroupBtn.innerHTML = '&times; Excluir';
+        delGroupBtn.style.cssText = 'background: transparent; color: #ef4444; border: none; font-size: 11px; font-weight: 600; cursor: pointer; padding: 2px 4px;';
         delGroupBtn.addEventListener('click', () => {
           dataObj.conditionGroups.splice(gIdx, 1);
           ctx.renderInspector();
@@ -297,6 +288,13 @@ export class FlowPropertiesRenderer {
       }
 
       group.rules.forEach((rule: any, rIdx: number) => {
+        // Conector com a regra anterior (E / OU / Não E / Não OU), alternado com um clique
+        if (rIdx === 0) {
+          delete rule.connector;
+        } else {
+          if (!rule.connector) rule.connector = group.logicalOperator === 'or' ? 'or' : 'and';
+          rulesList.appendChild(this.createConnectorButton(rule, ctx));
+        }
         const ruleEl = this.createRuleEditorElement(
           rule,
           rIdx,
@@ -327,7 +325,7 @@ export class FlowPropertiesRenderer {
       btnAddRuleInGroup.className = 'btn-xs';
       btnAddRuleInGroup.style.cssText =
         'width: 100%; padding: 4px; background: rgba(59, 130, 246, 0.1); color: #93c5fd; border: 1px dashed #3b82f6; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 600;';
-      btnAddRuleInGroup.textContent = `+ Adicionar Expressão ao Grupo #${gIdx + 1}`;
+      btnAddRuleInGroup.textContent = '+ Adicionar Expressão';
       btnAddRuleInGroup.addEventListener('click', () => {
         group.rules.push({
           id: `rule_${Date.now()}`,
@@ -344,29 +342,41 @@ export class FlowPropertiesRenderer {
 
       container.appendChild(groupEl);
 
-      // Conector entre grupos (E / OU)
+      // Conector entre grupos (E / OU / Não E / Não OU)
       if (!isLastGroup) {
         const connectorDiv = document.createElement('div');
-        connectorDiv.style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0;';
+        connectorDiv.style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px; margin: 4px 0;';
 
         const lineLeft = document.createElement('div');
         lineLeft.style.cssText = 'flex: 1; height: 1px; background: #334155;';
         const lineRight = document.createElement('div');
         lineRight.style.cssText = 'flex: 1; height: 1px; background: #334155;';
 
-        const connectorSelect = document.createElement('select');
-        connectorSelect.style.cssText = 'padding: 2px 8px; font-size: 10px; font-weight: 700; background: #1e293b; color: #f59e0b; border: 1px solid #d97706; border-radius: 12px; cursor: pointer; text-transform: uppercase;';
-        connectorSelect.innerHTML = `
-          <option value="or" ${(group.nextOperator || 'or') === 'or' ? 'selected' : ''}>OU (OR)</option>
-          <option value="and" ${group.nextOperator === 'and' ? 'selected' : ''}>E (AND)</option>
-        `;
-        connectorSelect.addEventListener('change', (e: any) => {
-          group.nextOperator = e.target.value;
+        const groupConnectorBtn = document.createElement('button');
+        groupConnectorBtn.type = 'button';
+        groupConnectorBtn.title = 'Clique para alternar: E / OU / Não E / Não OU';
+
+        const order = ['and', 'or', 'and_not', 'or_not'];
+        const labels: Record<string, string> = { and: 'E', or: 'OU', and_not: 'Não E', or_not: 'Não OU' };
+        const colors: Record<string, string> = { and: '#38bdf8', or: '#f59e0b', and_not: '#ef4444', or_not: '#ec4899' };
+
+        const refreshGroupBtn = () => {
+          const cur = order.includes(group.nextOperator) ? group.nextOperator : 'or';
+          groupConnectorBtn.textContent = labels[cur];
+          groupConnectorBtn.style.cssText = `padding: 2px 14px; font-size: 10px; font-weight: 700; background: #1e293b; color: ${colors[cur]}; border: 1px solid ${colors[cur]}; border-radius: 12px; cursor: pointer; text-transform: uppercase; min-width: 60px;`;
+        };
+        refreshGroupBtn();
+
+        groupConnectorBtn.addEventListener('click', () => {
+          const cur = order.includes(group.nextOperator) ? group.nextOperator : 'or';
+          const idx = order.indexOf(cur);
+          group.nextOperator = order[(idx + 1) % order.length];
+          refreshGroupBtn();
           ctx.onNodeDataChanged();
         });
 
         connectorDiv.appendChild(lineLeft);
-        connectorDiv.appendChild(connectorSelect);
+        connectorDiv.appendChild(groupConnectorBtn);
         connectorDiv.appendChild(lineRight);
         container.appendChild(connectorDiv);
       }
@@ -377,10 +387,12 @@ export class FlowPropertiesRenderer {
     btnAddGroup.className = 'btn-xs';
     btnAddGroup.style.cssText =
       'width: 100%; padding: 6px; background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1px dashed #6366f1; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-top: 4px;';
-    btnAddGroup.textContent = '+ Adicionar Outro Grupo ( (Expressão...) OU / E ...)';
+    btnAddGroup.textContent = '+ Adicionar Grupo';
     btnAddGroup.addEventListener('click', () => {
       dataObj.conditionGroups.push({
         id: `grp_${Date.now()}`,
+        name: `Grupo ${dataObj.conditionGroups.length + 1}`,
+        label: `Grupo ${dataObj.conditionGroups.length + 1}`,
         logicalOperator: 'and',
         nextOperator: 'or',
         rules: [
@@ -400,6 +412,43 @@ export class FlowPropertiesRenderer {
     container.appendChild(btnAddGroup);
 
     return container;
+  }
+
+  /**
+   * Botão que alterna o conector de uma regra com a anterior: E → OU → Não E → Não OU → E ...
+   */
+  private static createConnectorButton(rule: any, ctx: FlowPropertiesContext): HTMLElement {
+    const order = ['and', 'or', 'and_not', 'or_not'];
+    const labels: Record<string, string> = { and: 'E', or: 'OU', and_not: 'Não E', or_not: 'Não OU' };
+    const colors: Record<string, string> = { and: '#38bdf8', or: '#f59e0b', and_not: '#ef4444', or_not: '#ec4899' };
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px;';
+    const lineL = document.createElement('div');
+    lineL.style.cssText = 'flex: 1; height: 1px; background: #334155;';
+    const lineR = document.createElement('div');
+    lineR.style.cssText = 'flex: 1; height: 1px; background: #334155;';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = 'Clique para alternar: E / OU / Não E / Não OU';
+    const refresh = () => {
+      const c = order.includes(rule.connector) ? rule.connector : 'and';
+      btn.textContent = labels[c];
+      btn.style.cssText = `padding: 2px 14px; font-size: 10px; font-weight: 700; background: #1e293b; color: ${colors[c]}; border: 1px solid ${colors[c]}; border-radius: 12px; cursor: pointer; text-transform: uppercase; min-width: 60px;`;
+    };
+    refresh();
+    btn.addEventListener('click', () => {
+      const idx = order.indexOf(rule.connector);
+      rule.connector = order[(idx + 1) % order.length];
+      refresh();
+      ctx.onNodeDataChanged();
+    });
+
+    wrap.appendChild(lineL);
+    wrap.appendChild(btn);
+    wrap.appendChild(lineR);
+    return wrap;
   }
 
   public static createRuleEditorElement(
@@ -464,10 +513,10 @@ export class FlowPropertiesRenderer {
     const jsFields = document.createElement('div');
     jsFields.style.cssText = `display: ${mode === 'js_eval' ? 'flex' : 'none'}; flex-direction: column; gap: 4px;`;
     jsFields.innerHTML = `
-      <div style="display: flex; gap: 4px;">
-        <input type="text" class="rule-js-code" placeholder="Expressão JS (ex: status === 200)" value="${InspectorInputHelpers.escapeSnippet(rule.jsExpression || '')}" style="flex: 1; padding: 4px 6px; font-size: 11px; font-family: monospace; background: #172033; color: #38bdf8; border: 1px solid #243049; border-radius: 4px;" />
-        <button type="button" class="btn-open-rule-editor" title="Abrir no editor JS completo sobre o canvas" style="padding: 2px 6px; background: rgba(99, 102, 241, 0.2); border: 1px solid #6366f1; color: #818cf8; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      <div style="display: flex; gap: 4px; align-items: flex-start;">
+        <textarea class="rule-js-code" rows="4" placeholder="Expressão JS (ex: status === 200)" style="flex: 1; min-height: 84px; line-height: 1.5; padding: 6px 8px; font-size: 11px; font-family: monospace; background: #172033; color: #38bdf8; border: 1px solid #243049; border-radius: 4px; resize: vertical;">${InspectorInputHelpers.escapeSnippet(rule.jsExpression || '')}</textarea>
+        <button type="button" class="btn-open-rule-editor" title="Abrir no editor JS completo sobre o canvas" style="padding: 6px 8px; background: rgba(99, 102, 241, 0.2); border: 1px solid #6366f1; color: #818cf8; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         </button>
       </div>
     `;
@@ -497,7 +546,7 @@ export class FlowPropertiesRenderer {
       ctx.onNodeDataChanged();
     });
 
-    const jsInput = jsFields.querySelector('.rule-js-code') as HTMLInputElement;
+    const jsInput = jsFields.querySelector('.rule-js-code') as HTMLTextAreaElement;
     jsInput?.addEventListener('input', (e: any) => {
       rule.jsExpression = e.target.value;
       ctx.onNodeDataChanged();

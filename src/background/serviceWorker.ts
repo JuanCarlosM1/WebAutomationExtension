@@ -126,6 +126,11 @@ class ExtensionController {
           for (const tab of tabs) {
             if (!tab.id || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://')) continue;
 
+            // Envia sinal para o content script reavaliar e limpar/reaplicar botões flutuantes de acordo com o storage atualizado
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'SYNC_FLOATING_TRIGGER_BUTTONS',
+            }).catch(() => {});
+
             for (const auto of automations) {
               const startNode = auto.nodes.find((n) => n.type === 'start');
               if (!startNode) continue;

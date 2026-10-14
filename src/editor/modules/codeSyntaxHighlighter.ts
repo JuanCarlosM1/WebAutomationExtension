@@ -1,26 +1,28 @@
 /**
- * Syntax Highlighter visual com tags estilizadas
+ * Syntax Highlighter visual com tags estilizadas e proteção total de tokens
  */
 import { CodeLanguage } from './codeEditorSuggestions';
 import { SyntaxDiagnostic } from './codeSyntaxValidator';
 
 export class CodeSyntaxHighlighter {
   public static highlight(code: string, lang: CodeLanguage, error?: SyntaxDiagnostic | null): string {
+    if (!code) {
+      return '';
+    }
+
     const placeholders: string[] = [];
+    // Utiliza caracteres Unicode da área privada (PUA) para tokens imunes a regex de palavras ou dígitos
     const saveToken = (html: string) => {
       const idx = placeholders.length;
       placeholders.push(html);
-      return `___TOK_${idx}___`;
+      return String.fromCharCode(0xE100 + idx);
     };
 
     let text = code;
 
     if (lang === 'javascript') {
       // 1. Comentários de bloco e linha única
-      text = text.replace(/(\/\*[\s\S]*?\*\/)/g, (match) => {
-        return saveToken(`<span class="tok-com">${this.escapeHtml(match)}</span>`);
-      });
-      text = text.replace(/(\/\/[^\n]*)/g, (match) => {
+      text = text.replace(/(\/\*[\s\S]*?\*\/|\/\/[^\n]*)/g, (match) => {
         return saveToken(`<span class="tok-com">${this.escapeHtml(match)}</span>`);
       });
 
@@ -34,24 +36,24 @@ export class CodeSyntaxHighlighter {
         return saveToken(`<span class="tok-str">${this.escapeHtml(match)}</span>`);
       });
 
-      // Agora escapa o texto base que sobrou
+      // Escapa o texto base que sobrou
       text = this.escapeHtml(text);
 
-      // 4. Palavras-chave
+      // 4. Palavras-chave JS
       const kwRegex = /\b(const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|try|catch|finally|throw|new|class|extends|async|await|import|export|from|default|this|typeof|instanceof|void|delete|in|of)\b/g;
-      text = text.replace(kwRegex, '<span class="tok-kw">$1</span>');
+      text = text.replace(kwRegex, (m) => saveToken(`<span class="tok-kw">${m}</span>`));
 
       // 5. Booleanos e nulos
-      text = text.replace(/\b(true|false|null|undefined|NaN)\b/g, '<span class="tok-bool">$1</span>');
+      text = text.replace(/\b(true|false|null|undefined|NaN)\b/g, (m) => saveToken(`<span class="tok-bool">${m}</span>`));
 
-      // 6. Números
-      text = text.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-num">$1</span>');
+      // 6. Chamadas de função
+      text = text.replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()/g, (m) => saveToken(`<span class="tok-fn">${m}</span>`));
 
-      // 7. Chamadas de função
-      text = text.replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()/g, '<span class="tok-fn">$1</span>');
+      // 7. Números
+      text = text.replace(/\b(\d+(?:\.\d+)?)\b/g, (m) => saveToken(`<span class="tok-num">${m}</span>`));
 
     } else if (lang === 'css') {
-      // 1. Comentários
+      // 1. Comentários CSS
       text = text.replace(/(\/\*[\s\S]*?\*\/)/g, (match) => {
         return saveToken(`<span class="tok-com">${this.escapeHtml(match)}</span>`);
       });
@@ -65,13 +67,13 @@ export class CodeSyntaxHighlighter {
       text = this.escapeHtml(text);
 
       // 3. Seletores e IDs
-      text = text.replace(/([.#][a-zA-Z0-9_-]+)/g, '<span class="tok-fn">$1</span>');
+      text = text.replace(/([.#][a-zA-Z0-9_-]+)/g, (m) => saveToken(`<span class="tok-fn">${m}</span>`));
 
       // 4. Propriedades CSS
-      text = text.replace(/([a-zA-Z-]+)(?=\s*:)/g, '<span class="tok-kw">$1</span>');
+      text = text.replace(/([a-zA-Z-]+)(?=\s*:)/g, (m) => saveToken(`<span class="tok-kw">${m}</span>`));
 
       // 5. Unidades e Números
-      text = text.replace(/\b(\d+(?:px|em|rem|%|vh|vw|s|ms|deg)?)\b/g, '<span class="tok-num">$1</span>');
+      text = text.replace(/\b(\d+(?:px|em|rem|%|vh|vw|s|ms|deg)?)\b/g, (m) => saveToken(`<span class="tok-num">${m}</span>`));
 
     } else if (lang === 'html') {
       // 1. Comentários HTML
@@ -82,22 +84,32 @@ export class CodeSyntaxHighlighter {
       // Escapa HTML
       text = this.escapeHtml(text);
 
-      // 2. Tags
-      text = text.replace(/(&lt;\/?[a-zA-Z0-9_-]+)/g, '<span class="tok-kw">$1</span>');
-      text = text.replace(/(&gt;)/g, '<span class="tok-kw">$1</span>');
+      // 2. Tags HTML e Atributos de forma estruturada e atômica
+      text = text.replace(/(&lt;\/?[a-zA-Z0-9_-]+)([\s\S]*?)(&gt;|\/&gt;)/g, (match, openTag, attrs, closeTag) => {
+        const highlightedTag = saveToken(`<span class="tok-kw">${openTag}</span>`);
+        let highlightedAttrs = attrs;
 
-      // 3. Valores de atributos entre aspas
-      text = text.replace(/(=)(&quot;.*?&quot;|&#39;.*?&#39;|".*?"|'.*?')/g, '$1<span class="tok-str">$2</span>');
+        // Valores de atributos entre aspas
+        highlightedAttrs = highlightedAttrs.replace(/(=)(&quot;[\s\S]*?&quot;|&#39;[\s\S]*?&#39;|"[^"]*"|'[^']*')/g, (m: string, eq: string, val: string) => {
+          return eq + saveToken(`<span class="tok-str">${val}</span>`);
+        });
 
-      // 4. Nomes de atributos
-      text = text.replace(/\b([a-zA-Z_-]+)(?=\s*=)/g, '<span class="tok-fn">$1</span>');
+        // Nomes de atributos
+        highlightedAttrs = highlightedAttrs.replace(/\b([a-zA-Z_:-]+)(?=\s*=)/g, (m: string, attrName: string) => {
+          return saveToken(`<span class="tok-fn">${attrName}</span>`);
+        });
+
+        const highlightedClose = saveToken(`<span class="tok-kw">${closeTag}</span>`);
+        return highlightedTag + highlightedAttrs + highlightedClose;
+      });
     } else {
       text = this.escapeHtml(text);
     }
 
-    // Restaura os placeholders protegidos
-    placeholders.forEach((tokenHtml, idx) => {
-      text = text.replace(`___TOK_${idx}___`, tokenHtml);
+    // Restaura os placeholders de forma segura
+    text = text.replace(/[\uE100-\uF8FF]/g, (char) => {
+      const idx = char.charCodeAt(0) - 0xE100;
+      return placeholders[idx] ?? '';
     });
 
     // Se houver erro de sintaxe em uma linha específica, adiciona sublinhado ondulado na linha afetada

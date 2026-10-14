@@ -132,124 +132,107 @@ export class HtmlElementAnalyzer {
     });
   }
 
-  private static renderModal(): void {
-    this.closeModal();
+  private static panelPos?: { left: number; top: number };
 
-    const backdrop = document.createElement('div');
-    backdrop.className = 'flow-modal-backdrop html-analyzer-modal';
-    backdrop.style.cssText = `
+  private static renderModal(): void {
+    // Reaproveita o painel existente para não perder posição nem conteúdo
+    if (this.modalBackdrop && document.body.contains(this.modalBackdrop)) return;
+    document.querySelectorAll('.html-analyzer-modal').forEach((el) => el.remove());
+
+    const panel = document.createElement('div');
+    panel.className = 'html-analyzer-modal';
+    const pos = this.panelPos || { left: Math.max(8, window.innerWidth - 388), top: 70 };
+    panel.style.cssText = `
       position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(10, 15, 26, 0.85);
-      backdrop-filter: blur(8px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      left: ${pos.left}px; top: ${pos.top}px;
+      width: 370px;
+      max-height: 70vh;
       z-index: 100000;
-      padding: 16px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6), 0 0 18px rgba(99,102,241,0.25);
       font-family: var(--font-sans, system-ui, sans-serif);
-      animation: fadeIn 0.15s ease-out;
+      overflow: hidden;
     `;
 
-    backdrop.innerHTML = `
-      <div class="analyzer-card" style="
-        background: #0f172a;
-        border: 1px solid #334155;
-        border-radius: 12px;
-        max-width: 840px;
-        width: 100%;
-        max-height: 90vh;
-        display: flex;
-        flex-direction: column;
-        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8), 0 0 30px rgba(99,102,241,0.2);
-        overflow: hidden;
-      ">
-        <!-- Header -->
-        <div style="padding: 16px 20px; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; background: #131d35;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(99, 102, 241, 0.2); color: #818cf8; display: flex; align-items: center; justify-content: center;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                <line x1="11" y1="8" x2="11" y2="14"></line>
-                <line x1="8" y1="11" x2="14" y2="11"></line>
-              </svg>
-            </div>
-            <div>
-              <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #f8fafc;">Analisador de Elementos HTML</h3>
-              <p style="margin: 2px 0 0; font-size: 11px; color: #94a3b8;">Capture e analise seletores limpos e simples de qualquer elemento web, pai e filhos</p>
-            </div>
-          </div>
-          <button id="btnCloseAnalyzer" style="background: transparent; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 6px;">✕</button>
+    panel.innerHTML = `
+      <div id="analyzerDragHandle" title="Segure CTRL e arraste para mover" style="padding: 6px 10px; background: #131d35; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; gap: 8px; user-select: none;">
+        <span style="font-size: 12px; font-weight: 700; color: #f8fafc;">🔍 Analisador HTML <span style="font-weight: 400; color: #64748b; font-size: 10px;">(CTRL + arrastar)</span></span>
+        <button id="btnCloseAnalyzer" title="Fechar e desativar" style="background: transparent; border: none; color: #94a3b8; font-size: 15px; cursor: pointer; padding: 0 4px; border-radius: 4px;">✕</button>
+      </div>
+      <div id="analyzerBodyContent" style="padding: 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+        <button type="button" id="btnPickFromWebPage" class="btn btn-primary" style="background: #3b82f6; border-color: #3b82f6; padding: 6px 10px; font-size: 11px; font-weight: 600; cursor: pointer;">🎯 Ativar Mira na Página</button>
+        <div style="display: flex; gap: 4px;">
+          <input type="text" id="analyzerManualInput" placeholder="Seletor CSS (ex: #id, button.btn)" style="flex: 1; min-width: 0; padding: 5px 8px; font-size: 11px; background: #090d16; color: white; border: 1px solid #334155; border-radius: 6px;" />
+          <button type="button" id="btnAnalyzeManual" class="btn btn-secondary" style="padding: 5px 10px; font-size: 11px; white-space: nowrap;">Analisar</button>
         </div>
-
-        <!-- Body -->
-        <div style="padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px;" id="analyzerBodyContent">
-          <!-- Ação Principal: Iniciar Seleção na Página Ativa -->
-          <div style="background: #172554; border: 1px solid #3b82f6; border-radius: 8px; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
-            <div>
-              <h4 style="margin: 0; font-size: 13px; font-weight: 700; color: #93c5fd;">Capturar Elemento na Página Web</h4>
-              <p style="margin: 4px 0 0; font-size: 11px; color: #cbd5e1;">Clique no botão ao lado para apontar e clicar em qualquer elemento da página aberta.</p>
-            </div>
-            <button type="button" id="btnPickFromWebPage" class="btn btn-primary" style="background: #3b82f6; border-color: #3b82f6; padding: 8px 16px; font-size: 12px; font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              <span>Ativar Mira na Página</span>
-            </button>
+        <div id="analyzerResultsContainer" style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="background: #090d16; border: 1px dashed #334155; border-radius: 6px; padding: 10px; text-align: center; color: #64748b; font-size: 11px;">
+            Nenhum elemento analisado. Ative a mira ou digite um seletor.
           </div>
-
-          <!-- Campo de Teste / Inserção Manual de Seletor ou Código HTML -->
-          <div style="display: flex; flex-direction: column; gap: 6px;">
-            <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; text-transform: uppercase;">Ou digite/cole o Seletor CSS ou Código HTML para inspecionar:</label>
-            <div style="display: flex; gap: 8px;">
-              <input type="text" id="analyzerManualInput" placeholder="ex: #meu-elemento, button.btn-primary, input[name='email']" style="flex: 1; padding: 8px 12px; font-size: 12px; background: #090d16; color: white; border: 1px solid #334155; border-radius: 6px;" />
-              <button type="button" id="btnAnalyzeManual" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12px; font-weight: 600; white-space: nowrap;">
-                Analisar Seletor
-              </button>
-            </div>
-          </div>
-
-          <!-- Área de Resultados / Árvore de Hierarquia (Alvo, Pai e Filhos) -->
-          <div id="analyzerResultsContainer" style="display: flex; flex-direction: column; gap: 12px;">
-            <div style="background: #090d16; border: 1px dashed #334155; border-radius: 8px; padding: 24px; text-align: center; color: #64748b; font-size: 12px;">
-              🔍 Nenhum elemento analisado ainda. Clique em <strong>"Ativar Mira na Página"</strong> ou digite um seletor acima.
-            </div>
-          </div>
-        </div>
-
-        <!-- Footer -->
-        <div style="padding: 12px 20px; border-top: 1px solid #1e293b; background: #131d35; display: flex; align-items: center; justify-content: space-between;">
-          <span style="font-size: 11px; color: #64748b;">Dica: Seletores com ID (#id) ou atributos únicos são sempre priorizados para evitar fragilidade.</span>
-          <button type="button" id="btnCloseAnalyzerBottom" class="btn btn-secondary" style="padding: 6px 16px; font-size: 12px;">Fechar</button>
         </div>
       </div>
     `;
 
-    backdrop.querySelector('#btnCloseAnalyzer')?.addEventListener('click', () => this.closeModal());
-    backdrop.querySelector('#btnCloseAnalyzerBottom')?.addEventListener('click', () => this.closeModal());
+    panel.querySelector('#btnCloseAnalyzer')?.addEventListener('click', () => this.closeModal());
 
-    backdrop.querySelector('#btnPickFromWebPage')?.addEventListener('click', () => {
-      this.closeModal();
+    panel.querySelector('#btnPickFromWebPage')?.addEventListener('click', () => {
       this.startLivePicker();
     });
 
-    backdrop.querySelector('#btnAnalyzeManual')?.addEventListener('click', () => {
-      const input = (backdrop.querySelector('#analyzerManualInput') as HTMLInputElement)?.value.trim();
+    const runManual = () => {
+      const input = (panel.querySelector('#analyzerManualInput') as HTMLInputElement)?.value.trim();
       if (!input) return;
       this.testAndShowLocalSelector(input);
+    };
+    panel.querySelector('#btnAnalyzeManual')?.addEventListener('click', runManual);
+    panel.querySelector('#analyzerManualInput')?.addEventListener('keydown', (e: any) => {
+      if (e.key === 'Enter') runManual();
     });
 
-    backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) this.closeModal();
+    // Arrastar com CTRL + clique em qualquer ponto do painel
+    panel.addEventListener('mousedown', (e: MouseEvent) => {
+      if (!e.ctrlKey || e.button !== 0) return;
+      e.preventDefault();
+      const rect = panel.getBoundingClientRect();
+      const offX = e.clientX - rect.left;
+      const offY = e.clientY - rect.top;
+      const onMove = (me: MouseEvent) => {
+        const left = Math.max(0, Math.min(window.innerWidth - rect.width, me.clientX - offX));
+        const top = Math.max(0, Math.min(window.innerHeight - 40, me.clientY - offY));
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
+        this.panelPos = { left, top };
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
     });
 
-    document.body.appendChild(backdrop);
-    this.modalBackdrop = backdrop;
+    document.body.appendChild(panel);
+    this.modalBackdrop = panel;
   }
 
   private static closeModal(): void {
     this.modalBackdrop?.remove();
     document.querySelectorAll('.html-analyzer-modal').forEach((el) => el.remove());
     this.modalBackdrop = undefined;
+    // Desativa a mira na página web, se estiver ativa
+    if (chrome.tabs?.query) {
+      chrome.tabs.query({}, (tabs) => {
+        tabs.forEach((t) => {
+          if (t.id && t.url && /^(https?|file):/.test(t.url)) {
+            chrome.tabs.sendMessage(t.id, { action: 'STOP_ELEMENT_PICKER' }, () => void chrome.runtime.lastError);
+          }
+        });
+      });
+    }
   }
 
   /**
@@ -296,10 +279,10 @@ export class HtmlElementAnalyzer {
       background: ${isPrimary ? '#111c38' : '#090d16'};
       border: 1px solid ${borderColor};
       border-radius: 8px;
-      padding: 12px 14px;
+      padding: 6px 8px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 4px;
       position: relative;
     `;
 
@@ -308,8 +291,8 @@ export class HtmlElementAnalyzer {
     const classSnippet = node.classes.length > 0 ? `<span style="color: #10b981; font-family: monospace;">.${node.classes.slice(0, 2).join('.')}</span>` : '';
 
     card.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0;">
           <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; background: ${borderColor}25; color: ${borderColor}; border: 1px solid ${borderColor}50; padding: 2px 6px; border-radius: 4px;">${type}</span>
           <span style="font-size: 12px; font-weight: 600; color: #f8fafc;">${title}</span>
           <span style="font-size: 11px; font-family: monospace; color: #94a3b8;">${tagBadge} ${idSnippet} ${classSnippet}</span>
@@ -320,7 +303,7 @@ export class HtmlElementAnalyzer {
         </button>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">
+      <div style="display: grid; grid-template-columns: 1fr; gap: 4px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">
         <div style="display: flex; flex-direction: column; gap: 2px; overflow: hidden;">
           <span style="font-size: 10px; color: #94a3b8; font-weight: 700;">SELETOR CSS OTIMIZADO:</span>
           <code style="font-size: 11px; color: #38bdf8; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${node.selector || 'tag'}</code>

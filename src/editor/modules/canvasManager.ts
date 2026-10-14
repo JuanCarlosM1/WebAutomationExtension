@@ -653,6 +653,14 @@ export class CanvasManager {
     svgEdges.innerHTML = '';
     if (svgControls) svgControls.innerHTML = '';
 
+    // Retângulos dos blocos para que as cordas evitem atravessá-los
+    const obstacles = graph.nodes
+      .map((n) => {
+        const el = document.getElementById(`rendered_${n.id}`);
+        return el ? { x: n.position.x, y: n.position.y, w: el.offsetWidth || 210, h: el.offsetHeight || 80 } : null;
+      })
+      .filter((o): o is { x: number; y: number; w: number; h: number } => !!o);
+
     graph.edges.forEach((edge) => {
       const sourceNode = graph.nodes.find((n) => n.id === edge.source);
       const targetNode = graph.nodes.find((n) => n.id === edge.target);
@@ -680,7 +688,7 @@ export class CanvasManager {
       const x2 = targetPt.x;
       const y2 = targetPt.y;
 
-      const { pathData, midX, midY } = this.generateOrthogonalPath(x1, y1, x2, y2);
+      const { pathData, midX, midY } = this.generateOrthogonalPath(x1, y1, x2, y2, obstacles);
 
       let strokeColor = '#6366f1';
       if (edge.sourceHandle === 'true' || edge.sourceHandle === 'loop_done') strokeColor = '#10b981';
@@ -774,8 +782,14 @@ export class CanvasManager {
     });
   }
 
-  public generateOrthogonalPath(x1: number, y1: number, x2: number, y2: number): { pathData: string; midX: number; midY: number } {
-    return CanvasPathUtils.generateOrthogonalPath(x1, y1, x2, y2);
+  public generateOrthogonalPath(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    obstacles?: { x: number; y: number; w: number; h: number }[]
+  ): { pathData: string; midX: number; midY: number } {
+    return CanvasPathUtils.generateOrthogonalPath(x1, y1, x2, y2, obstacles);
   }
 
   public renderTemporaryEdge(x1: number, y1: number, x2: number, y2: number): void {

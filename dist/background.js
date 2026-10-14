@@ -178,6 +178,22 @@ var StateManager = class {
   evaluateRulesGroup(rules, logicalOperator = "and") {
     if (!rules || rules.length === 0)
       return true;
+    if (rules.some((r) => !!r.connector)) {
+      let result = this.evaluateConditionRule(rules[0]);
+      for (let i = 1; i < rules.length; i++) {
+        const conn = rules[i].connector || logicalOperator;
+        let value = this.evaluateConditionRule(rules[i]);
+        if (conn === "and_not" || conn === "or_not" || conn === "not_and" || conn === "not_or") {
+          value = !value;
+        }
+        if (conn === "or" || conn === "or_not" || conn === "not_or") {
+          result = result || value;
+        } else {
+          result = result && value;
+        }
+      }
+      return result;
+    }
     if (logicalOperator === "or") {
       return rules.some((r) => this.evaluateConditionRule(r));
     }
@@ -197,11 +213,14 @@ var StateManager = class {
       const currentGroup = groups[i];
       const nextGroup = groups[i + 1];
       const connector = currentGroup.nextOperator || "or";
-      const nextGroupResult = this.evaluateRulesGroup(nextGroup.rules, nextGroup.logicalOperator || "and");
-      if (connector === "and") {
-        runningResult = runningResult && nextGroupResult;
-      } else {
+      let nextGroupResult = this.evaluateRulesGroup(nextGroup.rules, nextGroup.logicalOperator || "and");
+      if (connector === "and_not" || connector === "or_not" || connector === "not_and" || connector === "not_or") {
+        nextGroupResult = !nextGroupResult;
+      }
+      if (connector === "or" || connector === "or_not" || connector === "not_or") {
         runningResult = runningResult || nextGroupResult;
+      } else {
+        runningResult = runningResult && nextGroupResult;
       }
     }
     return runningResult;
@@ -1380,6 +1399,10 @@ var ExtensionController = class {
           for (const tab of tabs) {
             if (!tab.id || !tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://"))
               continue;
+            chrome.tabs.sendMessage(tab.id, {
+              action: "SYNC_FLOATING_TRIGGER_BUTTONS"
+            }).catch(() => {
+            });
             for (const auto of automations) {
               const startNode = auto.nodes.find((n) => n.type === "start");
               if (!startNode)

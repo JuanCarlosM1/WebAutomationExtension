@@ -94,6 +94,7 @@ export class StartPropertiesRenderer {
         }
         data.triggers.splice(index, 1);
         ctx.renderInspector();
+        ctx.onNodeDataChanged?.();
       });
 
       accordionHeader.appendChild(headerLeft);
@@ -132,6 +133,7 @@ export class StartPropertiesRenderer {
           (val) => {
             trig.type = val;
             ctx.renderInspector();
+            ctx.onNodeDataChanged?.();
           }
         );
 
@@ -142,6 +144,7 @@ export class StartPropertiesRenderer {
           this.renderUrlListSection(body, 'URLs de Execução Automática', trig.urlPatterns, (newList) => {
             trig.urlPatterns = newList;
             trig.urlPattern = newList[0] || 'https://*/*';
+            ctx.onNodeDataChanged?.();
           }, ctx);
 
           // Opção de ativar apenas quando um elemento específico aparecer
@@ -184,13 +187,19 @@ export class StartPropertiesRenderer {
             body.appendChild(onUrlElemBox);
           }
         } else if (trig.type === 'shortcut') {
-          InspectorInputHelpers.addTextInput(body, 'Combinação de Teclas (ex: Ctrl+Shift+U)', trig.shortcutKey || 'Ctrl+Shift+U', (val) => (trig.shortcutKey = val));
+          InspectorInputHelpers.addTextInput(body, 'Combinação de Teclas (ex: Ctrl+Shift+U)', trig.shortcutKey || 'Ctrl+Shift+U', (val) => {
+            trig.shortcutKey = val;
+            ctx.onNodeDataChanged?.();
+          });
         } else if (trig.type === 'schedule') {
-          this.renderIntervalScheduleTriggerConfig(body, trig);
+          this.renderIntervalScheduleTriggerConfig(body, trig, ctx);
         } else if (trig.type === 'date_schedule') {
           this.renderDateScheduleTriggerConfig(body, trig, ctx);
         } else if (trig.type === 'context_menu') {
-          InspectorInputHelpers.addTextInput(body, 'Título no Menu de Contexto', trig.contextMenuTitle || 'Executar Automação', (val) => (trig.contextMenuTitle = val));
+          InspectorInputHelpers.addTextInput(body, 'Título no Menu de Contexto', trig.contextMenuTitle || 'Executar Automação', (val) => {
+            trig.contextMenuTitle = val;
+            ctx.onNodeDataChanged?.();
+          });
         } else if (trig.type === 'floating_button') {
           this.renderFloatingButtonTriggerConfig(body, trig, ctx);
         }
@@ -215,13 +224,14 @@ export class StartPropertiesRenderer {
       });
       ctx.expandedTriggerIndices.add(newIndex);
       ctx.renderInspector(`.start-trigger-card-item[data-trigger-index="${newIndex}"]`);
+      ctx.onNodeDataChanged?.();
     });
 
     triggersContainer.appendChild(btnAddTrigger);
     form.appendChild(triggersContainer);
   }
 
-  public static renderIntervalScheduleTriggerConfig(body: HTMLElement, trig: any): void {
+  public static renderIntervalScheduleTriggerConfig(body: HTMLElement, trig: any, ctx?: StartPropertiesContext): void {
     if (trig.intervalValue === undefined) {
       trig.intervalValue = trig.intervalMinutes ?? 15;
     }
@@ -252,6 +262,7 @@ export class StartPropertiesRenderer {
       else if (trig.intervalUnit === 'hours') trig.intervalMinutes = val * 60;
       else if (trig.intervalUnit === 'seconds') trig.intervalMinutes = Math.max(1, Math.round(val / 60));
       else if (trig.intervalUnit === 'ms') trig.intervalMinutes = Math.max(1, Math.round(val / 60000));
+      ctx?.onNodeDataChanged?.();
     });
 
     const unitSelect = document.createElement('select');
@@ -269,6 +280,7 @@ export class StartPropertiesRenderer {
       else if (trig.intervalUnit === 'hours') trig.intervalMinutes = val * 60;
       else if (trig.intervalUnit === 'seconds') trig.intervalMinutes = Math.max(1, Math.round(val / 60));
       else if (trig.intervalUnit === 'ms') trig.intervalMinutes = Math.max(1, Math.round(val / 60000));
+      ctx?.onNodeDataChanged?.();
     });
 
     inputGroup.appendChild(numInp);
@@ -276,7 +288,10 @@ export class StartPropertiesRenderer {
     intervalRow.appendChild(inputGroup);
     body.appendChild(intervalRow);
 
-    InspectorInputHelpers.addTextInput(body, 'Expressão Cron (Opcional, ex: 0 * * * *)', trig.cronExpression || '', (val) => (trig.cronExpression = val));
+    InspectorInputHelpers.addTextInput(body, 'Expressão Cron (Opcional, ex: 0 * * * *)', trig.cronExpression || '', (val) => {
+      trig.cronExpression = val;
+      ctx?.onNodeDataChanged?.();
+    });
   }
 
   public static renderDateScheduleTriggerConfig(body: HTMLElement, trig: any, ctx: StartPropertiesContext): void {
@@ -312,13 +327,17 @@ export class StartPropertiesRenderer {
     modeSelect.addEventListener('change', (e: any) => {
       ds.mode = e.target.value;
       ctx.renderInspector();
+      ctx.onNodeDataChanged?.();
     });
 
     modeGroup.appendChild(modeLabel);
     modeGroup.appendChild(modeSelect);
     body.appendChild(modeGroup);
 
-    InspectorInputHelpers.addTextInput(body, 'Horário de Execução no Dia (HH:MM)', ds.time || '09:00', (val) => (ds.time = val));
+    InspectorInputHelpers.addTextInput(body, 'Horário de Execução no Dia (HH:MM)', ds.time || '09:00', (val) => {
+      ds.time = val;
+      ctx.onNodeDataChanged?.();
+    });
 
     const selectionCard = document.createElement('div');
     selectionCard.style.cssText = 'background: #0b0f19; border: 1px solid #1e293b; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px;';
@@ -372,6 +391,7 @@ export class StartPropertiesRenderer {
             ds.weekdays.sort();
           }
           ctx.renderInspector();
+          ctx.onNodeDataChanged?.();
         });
         daysGrid.appendChild(dayBtn);
       });
@@ -414,6 +434,7 @@ export class StartPropertiesRenderer {
             ds.monthDays.sort((a: number, b: number) => a - b);
           }
           ctx.renderInspector();
+          ctx.onNodeDataChanged?.();
         });
         monthGrid.appendChild(dayBtn);
       }
@@ -460,6 +481,7 @@ export class StartPropertiesRenderer {
           ds.fullDates.push(val);
           ds.fullDates.sort();
           ctx.renderInspector();
+          ctx.onNodeDataChanged?.();
         } else {
           ctx.showToast('Esta data já foi adicionada à lista.', 'info');
         }
@@ -495,6 +517,7 @@ export class StartPropertiesRenderer {
         btnClear.addEventListener('click', () => {
           ds.fullDates = [];
           ctx.renderInspector();
+          ctx.onNodeDataChanged?.();
         });
         badgeHeader.appendChild(btnClear);
       }
@@ -518,6 +541,7 @@ export class StartPropertiesRenderer {
           tag.querySelector('button')?.addEventListener('click', () => {
             ds.fullDates = ds.fullDates.filter((x: string) => x !== dt);
             ctx.renderInspector();
+            ctx.onNodeDataChanged?.();
           });
           tagContainer.appendChild(tag);
         });
@@ -558,7 +582,10 @@ export class StartPropertiesRenderer {
     if (!fb.offsetUnitY) fb.offsetUnitY = 'px';
 
     // 1. Texto do Botão
-    InspectorInputHelpers.addTextInput(body, 'Texto do Botão', fb.buttonText || '', (val) => (fb.buttonText = val));
+    InspectorInputHelpers.addTextInput(body, 'Texto do Botão', fb.buttonText || '', (val) => {
+      fb.buttonText = val;
+      ctx.onNodeDataChanged?.();
+    });
 
     // 2. Ícone (Tipo de Ícone)
     const iconGroup = document.createElement('div');
@@ -588,7 +615,10 @@ export class StartPropertiesRenderer {
         emojiInput.value = fb.buttonIcon || '⚡';
         emojiInput.placeholder = 'ex: ⚡, 🚀, ▶, ⚙️';
         emojiInput.style.cssText = 'width: 100%; padding: 5px 8px; font-size: 14px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px;';
-        emojiInput.addEventListener('input', (e: any) => (fb.buttonIcon = e.target.value));
+        emojiInput.addEventListener('input', (e: any) => {
+          fb.buttonIcon = e.target.value;
+          ctx.onNodeDataChanged?.();
+        });
         iconContentDiv.appendChild(emojiInput);
       } else if (fb.iconType === 'svg') {
         const svgInput = document.createElement('textarea');
@@ -596,7 +626,10 @@ export class StartPropertiesRenderer {
         svgInput.placeholder = '<svg viewBox="0 0 24 24" ...>...</svg>';
         svgInput.rows = 3;
         svgInput.style.cssText = 'width: 100%; padding: 5px 8px; font-size: 11px; font-family: monospace; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px; resize: vertical;';
-        svgInput.addEventListener('input', (e: any) => (fb.svgIcon = e.target.value));
+        svgInput.addEventListener('input', (e: any) => {
+          fb.svgIcon = e.target.value;
+          ctx.onNodeDataChanged?.();
+        });
         iconContentDiv.appendChild(svgInput);
       } else if (fb.iconType === 'image') {
         const uploadContainer = document.createElement('div');
@@ -619,6 +652,7 @@ export class StartPropertiesRenderer {
               fb.imageIcon = base64;
               previewImg.src = base64;
               previewImg.style.display = 'block';
+              ctx.onNodeDataChanged?.();
             };
             reader.readAsDataURL(file);
           }
@@ -646,6 +680,7 @@ export class StartPropertiesRenderer {
         delete fb.svgIcon;
       }
       renderIconOptions();
+      ctx.onNodeDataChanged?.();
     });
 
     renderIconOptions();
@@ -995,6 +1030,7 @@ export class StartPropertiesRenderer {
         inp.addEventListener('input', (e: any) => {
           currentList[uIdx] = e.target.value;
           onUpdate(currentList);
+          ctx.onNodeDataChanged?.();
         });
 
         const delUrlBtn = document.createElement('button');
@@ -1006,6 +1042,7 @@ export class StartPropertiesRenderer {
           currentList.splice(uIdx, 1);
           onUpdate(currentList);
           ctx.renderInspector();
+          ctx.onNodeDataChanged?.();
         });
 
         row.appendChild(inp);
@@ -1025,6 +1062,7 @@ export class StartPropertiesRenderer {
       currentList.push('*://*/*');
       onUpdate(currentList);
       ctx.renderInspector();
+      ctx.onNodeDataChanged?.();
     });
     urlSection.appendChild(btnAddUrl);
 

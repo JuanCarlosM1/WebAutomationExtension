@@ -1397,6 +1397,12 @@ body.is-resizing-active * {
   max-width: 100%;
 }
 
+.form-group textarea {
+  min-height: 84px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
 select {
   box-sizing: border-box;
   max-width: 100%;
@@ -1726,6 +1732,31 @@ select {
   caret-color: #38bdf8 !important;
   resize: none !important;
   outline: none !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* Permitir seleção visível e nítida de trechos ou de todo o código */
+.code-editor-component,
+.code-editor-main,
+.code-editor-content-wrapper,
+.code-modal-card,
+.code-modal-body,
+.node-expand-body,
+.node-expand-modal {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+.code-editor-textarea::selection {
+  background: rgba(59, 130, 246, 0.45) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.code-editor-textarea::-moz-selection {
+  background: rgba(59, 130, 246, 0.45) !important;
+  color: #ffffff !important;
 }
 
 .code-editor-statusbar {

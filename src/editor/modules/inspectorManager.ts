@@ -408,18 +408,22 @@ export class InspectorManager {
       backdrop.querySelector('#btnDiscardExpandedModal')?.addEventListener('click', discardChanges);
       backdrop.querySelector('#btnDoneExpandedModal')?.addEventListener('click', commitChanges);
 
-      // Fechar pelo botão X ou clicar no backdrop pergunta ou aplica se não descartado
+      // Fechar pelo botão X ou tecla Escape descarta as alterações; aplicar alterações acontece APENAS via 'Concluir e Aplicar'
       const handleCloseDialog = () => {
         if (!changesCommitted) {
-          // Conclui e sincroniza as edições feitas
-          commitChanges();
+          discardChanges();
         }
       };
 
       backdrop.querySelector('#btnCloseExpandedModal')?.addEventListener('click', handleCloseDialog);
 
+      // Clicar fora do editor (backdrop) não faz NADA por especificação do usuário:
+      // apenas botões configurados devem fechar ou aplicar/descartar alterações
       backdrop.addEventListener('click', (e) => {
-        if (e.target === backdrop) handleCloseDialog();
+        if (e.target === backdrop) {
+          e.stopPropagation();
+          // Não fecha nem aplica alterações ao clicar fora
+        }
       });
 
       const onKeyDown = (e: KeyboardEvent) => {
@@ -493,7 +497,7 @@ export class InspectorManager {
   private addTextareaInput(container: HTMLElement, labelText: string, value: string, onChange: (val: string) => void): void {
     const group = document.createElement('div');
     group.className = 'form-group';
-    group.innerHTML = `<label>${labelText}</label><textarea>${value ?? ''}</textarea>`;
+    group.innerHTML = `<label>${labelText}</label><textarea rows="4" style="min-height: 84px; line-height: 1.4; resize: vertical;">${value ?? ''}</textarea>`;
     group.querySelector('textarea')?.addEventListener('input', (e: any) => onChange(e.target.value));
     container.appendChild(group);
   }

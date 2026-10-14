@@ -105,7 +105,9 @@ export const HTML_SUGGESTIONS: AutocompleteItem[] = [
   { label: 'label', type: 'tag', insertText: '<label></label>', detail: 'input label', cursorOffset: 7 },
   { label: 'select', type: 'tag', insertText: '<select>\n  <option value="1">Opção 1</option>\n</select>', detail: 'select dropdown', cursorOffset: 8 },
   { label: 'textarea', type: 'tag', insertText: '<textarea></textarea>', detail: 'multiline input', cursorOffset: 10 },
+  { label: 'script', type: 'tag', insertText: '<script>\n  \n</script>', detail: 'javascript script tag', cursorOffset: 11 },
+  { label: 'style', type: 'tag', insertText: '<style>\n  \n</style>', detail: 'css style tag', cursorOffset: 10 },
   { label: 'class', type: 'property', insertText: 'class=""', detail: 'attribute', cursorOffset: 7 },
   { label: 'id', type: 'property', insertText: 'id=""', detail: 'attribute', cursorOffset: 4 },
-  { label: 'style', type: 'property', insertText: 'style=""', detail: 'attribute', cursorOffset: 7 },
+  { label: 'style-attr', type: 'property', insertText: 'style=""', detail: 'style attribute', cursorOffset: 7 },
 ];

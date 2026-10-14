@@ -11,8 +11,16 @@
         startElementPickerMode();
         return { success: true };
       }
+      case "STOP_ELEMENT_PICKER": {
+        stopElementPickerMode();
+        return { success: true };
+      }
       case "INJECT_FLOATING_TRIGGER_BUTTON": {
         injectFloatingTriggerButton(payload);
+        return { success: true };
+      }
+      case "SYNC_FLOATING_TRIGGER_BUTTONS": {
+        checkAndInjectFloatingButtonsOnLoad();
         return { success: true };
       }
       case "CLICK_ELEMENT": {
@@ -286,15 +294,10 @@
     const pos = buttonConfig.position || "bottom-right";
     const containerId = `webautomations-floating-container-${pos}`;
     const shape = buttonConfig.shape || "pill";
+    const configSignature = JSON.stringify({ automationName, buttonConfig });
     const oldBtn = document.getElementById(existingId);
-    if (oldBtn) {
-      const prevText = oldBtn.getAttribute("data-webautomations-text");
-      const prevShape = oldBtn.getAttribute("data-webautomations-shape");
-      const prevPos = oldBtn.getAttribute("data-webautomations-pos");
-      const newText = buttonConfig.buttonText || automationName || "Executar Fluxo";
-      if (prevText === newText && prevShape === shape && prevPos === pos) {
-        return;
-      }
+    if (oldBtn && oldBtn.getAttribute("data-webautomations-sig") === configSignature) {
+      return;
     }
     const oldBtns = document.querySelectorAll(`[id="${existingId}"], [data-webautomations-trigger="${automationId}"]`);
     oldBtns.forEach((btn) => btn.remove());
@@ -306,87 +309,88 @@
       const maxColumns = Number(layoutSettings.maxColumns) > 0 ? Number(layoutSettings.maxColumns) : 3;
       const maxRows = Number(layoutSettings.maxRows) > 0 ? Number(layoutSettings.maxRows) : 5;
       const gap = layoutSettings.gap !== void 0 ? Number(layoutSettings.gap) : 10;
+      const unitX = buttonConfig.offsetUnitX || "px";
+      const unitY = buttonConfig.offsetUnitY || "px";
+      const rawOffsetX = buttonConfig.offsetX !== void 0 ? buttonConfig.offsetX : 24;
+      const rawOffsetY = buttonConfig.offsetY !== void 0 ? buttonConfig.offsetY : 24;
+      const offsetX = `${rawOffsetX}${unitX}`;
+      const offsetY = `${rawOffsetY}${unitY}`;
+      let posCss = "";
+      let alignFlex = "flex-end";
+      let justifyFlex = "flex-end";
+      switch (pos) {
+        case "bottom-right":
+          posCss = `bottom: ${offsetY}; right: ${offsetX};`;
+          alignFlex = "flex-end";
+          justifyFlex = "flex-end";
+          break;
+        case "bottom-left":
+          posCss = `bottom: ${offsetY}; left: ${offsetX};`;
+          alignFlex = "flex-start";
+          justifyFlex = "flex-end";
+          break;
+        case "top-right":
+          posCss = `top: ${offsetY}; right: ${offsetX};`;
+          alignFlex = "flex-end";
+          justifyFlex = "flex-start";
+          break;
+        case "top-left":
+          posCss = `top: ${offsetY}; left: ${offsetX};`;
+          alignFlex = "flex-start";
+          justifyFlex = "flex-start";
+          break;
+        case "top-center":
+          posCss = `top: ${offsetY}; left: 50%; transform: translateX(-50%);`;
+          alignFlex = "center";
+          justifyFlex = "flex-start";
+          break;
+        case "bottom-center":
+          posCss = `bottom: ${offsetY}; left: 50%; transform: translateX(-50%);`;
+          alignFlex = "center";
+          justifyFlex = "flex-end";
+          break;
+        case "center-left":
+          posCss = `top: 50%; left: ${offsetX}; transform: translateY(-50%);`;
+          alignFlex = "flex-start";
+          justifyFlex = "center";
+          break;
+        case "center-right":
+          posCss = `top: 50%; right: ${offsetX}; transform: translateY(-50%);`;
+          alignFlex = "flex-end";
+          justifyFlex = "center";
+          break;
+        case "center":
+          posCss = `top: 50%; left: 50%; transform: translate(-50%, -50%);`;
+          alignFlex = "center";
+          justifyFlex = "center";
+          break;
+        default:
+          posCss = `bottom: ${offsetY}; right: ${offsetX};`;
+          alignFlex = "flex-end";
+          justifyFlex = "flex-end";
+          break;
+      }
+      const containerCss = `
+      position: fixed;
+      ${posCss}
+      z-index: 2147483647;
+      display: flex;
+      flex-direction: ${stackDirection === "vertical" ? "column" : "row"};
+      flex-wrap: wrap;
+      align-items: ${alignFlex};
+      justify-content: ${justifyFlex};
+      gap: ${gap}px;
+      max-width: ${stackDirection === "horizontal" ? `${maxColumns * 220}px` : "calc(100vw - 32px)"};
+      max-height: ${stackDirection === "vertical" ? `${maxRows * 56}px` : "calc(100vh - 32px)"};
+      pointer-events: none;
+      transition: all 0.2s ease;
+    `;
       let container = document.getElementById(containerId);
       if (!container) {
         container = document.createElement("div");
         container.id = containerId;
         container.setAttribute("data-webautomations-container", pos);
-        const unitX = buttonConfig.offsetUnitX || "px";
-        const unitY = buttonConfig.offsetUnitY || "px";
-        const rawOffsetX = buttonConfig.offsetX !== void 0 ? buttonConfig.offsetX : 24;
-        const rawOffsetY = buttonConfig.offsetY !== void 0 ? buttonConfig.offsetY : 24;
-        const offsetX = `${rawOffsetX}${unitX}`;
-        const offsetY = `${rawOffsetY}${unitY}`;
-        let posCss = "";
-        let alignFlex = "flex-end";
-        let justifyFlex = "flex-end";
-        switch (pos) {
-          case "bottom-right":
-            posCss = `bottom: ${offsetY}; right: ${offsetX};`;
-            alignFlex = "flex-end";
-            justifyFlex = "flex-end";
-            break;
-          case "bottom-left":
-            posCss = `bottom: ${offsetY}; left: ${offsetX};`;
-            alignFlex = "flex-start";
-            justifyFlex = "flex-end";
-            break;
-          case "top-right":
-            posCss = `top: ${offsetY}; right: ${offsetX};`;
-            alignFlex = "flex-end";
-            justifyFlex = "flex-start";
-            break;
-          case "top-left":
-            posCss = `top: ${offsetY}; left: ${offsetX};`;
-            alignFlex = "flex-start";
-            justifyFlex = "flex-start";
-            break;
-          case "top-center":
-            posCss = `top: ${offsetY}; left: 50%; transform: translateX(-50%);`;
-            alignFlex = "center";
-            justifyFlex = "flex-start";
-            break;
-          case "bottom-center":
-            posCss = `bottom: ${offsetY}; left: 50%; transform: translateX(-50%);`;
-            alignFlex = "center";
-            justifyFlex = "flex-end";
-            break;
-          case "center-left":
-            posCss = `top: 50%; left: ${offsetX}; transform: translateY(-50%);`;
-            alignFlex = "flex-start";
-            justifyFlex = "center";
-            break;
-          case "center-right":
-            posCss = `top: 50%; right: ${offsetX}; transform: translateY(-50%);`;
-            alignFlex = "flex-end";
-            justifyFlex = "center";
-            break;
-          case "center":
-            posCss = `top: 50%; left: 50%; transform: translate(-50%, -50%);`;
-            alignFlex = "center";
-            justifyFlex = "center";
-            break;
-          default:
-            posCss = `bottom: ${offsetY}; right: ${offsetX};`;
-            alignFlex = "flex-end";
-            justifyFlex = "flex-end";
-            break;
-        }
-        container.style.cssText = `
-        position: fixed;
-        ${posCss}
-        z-index: 2147483647;
-        display: flex;
-        flex-direction: ${stackDirection === "vertical" ? "column" : "row"};
-        flex-wrap: wrap;
-        align-items: ${alignFlex};
-        justify-content: ${justifyFlex};
-        gap: ${gap}px;
-        max-width: ${stackDirection === "horizontal" ? `${maxColumns * 220}px` : "calc(100vw - 32px)"};
-        max-height: ${stackDirection === "vertical" ? `${maxRows * 56}px` : "calc(100vh - 32px)"};
-        pointer-events: none;
-        transition: all 0.2s ease;
-      `;
+        container.style.cssText = containerCss;
         if (document.body) {
           document.body.appendChild(container);
         } else {
@@ -397,6 +401,8 @@
           });
           document.documentElement.appendChild(container);
         }
+      } else {
+        container.style.cssText = containerCss;
       }
       const duplicateInsideContainer = container.querySelector(`[data-webautomations-trigger="${automationId}"], [id="${existingId}"]`);
       if (duplicateInsideContainer) {
@@ -407,6 +413,7 @@
       btn.setAttribute("data-webautomations-trigger", automationId);
       btn.setAttribute("data-webautomations-shape", shape);
       btn.setAttribute("data-webautomations-pos", pos);
+      btn.setAttribute("data-webautomations-sig", configSignature);
       const text = buttonConfig.buttonText || automationName || "Executar Fluxo";
       btn.setAttribute("data-webautomations-text", text);
       const iconType = buttonConfig.iconType || "emoji";

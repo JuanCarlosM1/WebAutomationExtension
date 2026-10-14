@@ -189,8 +189,11 @@ export class CodeEditorComponent {
     backdrop.querySelector('#btnCancelCodeModal')?.addEventListener('click', close);
     backdrop.querySelector('#btnSaveCodeModal')?.addEventListener('click', saveAndClose);
 
+    // Clicar fora da tela do editor não deve fechar nem alterar nada
     backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) close();
+      if (e.target === backdrop) {
+        e.stopPropagation();
+      }
     });
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -228,6 +231,10 @@ export class CodeEditorComponent {
           <button type="button" class="ce-btn btn-format-code" title="Formatar / Auto-indentar código">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
             <span>Formatar</span>
+          </button>
+          <button type="button" class="ce-btn btn-select-all-code" title="Selecionar Todo o Código (Ctrl+A)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 3v18"/><path d="M15 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>
+            <span>Selecionar</span>
           </button>
           <button type="button" class="ce-btn btn-copy-code" title="Copiar código">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -355,6 +362,13 @@ export class CodeEditorComponent {
       this.formatCode();
     });
 
+    const selectAllBtn = this.container.querySelector('.btn-select-all-code');
+    selectAllBtn?.addEventListener('click', () => {
+      this.textarea.focus();
+      this.textarea.setSelectionRange(0, this.textarea.value.length);
+      this.updateCursorStatus();
+    });
+
     const fullscreenBtn = this.container.querySelector('.btn-fullscreen-code');
     fullscreenBtn?.addEventListener('click', () => {
       this.toggleFullscreen();
@@ -366,6 +380,15 @@ export class CodeEditorComponent {
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const value = textarea.value;
+
+    // Atalho Selecionar Tudo (Ctrl+A / Cmd+A) independente da posição ou foco
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+      e.preventDefault();
+      textarea.focus();
+      textarea.setSelectionRange(0, textarea.value.length);
+      this.updateCursorStatus();
+      return;
+    }
 
     // Atalhos de Desfazer e Fazer (Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, Cmd+Z, Cmd+Shift+Z)
     if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
@@ -575,8 +598,8 @@ export class CodeEditorComponent {
       return;
     }
 
-    // Obter lista de sugestões com base na linguagem
-    const suggestions = this.getLanguageSuggestions(this.currentLanguage);
+    // Obter lista de sugestões com suporte a códigos mistos (JS, HTML, CSS) priorizando contexto
+    const suggestions = this.getMixedSuggestions(pos);
     
     // Filtrar sugestões pelo prefixo digitado (case-insensitive)
     const filtered = suggestions.filter((item) => {
@@ -707,6 +730,127 @@ export class CodeEditorComponent {
       return HTML_SUGGESTIONS;
     }
     return [];
+  }
+
+  /**
+   * Obtém sugestões para códigos mistos (JS, HTML e CSS combinados),
+   * detectando quais linguagens estão presentes no código e priorizando
+   * o contexto específico que está sendo editado na posição do cursor.
+   */
+  private getMixedSuggestions(cursorPos: number): AutocompleteItem[] {
+    const code = this.currentValue || '';
+    const textBeforeCursor = code.substring(0, cursorPos);
+
+    // 1. Detectar linguagens presentes no código
+    const hasJsInDoc =
+      this.currentLanguage === 'javascript' ||
+      /<script\b/i.test(code) ||
+      /\b(function|const|let|var|document\.|window\.|console\.|=>|addEventListener|return|async|await)\b/.test(code);
+
+    const hasCssInDoc =
+      this.currentLanguage === 'css' ||
+      /<style\b/i.test(code) ||
+      /\b(style\s*=|display\s*:|color\s*:|background\s*:|margin\s*:|padding\s*:|font-size\s*:|border\s*:|width\s*:|height\s*:)\b/i.test(code);
+
+    const hasHtmlInDoc =
+      this.currentLanguage === 'html' ||
+      /<\/?[a-z][\s\S]*>/i.test(code) ||
+      /<!DOCTYPE\b/i.test(code);
+
+    // 2. Determinar a linguagem do contexto atual sob o cursor
+    let cursorLang: CodeLanguage = this.currentLanguage;
+
+    // Verificar se cursor está dentro de tag <script>...</script>
+    const lastOpenScript = textBeforeCursor.lastIndexOf('<script');
+    const lastCloseScript = textBeforeCursor.lastIndexOf('</script>');
+    const isInsideScriptTag = lastOpenScript !== -1 && lastOpenScript > lastCloseScript;
+
+    // Verificar se cursor está dentro de tag <style>...</style>
+    const lastOpenStyle = textBeforeCursor.lastIndexOf('<style');
+    const lastCloseStyle = textBeforeCursor.lastIndexOf('</style>');
+    const isInsideStyleTag = lastOpenStyle !== -1 && lastOpenStyle > lastCloseStyle;
+
+    // Verificar se cursor está dentro de atributo style="..."
+    const lastStyleAttrDbl = textBeforeCursor.lastIndexOf('style="');
+    const lastStyleAttrSgl = textBeforeCursor.lastIndexOf("style='");
+    const styleAttrIdx = Math.max(lastStyleAttrDbl, lastStyleAttrSgl);
+    const quoteChar = styleAttrIdx !== -1 ? textBeforeCursor[styleAttrIdx + 6] : '';
+    const isInsideStyleAttr =
+      styleAttrIdx !== -1 && textBeforeCursor.indexOf(quoteChar, styleAttrIdx + 7) === -1;
+
+    // Verificar se cursor está dentro de atributo de evento inline como onclick="..."
+    const inlineEventMatch = textBeforeCursor.match(/on[a-z]+\s*=\s*["']([^"']*)$/i);
+
+    if (isInsideScriptTag || inlineEventMatch) {
+      cursorLang = 'javascript';
+    } else if (isInsideStyleTag || isInsideStyleAttr) {
+      cursorLang = 'css';
+    } else if (this.currentLanguage === 'html') {
+      cursorLang = 'html';
+    } else if (this.currentLanguage === 'javascript') {
+      // Se em arquivo JS, verificar se está digitando tag HTML (ex: template string com HTML)
+      const lastLeftAngle = textBeforeCursor.lastIndexOf('<');
+      const lastRightAngle = textBeforeCursor.lastIndexOf('>');
+      if (lastLeftAngle > lastRightAngle) {
+        cursorLang = 'html';
+      } else {
+        cursorLang = 'javascript';
+      }
+    } else if (this.currentLanguage === 'css') {
+      cursorLang = 'css';
+    }
+
+    // 3. Obter itens de cada linguagem presente
+    const jsItems: AutocompleteItem[] = hasJsInDoc
+      ? this.getLanguageSuggestions('javascript').map((item) => ({
+          ...item,
+          detail: item.detail ? `[JS] ${item.detail}` : '[JS]',
+        }))
+      : [];
+
+    const cssItems: AutocompleteItem[] = hasCssInDoc
+      ? CSS_SUGGESTIONS.map((item) => ({
+          ...item,
+          detail: item.detail ? `[CSS] ${item.detail}` : '[CSS]',
+        }))
+      : [];
+
+    const htmlItems: AutocompleteItem[] = hasHtmlInDoc
+      ? HTML_SUGGESTIONS.map((item) => ({
+          ...item,
+          detail: item.detail ? `[HTML] ${item.detail}` : '[HTML]',
+        }))
+      : [];
+
+    // Priorizar a lista da linguagem do cursor no topo
+    let prioritizedLists: AutocompleteItem[][] = [];
+    if (cursorLang === 'javascript') {
+      prioritizedLists = [jsItems, htmlItems, cssItems];
+    } else if (cursorLang === 'css') {
+      prioritizedLists = [cssItems, htmlItems, jsItems];
+    } else {
+      prioritizedLists = [htmlItems, jsItems, cssItems];
+    }
+
+    const seen = new Set<string>();
+    const combined: AutocompleteItem[] = [];
+
+    for (const list of prioritizedLists) {
+      for (const item of list) {
+        const key = `${item.label}::${item.type}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          combined.push(item);
+        }
+      }
+    }
+
+    // Fallback se nada foi detectado
+    if (combined.length === 0) {
+      return this.getLanguageSuggestions(this.currentLanguage);
+    }
+
+    return combined;
   }
 
   /**
