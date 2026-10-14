@@ -183,6 +183,29 @@ var StateManager = class {
     }
     return rules.every((r) => this.evaluateConditionRule(r));
   }
+  /**
+   * Avalia múltiplos grupos combinados com AND e OR:
+   * Exemplo: ( (exp1 and exp2) ou (exp3 and exp4) or exp5 )
+   * Cada grupo avalia suas regras internas (todas ou qualquer uma),
+   * e o resultado do grupo é combinado com o próximo grupo usando o nextOperator ('and' ou 'or').
+   */
+  evaluateConditionGroups(groups) {
+    if (!groups || groups.length === 0)
+      return true;
+    let runningResult = this.evaluateRulesGroup(groups[0].rules, groups[0].logicalOperator || "and");
+    for (let i = 0; i < groups.length - 1; i++) {
+      const currentGroup = groups[i];
+      const nextGroup = groups[i + 1];
+      const connector = currentGroup.nextOperator || "or";
+      const nextGroupResult = this.evaluateRulesGroup(nextGroup.rules, nextGroup.logicalOperator || "and");
+      if (connector === "and") {
+        runningResult = runningResult && nextGroupResult;
+      } else {
+        runningResult = runningResult || nextGroupResult;
+      }
+    }
+    return runningResult;
+  }
 };
 
 // ../BibliotecaDeDev/src/engine/ExecutionContext.ts
@@ -418,7 +441,9 @@ var ExecutionEngine = class {
         break;
       await context.checkPausePoint();
       let conditionPassed = false;
-      if (Array.isArray(data.rules) && data.rules.length > 0) {
+      if (Array.isArray(data.conditionGroups) && data.conditionGroups.length > 0) {
+        conditionPassed = context.state.evaluateConditionGroups(data.conditionGroups);
+      } else if (Array.isArray(data.rules) && data.rules.length > 0) {
         conditionPassed = context.state.evaluateRulesGroup(data.rules, data.logicalOperator || "and");
       } else if (data.evaluationMode === "js_eval" || data.jsExpression && !data.operator) {
         conditionPassed = Boolean(context.state.evaluateJsExpression(data.jsExpression || ""));
@@ -562,7 +587,9 @@ var SwitchNodeHandler = class {
     const { cases, hasDefaultBranch } = node.data;
     for (const testCase of cases) {
       let passed = false;
-      if (Array.isArray(testCase.rules) && testCase.rules.length > 0) {
+      if (Array.isArray(testCase.conditionGroups) && testCase.conditionGroups.length > 0) {
+        passed = context.state.evaluateConditionGroups(testCase.conditionGroups);
+      } else if (Array.isArray(testCase.rules) && testCase.rules.length > 0) {
         passed = context.state.evaluateRulesGroup(testCase.rules, testCase.logicalOperator || "and");
       } else if (testCase.evaluationMode === "js_eval" || testCase.jsExpression && !testCase.operator) {
         const result = context.state.evaluateJsExpression(testCase.jsExpression || "");
@@ -1348,6 +1375,46 @@ var ExtensionController = class {
           });
         }
       }
+      if (chrome.tabs) {
+        chrome.tabs.query({}, (tabs) => {
+          for (const tab of tabs) {
+            if (!tab.id || !tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://"))
+              continue;
+            for (const auto of automations) {
+              const startNode = auto.nodes.find((n) => n.type === "start");
+              if (!startNode)
+                continue;
+              const triggers = getActiveTriggers(startNode.data);
+              const floatingTriggers = triggers.filter((t) => t.type === "floating_button");
+              for (const trig of floatingTriggers) {
+                const patterns = trig.urlPatterns || (trig.urlPattern ? [trig.urlPattern] : ["*://*/*"]);
+                const floatingPatterns = patterns.length > 0 ? patterns : ["*://*/*"];
+                const matches = floatingPatterns.some((p) => {
+                  if (!p || p === "*://*/*" || p === "https://*/*" || p === "<all_urls>" || p === ".*")
+                    return true;
+                  try {
+                    const escaped = p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+                    return new RegExp(`^${escaped}$`, "i").test(tab.url);
+                  } catch {
+                    return false;
+                  }
+                });
+                if (matches && tab.id) {
+                  chrome.tabs.sendMessage(tab.id, {
+                    action: "INJECT_FLOATING_TRIGGER_BUTTON",
+                    payload: {
+                      automationId: auto.metadata.id,
+                      automationName: auto.metadata.name,
+                      buttonConfig: trig.floatingButton
+                    }
+                  }).catch(() => {
+                  });
+                }
+              }
+            }
+          }
+        });
+      }
     } catch (err) {
       console.warn("[WebAutomations] Erro ao sincronizar gatilhos:", err);
     }
@@ -1458,10 +1525,16 @@ var ExtensionController = class {
             }
           }
           if (trigger.type === "floating_button") {
-            const floatingPatterns = patterns.length > 0 ? patterns : [".*"];
+            const floatingPatterns = patterns.length > 0 ? patterns : ["*://*/*"];
             const matches = floatingPatterns.some((p) => {
-              const regex = new RegExp(p.replace(/\*/g, ".*"));
-              return regex.test(details.url);
+              if (!p || p === "*://*/*" || p === "https://*/*" || p === "<all_urls>" || p === ".*")
+                return true;
+              try {
+                const escaped = p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+                return new RegExp(`^${escaped}$`, "i").test(details.url);
+              } catch {
+                return false;
+              }
             });
             if (matches && details.tabId) {
               chrome.tabs.sendMessage(details.tabId, {
@@ -1592,6 +1665,10 @@ var ExtensionController = class {
       case "SAVE_AUTOMATION": {
         const graph = payload.graph;
         await this.saveAutomation(graph);
+        return { success: true };
+      }
+      case "SYNC_TRIGGERS": {
+        await this.syncTriggers();
         return { success: true };
       }
       case "SET_MCP_CONFIG": {

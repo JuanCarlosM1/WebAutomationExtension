@@ -11,6 +11,8 @@ import { InspectorManager } from './modules/inspectorManager';
 import { CanvasManager } from './modules/canvasManager';
 import { WorkflowTabManager } from './modules/tabManager';
 import { showToast, showModalDialog, sanitizeGraph } from './modules/editorUtils';
+import { FlowSettingsModal } from './modules/flowSettingsModal';
+import { HtmlElementAnalyzer } from './modules/htmlElementAnalyzer';
 
 class VisualEditorApp {
   private currentView: 'dashboard' | 'studio' = 'dashboard';
@@ -170,6 +172,16 @@ class VisualEditorApp {
       await chrome.storage.local.set({ web_automations: this.tabManager.getSavedAutomations() });
     }
 
+    // Notificar Service Worker para sincronizar gatilhos e atualizar imediatamente os botões nas abas abertas
+    if (chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({
+        action: 'SAVE_AUTOMATION',
+        payload: { graph: cleanGraph },
+      }).catch(() => {
+        // Ignorar se background estiver suspenso
+      });
+    }
+
     const saveBtnLabel = document.getElementById('saveButtonLabel');
     if (saveBtnLabel) saveBtnLabel.textContent = 'Salvo! ✓';
     setTimeout(() => {
@@ -177,6 +189,7 @@ class VisualEditorApp {
     }, 2000);
 
     this.tabManager.renderTabs();
+    this.inspectorManager.renderInspector();
     showToast(`Automação "${this.graph.metadata.name}" salva com sucesso!`, 'success');
   }
 
@@ -387,6 +400,12 @@ class VisualEditorApp {
       });
     });
 
+    document.getElementById('btnOpenSettings')?.addEventListener('click', () => {
+      FlowSettingsModal.open(() => {
+        showToast('Configurações do Visual Flow salvas com sucesso!', 'success');
+      });
+    });
+
     document.getElementById('btnImportJson')?.addEventListener('click', () => {
       document.getElementById('jsonFileInput')?.click();
     });
@@ -420,6 +439,14 @@ class VisualEditorApp {
     const btnToggleLeft = document.getElementById('btnToggleSidebarLeft');
     const btnToggleRight = document.getElementById('btnToggleSidebarRight');
     const btnActivityBlocks = document.getElementById('btnActivityBlocks');
+    const btnActivityAnalyzer = document.getElementById('btnActivityAnalyzer');
+
+    // Inicializar listener de mensagens do Analisador HTML (comunicação com a página ativa)
+    HtmlElementAnalyzer.initMessageListener();
+
+    btnActivityAnalyzer?.addEventListener('click', () => {
+      HtmlElementAnalyzer.open();
+    });
 
     const toggleSidebarLeft = (collapse?: boolean) => {
       if (!sidebarLeft) return;

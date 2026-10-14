@@ -271,11 +271,12 @@ export class CanvasManager {
       // Botão ou prévia de código no corpo do nó se for bloco com código JS, HTML ou CSS
       let codeBadgeHtml = '';
       const hasJsRule = (rules: any[]) => Array.isArray(rules) && rules.some((r) => r.evaluationMode === 'js_eval');
+      const hasJsInGroups = (groups: any[]) => Array.isArray(groups) && groups.some((g) => hasJsRule(g.rules));
       const isCodeNode = ['inject_javascript', 'inject_html', 'inject_css', 'web_component'].includes(node.type) ||
         (node.type === 'for_loop' && (node.data as any).loopType === 'js_generator') ||
         (node.type === 'set_variable' && (node.data as any).evaluationType === 'js_eval') ||
-        (node.type === 'while_loop' && hasJsRule((node.data as any).rules)) ||
-        (node.type === 'switch' && Array.isArray((node.data as any).cases) && (node.data as any).cases.some((c: any) => hasJsRule(c.rules)));
+        (node.type === 'while_loop' && (hasJsRule((node.data as any).rules) || hasJsInGroups((node.data as any).conditionGroups))) ||
+        (node.type === 'switch' && Array.isArray((node.data as any).cases) && (node.data as any).cases.some((c: any) => hasJsRule(c.rules) || hasJsInGroups(c.conditionGroups)));
 
       if (isCodeNode) {
         const langMap: Record<string, { label: string; color: string }> = {

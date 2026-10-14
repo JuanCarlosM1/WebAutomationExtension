@@ -2,6 +2,7 @@
  * Utilitários para criação padronizada de inputs de formulário no Inspector
  */
 import { CodeEditorComponent, CodeLanguage } from './codeEditorComponent';
+import { HtmlElementAnalyzer } from './htmlElementAnalyzer';
 
 export class InspectorInputHelpers {
   public static addTextInput(
@@ -14,6 +15,50 @@ export class InspectorInputHelpers {
     group.className = 'form-group';
     group.innerHTML = `<label>${labelText}</label><input type="text" value="${value ?? ''}" />`;
     group.querySelector('input')?.addEventListener('input', (e: any) => onChange(e.target.value));
+    container.appendChild(group);
+  }
+
+  /**
+   * Adiciona um campo de seletor com botão de mira/analisador de HTML integrado
+   */
+  public static addSelectorInput(
+    container: HTMLElement,
+    labelText: string,
+    value: string,
+    onChange: (val: string) => void,
+    placeholder: string = 'ex: #meu-elemento, .btn-primary, [data-id]'
+  ): void {
+    const group = document.createElement('div');
+    group.className = 'form-group';
+    group.innerHTML = `
+      <label>${labelText}</label>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <input type="text" value="${value ?? ''}" placeholder="${placeholder}" style="flex: 1;" />
+        <button type="button" class="btn btn-secondary btn-launch-analyzer" title="Ativar Analisador de HTML / Mira na Página" style="padding: 6px 10px; font-size: 11px; white-space: nowrap; display: flex; align-items: center; gap: 4px; border-color: #6366f1; background: rgba(99, 102, 241, 0.15); color: #c7d2fe; cursor: pointer; border-radius: 6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <line x1="11" y1="8" x2="11" y2="14"></line>
+            <line x1="8" y1="11" x2="14" y2="11"></line>
+          </svg>
+          <span>Mirar</span>
+        </button>
+      </div>
+    `;
+
+    const inputEl = group.querySelector('input') as HTMLInputElement;
+    inputEl?.addEventListener('input', (e: any) => onChange(e.target.value));
+
+    const btnAnalyzer = group.querySelector('.btn-launch-analyzer') as HTMLButtonElement;
+    btnAnalyzer?.addEventListener('click', () => {
+      HtmlElementAnalyzer.startLivePicker((pickedSelector) => {
+        if (inputEl) {
+          inputEl.value = pickedSelector;
+        }
+        onChange(pickedSelector);
+      });
+    });
+
     container.appendChild(group);
   }
 
@@ -45,7 +90,16 @@ export class InspectorInputHelpers {
       optionsHtml += `<option value="${opt.value}" ${isSelected ? 'selected' : ''}>${opt.label}</option>`;
     });
     group.innerHTML = `<label>${labelText}</label><select>${optionsHtml}</select>`;
-    group.querySelector('select')?.addEventListener('change', (e: any) => onChange(e.target.value));
+    const selectEl = group.querySelector('select');
+    if (selectEl) {
+      selectEl.value = String(selectedValue ?? '');
+      selectEl.addEventListener('change', (e: any) => {
+        onChange(e.target.value);
+      });
+      selectEl.addEventListener('input', (e: any) => {
+        onChange(e.target.value);
+      });
+    }
     container.appendChild(group);
   }
 

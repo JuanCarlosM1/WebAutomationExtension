@@ -52,7 +52,7 @@ export class DomPropertiesRenderer {
   }
 
   public static renderClick(form: HTMLElement, data: any): void {
-    InspectorInputHelpers.addTextInput(form, 'Seletor do Elemento', data.selector || '', (val) => (data.selector = val));
+    InspectorInputHelpers.addSelectorInput(form, 'Seletor do Elemento', data.selector || '', (val) => (data.selector = val));
     InspectorInputHelpers.addSelectInput(
       form,
       'Tipo de Seletor',
@@ -79,7 +79,7 @@ export class DomPropertiesRenderer {
   }
 
   public static renderTypeInput(form: HTMLElement, data: any, ctx: DomPropertiesContext): void {
-    InspectorInputHelpers.addTextInput(form, 'Seletor do Campo', data.selector || '', (val) => (data.selector = val));
+    InspectorInputHelpers.addSelectorInput(form, 'Seletor do Campo', data.selector || '', (val) => (data.selector = val));
     InspectorInputHelpers.addSelectInput(
       form,
       'Tipo de Seletor',
@@ -133,7 +133,7 @@ export class DomPropertiesRenderer {
     );
 
     if (data.target === 'element') {
-      InspectorInputHelpers.addTextInput(form, 'Seletor do Elemento Alvo', data.selector || '', (val) => (data.selector = val));
+      InspectorInputHelpers.addSelectorInput(form, 'Seletor do Elemento Alvo', data.selector || '', (val) => (data.selector = val));
       InspectorInputHelpers.addSelectInput(
         form,
         'Tipo de Seletor',

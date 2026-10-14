@@ -114,6 +114,7 @@ export class InspectorManager {
           renderInspector: (sel) => this.renderInspector(sel),
           expandedTriggerIndices: this.expandedTriggerIndices,
           colorPicker: this.colorPicker,
+          onNodeDataChanged: this.callbacks.onNodeDataChanged,
           showToast: this.callbacks.showToast,
         });
         break;
@@ -197,14 +198,14 @@ export class InspectorManager {
         break;
       case 'press_key':
         this.addTextInput(form, 'Tecla (ex: Enter, Escape, Tab, ArrowDown)', data.key || 'Enter', (val) => data.key = val);
-        this.addTextInput(form, 'Seletor Alvo (Opcional)', data.selector || '', (val) => data.selector = val);
+        InspectorInputHelpers.addSelectorInput(form, 'Seletor Alvo (Opcional)', data.selector || '', (val) => data.selector = val);
         this.addSelectInput(form, 'Tipo de Seletor', data.selectorType || 'css', [
           { value: 'css', label: 'Seletor CSS' },
           { value: 'xpath', label: 'XPath' },
         ], (val) => data.selectorType = val);
         break;
       case 'hover_focus':
-        this.addTextInput(form, 'Seletor do Elemento', data.selector || '', (val) => data.selector = val);
+        InspectorInputHelpers.addSelectorInput(form, 'Seletor do Elemento', data.selector || '', (val) => data.selector = val);
         this.addSelectInput(form, 'Tipo de Seletor', data.selectorType || 'css', [
           { value: 'css', label: 'Seletor CSS' },
           { value: 'xpath', label: 'XPath' },
@@ -221,7 +222,7 @@ export class InspectorManager {
         });
         break;
       case 'wait_for_element':
-        this.addTextInput(form, 'Seletor do Elemento', data.selector || '', (val) => data.selector = val);
+        InspectorInputHelpers.addSelectorInput(form, 'Seletor do Elemento', data.selector || '', (val) => data.selector = val);
         this.addSelectInput(form, 'Tipo de Seletor', data.selectorType || 'css', [
           { value: 'css', label: 'Seletor CSS' },
           { value: 'xpath', label: 'XPath' },
@@ -282,7 +283,7 @@ export class InspectorManager {
         this.addTextInput(form, 'Salvar Resultado na Variável (opcional)', data.saveResultToVar || '', (val) => data.saveResultToVar = val);
         break;
       case 'inject_html':
-        this.addTextInput(form, 'Seletor do Elemento Alvo', data.targetSelector || 'body', (val) => data.targetSelector = val);
+        InspectorInputHelpers.addSelectorInput(form, 'Seletor do Elemento Alvo', data.targetSelector || 'body', (val) => data.targetSelector = val);
         this.addSelectInput(form, 'Tipo de Seletor', data.selectorType || 'css', [
           { value: 'css', label: 'Seletor CSS' },
           { value: 'xpath', label: 'XPath' },
@@ -363,41 +364,82 @@ export class InspectorManager {
             <!-- Campos gerados dinamicamente -->
           </form>
         </div>
-        <div class="node-expand-footer">
-          <button id="btnDoneExpandedModal" class="btn btn-primary">Concluir Edição</button>
+        <!-- Botões de Ação do Rodapé -->
+        <div class="node-expand-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-top: 1px solid #1e293b; background: #0b1120;">
+          <button type="button" id="btnDiscardExpandedModal" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; color: #f87171; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); cursor: pointer; border-radius: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            <span>Descartar Alterações</span>
+          </button>
+          <div style="display: flex; gap: 10px;">
+            <button type="button" id="btnDoneExpandedModal" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px; padding: 8px 22px; font-size: 13px; background: #6366f1; border-color: #6366f1; cursor: pointer; border-radius: 6px; font-weight: 600;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <span>Concluir e Aplicar</span>
+            </button>
+          </div>
         </div>
       </div>
     `;
 
-    const formEl = backdrop.querySelector('#expandedNodeModalForm') as HTMLElement;
-    this.populatePropertiesForm(formEl, node);
+      // Backup dos dados originais para possibilidade de descarte
+      const backupNodeData = JSON.parse(JSON.stringify(node.data || {}));
+      let changesCommitted = false;
 
-    const close = () => this.closeExpandedModal();
-    backdrop.querySelector('#btnCloseExpandedModal')?.addEventListener('click', close);
-    backdrop.querySelector('#btnDoneExpandedModal')?.addEventListener('click', close);
+      const formEl = backdrop.querySelector('#expandedNodeModalForm') as HTMLElement;
+      this.populatePropertiesForm(formEl, node);
 
-    backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) close();
-    });
+      // Função de descarte: restaura o estado original do nó e atualiza tudo imediatamente
+      const discardChanges = () => {
+        node.data = JSON.parse(JSON.stringify(backupNodeData));
+        this.closeExpandedModal();
+        this.renderInspector();
+        this.callbacks.onNodeDataChanged();
+        this.callbacks.showToast('Alterações no bloco foram descartadas.', 'info');
+      };
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        close();
-        window.removeEventListener('keydown', onKeyDown);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
+      // Função de conclusão: confirma as alterações e sincroniza a barra lateral imediatamente
+      const commitChanges = () => {
+        changesCommitted = true;
+        this.closeExpandedModal();
+        this.renderInspector();
+        this.callbacks.onNodeDataChanged();
+        this.callbacks.showToast('Alterações no bloco aplicadas com sucesso!', 'success');
+      };
 
-    document.body.appendChild(backdrop);
-  }
+      backdrop.querySelector('#btnDiscardExpandedModal')?.addEventListener('click', discardChanges);
+      backdrop.querySelector('#btnDoneExpandedModal')?.addEventListener('click', commitChanges);
 
-  /**
-   * Fecha o modal expandido se estiver aberto
-   */
-  public closeExpandedModal(): void {
-    const existing = document.getElementById('expandedNodeModalBackdrop');
-    existing?.remove();
-  }
+      // Fechar pelo botão X ou clicar no backdrop pergunta ou aplica se não descartado
+      const handleCloseDialog = () => {
+        if (!changesCommitted) {
+          // Conclui e sincroniza as edições feitas
+          commitChanges();
+        }
+      };
+
+      backdrop.querySelector('#btnCloseExpandedModal')?.addEventListener('click', handleCloseDialog);
+
+      backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) handleCloseDialog();
+      });
+
+      const onKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleCloseDialog();
+          window.removeEventListener('keydown', onKeyDown);
+        }
+      };
+      window.addEventListener('keydown', onKeyDown);
+
+      document.body.appendChild(backdrop);
+    }
+
+    /**
+     * Fecha o modal expandido se estiver aberto
+     */
+    public closeExpandedModal(): void {
+      const existing = document.getElementById('expandedNodeModalBackdrop');
+      existing?.remove();
+    }
 
   // Helpers de criação de inputs
   private addTextInput(container: HTMLElement, labelText: string, value: string, onChange: (val: string) => void): void {

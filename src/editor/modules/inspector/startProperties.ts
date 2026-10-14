@@ -12,6 +12,7 @@ export interface StartPropertiesContext {
   renderInspector: (scrollToSelector?: string) => void;
   expandedTriggerIndices: Set<number>;
   colorPicker: ColorPickerManager;
+  onNodeDataChanged?: () => void;
   showToast: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void;
 }
 
@@ -134,8 +135,6 @@ export class StartPropertiesRenderer {
           }
         );
 
-        InspectorInputHelpers.addCheckboxInput(body, 'Disparo Ativo', trig.enabled !== false, (val) => (trig.enabled = val));
-
         if (trig.type === 'on_url_load') {
           if (!Array.isArray(trig.urlPatterns)) {
             trig.urlPatterns = trig.urlPattern ? [trig.urlPattern] : ['https://*/*'];
@@ -144,6 +143,46 @@ export class StartPropertiesRenderer {
             trig.urlPatterns = newList;
             trig.urlPattern = newList[0] || 'https://*/*';
           }, ctx);
+
+          // Opção de ativar apenas quando um elemento específico aparecer
+          InspectorInputHelpers.addCheckboxInput(
+            body,
+            'Ativar Apenas Quando um Elemento Específico Aparecer',
+            !!trig.requireElement,
+            (val) => {
+              trig.requireElement = val;
+              ctx.renderInspector();
+              ctx.onNodeDataChanged?.();
+            }
+          );
+
+          if (trig.requireElement) {
+            const onUrlElemBox = document.createElement('div');
+            onUrlElemBox.style.cssText = 'background: #0b0f19; border: 1px solid #1e293b; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-top: 4px;';
+            InspectorInputHelpers.addSelectorInput(
+              onUrlElemBox,
+              'Seletor do Elemento Obrigatório',
+              trig.requireElementSelector || '',
+              (val) => {
+                trig.requireElementSelector = val.trim();
+                ctx.onNodeDataChanged?.();
+              }
+            );
+            InspectorInputHelpers.addSelectInput(
+              onUrlElemBox,
+              'Tipo do Seletor',
+              trig.requireElementSelectorType || 'css',
+              [
+                { value: 'css', label: 'Seletor CSS' },
+                { value: 'xpath', label: 'XPath' },
+              ],
+              (val: any) => {
+                trig.requireElementSelectorType = val;
+                ctx.onNodeDataChanged?.();
+              }
+            );
+            body.appendChild(onUrlElemBox);
+          }
         } else if (trig.type === 'shortcut') {
           InspectorInputHelpers.addTextInput(body, 'Combinação de Teclas (ex: Ctrl+Shift+U)', trig.shortcutKey || 'Ctrl+Shift+U', (val) => (trig.shortcutKey = val));
         } else if (trig.type === 'schedule') {
@@ -496,19 +535,32 @@ export class StartPropertiesRenderer {
         buttonText: 'Executar Fluxo',
         iconType: 'emoji',
         buttonIcon: '⚡',
+        size: 'medium',
+        shape: 'pill',
         position: 'bottom-right',
         offsetX: 24,
+        offsetUnitX: 'px',
         offsetY: 24,
+        offsetUnitY: 'px',
         backgroundColor: '#6366f1',
         textColor: '#ffffff',
+        opacity: 1.0,
+        requireElement: false,
+        requireElementSelector: '',
+        requireElementSelectorType: 'css',
+        filterBySites: false,
         urlPattern: '*://*/*',
       };
     }
     const fb = trig.floatingButton;
     if (!fb.iconType) fb.iconType = 'emoji';
+    if (!fb.offsetUnitX) fb.offsetUnitX = 'px';
+    if (!fb.offsetUnitY) fb.offsetUnitY = 'px';
 
+    // 1. Texto do Botão
     InspectorInputHelpers.addTextInput(body, 'Texto do Botão', fb.buttonText || '', (val) => (fb.buttonText = val));
 
+    // 2. Ícone (Tipo de Ícone)
     const iconGroup = document.createElement('div');
     iconGroup.style.cssText = 'background: #0b0f19; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px;';
 
@@ -601,6 +653,100 @@ export class StartPropertiesRenderer {
     iconGroup.appendChild(iconContentDiv);
     body.appendChild(iconGroup);
 
+    // 3. Tamanho do Botão
+    const customSizeContainer = document.createElement('div');
+    customSizeContainer.style.cssText = `background: #0d1527; border: 1px solid #1e3a8a; border-radius: 6px; padding: 10px; display: ${fb.size === 'custom' ? 'grid' : 'none'}; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: -2px; margin-bottom: 6px;`;
+
+    const widthCol = document.createElement('div');
+    widthCol.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+    widthCol.innerHTML = '<label style="font-size: 10px; font-weight: 700; color: #93c5fd; text-transform: uppercase;">Largura (px)</label>';
+    const widthInp = document.createElement('input');
+    widthInp.type = 'number';
+    widthInp.min = '30';
+    widthInp.max = '800';
+    widthInp.value = String(fb.customWidth ?? 160);
+    widthInp.style.cssText = 'width: 100%; padding: 5px 6px; font-size: 12px; background: #172033; color: white; border: 1px solid #2563eb; border-radius: 4px;';
+    widthInp.addEventListener('input', (e: any) => {
+      fb.customWidth = Math.max(20, Number(e.target.value) || 160);
+      ctx.onNodeDataChanged?.();
+    });
+    widthCol.appendChild(widthInp);
+    customSizeContainer.appendChild(widthCol);
+
+    const heightCol = document.createElement('div');
+    heightCol.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+    heightCol.innerHTML = '<label style="font-size: 10px; font-weight: 700; color: #93c5fd; text-transform: uppercase;">Altura (px)</label>';
+    const heightInp = document.createElement('input');
+    heightInp.type = 'number';
+    heightInp.min = '20';
+    heightInp.max = '400';
+    heightInp.value = String(fb.customHeight ?? 44);
+    heightInp.style.cssText = 'width: 100%; padding: 5px 6px; font-size: 12px; background: #172033; color: white; border: 1px solid #2563eb; border-radius: 4px;';
+    heightInp.addEventListener('input', (e: any) => {
+      fb.customHeight = Math.max(16, Number(e.target.value) || 44);
+      ctx.onNodeDataChanged?.();
+    });
+    heightCol.appendChild(heightInp);
+    customSizeContainer.appendChild(heightCol);
+
+    const fontCol = document.createElement('div');
+    fontCol.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+    fontCol.innerHTML = '<label style="font-size: 10px; font-weight: 700; color: #93c5fd; text-transform: uppercase;">Fonte (px)</label>';
+    const fontInp = document.createElement('input');
+    fontInp.type = 'number';
+    fontInp.min = '8';
+    fontInp.max = '48';
+    fontInp.value = String(fb.customFontSize ?? 14);
+    fontInp.style.cssText = 'width: 100%; padding: 5px 6px; font-size: 12px; background: #172033; color: white; border: 1px solid #2563eb; border-radius: 4px;';
+    fontInp.addEventListener('input', (e: any) => {
+      fb.customFontSize = Math.max(8, Number(e.target.value) || 14);
+      ctx.onNodeDataChanged?.();
+    });
+    fontCol.appendChild(fontInp);
+    customSizeContainer.appendChild(fontCol);
+
+    InspectorInputHelpers.addSelectInput(
+      body,
+      'Tamanho do Botão',
+      fb.size || 'medium',
+      [
+        { value: 'compact', label: '1. Ultra Compacto (Mínimo)' },
+        { value: 'small', label: '2. Pequeno (Discreto)' },
+        { value: 'medium', label: '3. Médio (Padrão)' },
+        { value: 'large', label: '4. Grande (Destaque)' },
+        { value: 'custom', label: '5. Personalizado (Manual)' },
+      ],
+      (val: any) => {
+        fb.size = val;
+        if (fb.size === 'custom') {
+          if (!fb.customWidth) fb.customWidth = 160;
+          if (!fb.customHeight) fb.customHeight = 44;
+          if (!fb.customFontSize) fb.customFontSize = 14;
+        }
+        customSizeContainer.style.display = fb.size === 'custom' ? 'grid' : 'none';
+        ctx.onNodeDataChanged?.();
+      }
+    );
+    body.appendChild(customSizeContainer);
+
+    // 4. Formato do Botão
+    InspectorInputHelpers.addSelectInput(
+      body,
+      'Formato do Botão',
+      fb.shape || 'pill',
+      [
+        { value: 'pill', label: 'Pílula (Cantos 100% Redondos)' },
+        { value: 'rounded', label: 'Retângulo Arredondado' },
+        { value: 'circle', label: 'Círculo (Ícone Flutuante)' },
+        { value: 'square', label: 'Quadrado (Cantos Retos)' },
+      ],
+      (val: any) => {
+        fb.shape = val;
+        ctx.onNodeDataChanged?.();
+      }
+    );
+
+    // 5. Posição na Tela
     InspectorInputHelpers.addSelectInput(
       body,
       'Posição na Tela',
@@ -608,24 +754,207 @@ export class StartPropertiesRenderer {
       [
         { value: 'bottom-right', label: 'Inferior Direito (Padrão)' },
         { value: 'bottom-left', label: 'Inferior Esquerdo' },
+        { value: 'bottom-center', label: 'Inferior Centro' },
         { value: 'top-right', label: 'Superior Direito' },
         { value: 'top-left', label: 'Superior Esquerdo' },
+        { value: 'top-center', label: 'Superior Centro' },
+        { value: 'center-left', label: 'Centro Esquerdo' },
+        { value: 'center-right', label: 'Centro Direito' },
+        { value: 'center', label: 'Centro da Tela' },
       ],
-      (val) => (fb.position = val)
+      (val: any) => {
+        fb.position = val;
+        ctx.onNodeDataChanged?.();
+      }
     );
-    InspectorInputHelpers.addNumberInput(body, 'Deslocamento X (px)', fb.offsetX ?? 24, (val) => (fb.offsetX = val));
-    InspectorInputHelpers.addNumberInput(body, 'Deslocamento Y (px)', fb.offsetY ?? 24, (val) => (fb.offsetY = val));
 
-    ctx.colorPicker.createPaintColorPicker(body, 'Cor de Fundo', fb.backgroundColor || '#6366f1', (val) => (fb.backgroundColor = val));
-    ctx.colorPicker.createPaintColorPicker(body, 'Cor do Texto', fb.textColor || '#ffffff', (val) => (fb.textColor = val));
+    // 6. Cor de Fundo
+    ctx.colorPicker.createPaintColorPicker(body, 'Cor de Fundo', fb.backgroundColor || '#6366f1', (val) => {
+      fb.backgroundColor = val;
+      ctx.onNodeDataChanged?.();
+    });
+
+    // 7. Cor do Texto
+    ctx.colorPicker.createPaintColorPicker(body, 'Cor do Texto', fb.textColor || '#ffffff', (val) => {
+      fb.textColor = val;
+      ctx.onNodeDataChanged?.();
+    });
+
+    // 8. Opacidade do Botão (0% totalmente à esquerda até 100% totalmente à direita)
+    const currentOpacity = fb.opacity !== undefined ? Number(fb.opacity) : 1.0;
+    const currentOpacityPct = Math.max(0, Math.min(100, Math.round(currentOpacity * 100)));
+    const opacityGroup = document.createElement('div');
+    opacityGroup.className = 'form-group';
+    opacityGroup.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+        <label style="margin: 0;">Opacidade do Botão</label>
+        <span class="fb-opacity-label" style="font-size: 11px; font-weight: 700; color: #818cf8;">${currentOpacityPct}%</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <input type="range" min="0" max="100" value="${currentOpacityPct}" style="flex: 1; accent-color: #6366f1;" />
+      </div>
+    `;
+    const rangeEl = opacityGroup.querySelector('input[type="range"]') as HTMLInputElement;
+    const labelEl = opacityGroup.querySelector('.fb-opacity-label') as HTMLElement;
+    rangeEl?.addEventListener('input', (e: any) => {
+      const val = Number(e.target.value);
+      fb.opacity = Math.max(0, Math.min(1.0, val / 100));
+      if (labelEl) labelEl.textContent = `${val}%`;
+      ctx.onNodeDataChanged?.();
+    });
+    body.appendChild(opacityGroup);
+
+    // 9. Deslocamento Horizontal (com Unidade de Medida)
+    const offsetHGroup = document.createElement('div');
+    offsetHGroup.className = 'form-group';
+    offsetHGroup.innerHTML = `
+      <label>Deslocamento Horizontal</label>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <input type="number" class="offset-h-val" value="${fb.offsetX ?? 24}" style="flex: 1; min-width: 0;" />
+        <select class="offset-h-unit" style="width: 70px; padding: 6px 8px; font-size: 12px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px; cursor: pointer;">
+          <option value="px" ${(fb.offsetUnitX || 'px') === 'px' ? 'selected' : ''}>px</option>
+          <option value="%" ${fb.offsetUnitX === '%' ? 'selected' : ''}>%</option>
+          <option value="rem" ${fb.offsetUnitX === 'rem' ? 'selected' : ''}>rem</option>
+          <option value="vw" ${fb.offsetUnitX === 'vw' ? 'selected' : ''}>vw</option>
+        </select>
+      </div>
+    `;
+    offsetHGroup.querySelector('.offset-h-val')?.addEventListener('input', (e: any) => {
+      fb.offsetX = Number(e.target.value);
+      ctx.onNodeDataChanged?.();
+    });
+    offsetHGroup.querySelector('.offset-h-unit')?.addEventListener('change', (e: any) => {
+      fb.offsetUnitX = e.target.value;
+      ctx.onNodeDataChanged?.();
+    });
+    body.appendChild(offsetHGroup);
+
+    // 10. Deslocamento Vertical (com Unidade de Medida)
+    const offsetVGroup = document.createElement('div');
+    offsetVGroup.className = 'form-group';
+    offsetVGroup.innerHTML = `
+      <label>Deslocamento Vertical</label>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <input type="number" class="offset-v-val" value="${fb.offsetY ?? 24}" style="flex: 1; min-width: 0;" />
+        <select class="offset-v-unit" style="width: 70px; padding: 6px 8px; font-size: 12px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px; cursor: pointer;">
+          <option value="px" ${(fb.offsetUnitY || 'px') === 'px' ? 'selected' : ''}>px</option>
+          <option value="%" ${fb.offsetUnitY === '%' ? 'selected' : ''}>%</option>
+          <option value="rem" ${fb.offsetUnitY === 'rem' ? 'selected' : ''}>rem</option>
+          <option value="vh" ${fb.offsetUnitY === 'vh' ? 'selected' : ''}>vh</option>
+        </select>
+      </div>
+    `;
+    offsetVGroup.querySelector('.offset-v-val')?.addEventListener('input', (e: any) => {
+      fb.offsetY = Number(e.target.value);
+      ctx.onNodeDataChanged?.();
+    });
+    offsetVGroup.querySelector('.offset-v-unit')?.addEventListener('change', (e: any) => {
+      fb.offsetUnitY = e.target.value;
+      ctx.onNodeDataChanged?.();
+    });
+    body.appendChild(offsetVGroup);
+
+    // Permissão para arrastar
+    InspectorInputHelpers.addCheckboxInput(
+      body,
+      'Permitir Arrastar o Botão Flutuante (CTRL + Clique / Arraste)',
+      fb.allowDrag ?? true,
+      (val) => {
+        fb.allowDrag = val;
+        ctx.onNodeDataChanged?.();
+      }
+    );
+
+    // 11. Exibir apenas quando elemento especificado estiver na aba (Não por padrão, Sim exibe opções)
+    const isRequireElem = Boolean(fb.requireElement);
+    const requireElemContainer = document.createElement('div');
+    requireElemContainer.style.cssText = 'background: #0b0f19; border: 1px solid #1e293b; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-top: 4px; box-sizing: border-box; width: 100%; overflow: hidden;';
+
+    const requireElemHeader = document.createElement('div');
+    requireElemHeader.style.cssText = 'display: flex; flex-direction: column; gap: 6px; width: 100%;';
+    requireElemHeader.innerHTML = `
+      <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; text-transform: uppercase; margin: 0; line-height: 1.4;">Exibir apenas quando elemento especificado estiver na aba</label>
+      <select class="select-req-elem-toggle select-toggle-control" style="width: 100%;">
+        <option value="false" ${!isRequireElem ? 'selected' : ''}>Não (Sempre visível)</option>
+        <option value="true" ${isRequireElem ? 'selected' : ''}>Sim (Apenas se elemento existir)</option>
+      </select>
+    `;
+    requireElemContainer.appendChild(requireElemHeader);
+
+    const requireElemDetails = document.createElement('div');
+    requireElemDetails.style.cssText = `display: ${isRequireElem ? 'flex' : 'none'}; flex-direction: column; gap: 8px; border-top: 1px solid #1e293b; padding-top: 8px; width: 100%; box-sizing: border-box;`;
+
+    InspectorInputHelpers.addSelectorInput(
+      requireElemDetails,
+      'Seletor do Elemento Obrigatório',
+      fb.requireElementSelector || '',
+      (val) => {
+        fb.requireElementSelector = val.trim();
+        ctx.onNodeDataChanged?.();
+      }
+    );
+
+    InspectorInputHelpers.addSelectInput(
+      requireElemDetails,
+      'Tipo do Seletor',
+      fb.requireElementSelectorType || 'css',
+      [
+        { value: 'css', label: 'Seletor CSS' },
+        { value: 'xpath', label: 'XPath' },
+      ],
+      (val: any) => {
+        fb.requireElementSelectorType = val;
+        ctx.onNodeDataChanged?.();
+      }
+    );
+
+    requireElemContainer.appendChild(requireElemDetails);
+    requireElemHeader.querySelector('.select-req-elem-toggle')?.addEventListener('change', (e: any) => {
+      const active = e.target.value === 'true';
+      fb.requireElement = active;
+      requireElemDetails.style.display = active ? 'flex' : 'none';
+      ctx.onNodeDataChanged?.();
+    });
+    body.appendChild(requireElemContainer);
+
+    // 12. Exibir apenas quando estiver em um ou mais sites específicos (Não marcado por padrão, Sim exibe URLs)
+    const isFilterSites = Boolean(fb.filterBySites);
+    const sitesContainer = document.createElement('div');
+    sitesContainer.style.cssText = 'background: #0b0f19; border: 1px solid #1e293b; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-top: 4px; box-sizing: border-box; width: 100%; overflow: hidden;';
+
+    const sitesHeader = document.createElement('div');
+    sitesHeader.style.cssText = 'display: flex; flex-direction: column; gap: 6px; width: 100%;';
+    sitesHeader.innerHTML = `
+      <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; text-transform: uppercase; margin: 0; line-height: 1.4;">Exibir apenas quando estiver em um ou mais sites específicos</label>
+      <select class="select-sites-toggle select-toggle-control" style="width: 100%;">
+        <option value="false" ${!isFilterSites ? 'selected' : ''}>Não (Exibir em todos os sites)</option>
+        <option value="true" ${isFilterSites ? 'selected' : ''}>Sim (Filtrar por URLs)</option>
+      </select>
+    `;
+    sitesContainer.appendChild(sitesHeader);
+
+    const sitesDetails = document.createElement('div');
+    sitesDetails.style.cssText = `display: ${isFilterSites ? 'flex' : 'none'}; flex-direction: column; gap: 8px; border-top: 1px solid #1e293b; padding-top: 8px; width: 100%; box-sizing: border-box;`;
 
     if (!Array.isArray(trig.urlPatterns)) {
-      trig.urlPatterns = fb.urlPattern ? [fb.urlPattern] : ['*://*/*'];
+      trig.urlPatterns = fb.urlPattern && fb.urlPattern !== '*://*/*' ? [fb.urlPattern] : ['https://*/*'];
     }
-    this.renderUrlListSection(body, 'URLs Em Que o Botão Será Exibido', trig.urlPatterns, (newList) => {
+    this.renderUrlListSection(sitesDetails, 'Sites / URLs Permitidas', trig.urlPatterns, (newList) => {
       trig.urlPatterns = newList;
       fb.urlPattern = newList[0] || '*://*/*';
     }, ctx);
+
+    sitesContainer.appendChild(sitesDetails);
+    sitesHeader.querySelector('.select-sites-toggle')?.addEventListener('change', (e: any) => {
+      const active = e.target.value === 'true';
+      fb.filterBySites = active;
+      sitesDetails.style.display = active ? 'flex' : 'none';
+      if (!active) {
+        fb.urlPattern = '*://*/*';
+      }
+      ctx.onNodeDataChanged?.();
+    });
+    body.appendChild(sitesContainer);
   }
 
   public static renderUrlListSection(

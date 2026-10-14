@@ -72,18 +72,7 @@ export class FlowPropertiesRenderer {
     if (!Array.isArray(data.cases)) data.cases = [];
 
     data.cases.forEach((c: any, index: number) => {
-      if (!Array.isArray(c.rules) || c.rules.length === 0) {
-        c.rules = [
-          {
-            id: `rule_${Date.now()}_0`,
-            evaluationMode: c.evaluationMode || (c.jsExpression && !c.operator ? 'js_eval' : 'comparison'),
-            leftOperand: c.leftOperand || '',
-            operator: c.operator || 'equals',
-            rightOperand: c.rightOperand || '',
-            jsExpression: c.jsExpression || '',
-          },
-        ];
-      }
+      this.ensureConditionGroups(c);
 
       const isExpanded = ctx.expandedCaseIndices.has(index);
       const caseCard = document.createElement('div');
@@ -143,66 +132,9 @@ export class FlowPropertiesRenderer {
           ctx.onNodeDataChanged();
         });
 
-        if (c.rules.length > 1) {
-          const logicRow = document.createElement('div');
-          logicRow.style.cssText =
-            'display: flex; align-items: center; justify-content: space-between; background: #0b0f19; padding: 6px 8px; border-radius: 4px; border: 1px solid #1e293b;';
-          logicRow.innerHTML = '<span style="font-size: 11px; color: #94a3b8; font-weight: 600;">Combinar Expressões:</span>';
-
-          const logicSelect = document.createElement('select');
-          logicSelect.style.cssText =
-            'padding: 3px 6px; font-size: 11px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px;';
-          logicSelect.innerHTML = `
-            <option value="and" ${(c.logicalOperator || 'and') === 'and' ? 'selected' : ''}>Satisfazer TODAS (E)</option>
-            <option value="or" ${c.logicalOperator === 'or' ? 'selected' : ''}>Satisfazer QUALQUER UMA (OU)</option>
-          `;
-          logicSelect.addEventListener('change', (e: any) => {
-            c.logicalOperator = e.target.value;
-          });
-          logicRow.appendChild(logicSelect);
-          body.appendChild(logicRow);
-        }
-
-        const rulesList = document.createElement('div');
-        rulesList.style.cssText = 'display: flex; flex-direction: column; gap: 6px;';
-
-        c.rules.forEach((rule: any, ruleIdx: number) => {
-          const ruleEl = this.createRuleEditorElement(rule, ruleIdx, c.rules.length, () => {
-            c.rules.splice(ruleIdx, 1);
-            if (c.rules.length === 0) {
-              c.rules.push({
-                id: `rule_${Date.now()}`,
-                evaluationMode: 'comparison',
-                leftOperand: '',
-                operator: 'equals',
-                rightOperand: '',
-              });
-            }
-            ctx.renderInspector();
-          }, ctx);
-          rulesList.appendChild(ruleEl);
-        });
-
-        body.appendChild(rulesList);
-
-        const btnAddRule = document.createElement('button');
-        btnAddRule.type = 'button';
-        btnAddRule.className = 'btn-xs';
-        btnAddRule.style.cssText =
-          'width: 100%; padding: 5px; background: #1e293b; color: #93c5fd; border: 1px dashed #3b82f6; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 600;';
-        btnAddRule.textContent = '+ Adicionar Outra Expressão Condicional';
-        btnAddRule.addEventListener('click', () => {
-          c.rules.push({
-            id: `rule_${Date.now()}`,
-            evaluationMode: 'comparison',
-            leftOperand: '',
-            operator: 'equals',
-            rightOperand: '',
-            jsExpression: '',
-          });
-          ctx.renderInspector();
-        });
-        body.appendChild(btnAddRule);
+        // Construtor Visual de Condições Combinadas (Grupos E e OU)
+        const groupsBuilder = this.renderConditionGroupsBuilder(c, ctx);
+        body.appendChild(groupsBuilder);
 
         caseCard.appendChild(body);
       }
@@ -220,6 +152,237 @@ export class FlowPropertiesRenderer {
       data.cases.push({
         id: `case_${Date.now()}`,
         label: `Caso #${newIdx + 1}`,
+        conditionGroups: [
+          {
+            id: `grp_${Date.now()}_0`,
+            logicalOperator: 'and',
+            nextOperator: 'or',
+            rules: [
+              {
+                id: `rule_${Date.now()}_0`,
+                evaluationMode: 'comparison',
+                leftOperand: '',
+                operator: 'equals',
+                rightOperand: '',
+                jsExpression: '',
+              },
+            ],
+          },
+        ],
+      });
+      ctx.expandedCaseIndices.add(newIdx);
+      ctx.renderInspector(`.switch-case-card-item[data-case-index="${newIdx}"]`);
+    });
+
+    casesContainer.appendChild(btnAddCase);
+    form.appendChild(casesContainer);
+  }
+
+  /**
+   * Garante a inicialização consistente de conditionGroups a partir de dados existentes ou legados
+   */
+  private static ensureConditionGroups(target: any): void {
+    if (!Array.isArray(target.conditionGroups) || target.conditionGroups.length === 0) {
+      if (Array.isArray(target.rules) && target.rules.length > 0) {
+        target.conditionGroups = [
+          {
+            id: `grp_${Date.now()}_0`,
+            logicalOperator: target.logicalOperator || 'and',
+            nextOperator: 'or',
+            rules: JSON.parse(JSON.stringify(target.rules)),
+          },
+        ];
+      } else {
+        target.conditionGroups = [
+          {
+            id: `grp_${Date.now()}_0`,
+            logicalOperator: 'and',
+            nextOperator: 'or',
+            rules: [
+              {
+                id: `rule_${Date.now()}_0`,
+                evaluationMode: target.evaluationMode || (target.jsExpression && !target.operator ? 'js_eval' : 'comparison'),
+                leftOperand: target.leftOperand || '',
+                operator: target.operator || 'equals',
+                rightOperand: target.rightOperand || '',
+                jsExpression: target.jsExpression || '',
+              },
+            ],
+          },
+        ];
+      }
+    }
+  }
+
+  /**
+   * Renderiza o construtor visual de grupos de condições com AND e OR:
+   * ( (Expressão 1 AND Expressão 2) OU (Expressão 3 AND Expressão 4) OR Expressão 5 )
+   */
+  public static renderConditionGroupsBuilder(dataObj: any, ctx: FlowPropertiesContext): HTMLElement {
+    this.ensureConditionGroups(dataObj);
+    const container = document.createElement('div');
+    container.style.cssText = 'display: flex; flex-direction: column; gap: 8px; margin-top: 4px;';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
+    header.innerHTML = `
+      <span style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Lógica Combinada (E / OU)</span>
+      <span style="font-size: 10px; color: #60a5fa;">${dataObj.conditionGroups.length} Grupo(s)</span>
+    `;
+    container.appendChild(header);
+
+    dataObj.conditionGroups.forEach((group: any, gIdx: number) => {
+      const isLastGroup = gIdx === dataObj.conditionGroups.length - 1;
+      const groupEl = document.createElement('div');
+      groupEl.style.cssText = 'background: #080d1a; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px;';
+
+      // Header do grupo com seletor TODAS (E) ou QUALQUER UMA (OU)
+      const groupHeader = document.createElement('div');
+      groupHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
+
+      const titleAndLogic = document.createElement('div');
+      titleAndLogic.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+      titleAndLogic.innerHTML = `
+        <span style="font-size: 11px; font-weight: 700; color: #cbd5e1;">( Grupo #${gIdx + 1}:</span>
+      `;
+
+      const logicSelect = document.createElement('select');
+      logicSelect.style.cssText = 'padding: 2px 6px; font-size: 10px; font-weight: 600; background: #172033; color: #93c5fd; border: 1px solid #3b82f6; border-radius: 4px; cursor: pointer;';
+      logicSelect.innerHTML = `
+        <option value="and" ${(group.logicalOperator || 'and') === 'and' ? 'selected' : ''}>Satisfazer TODAS (E / AND)</option>
+        <option value="or" ${group.logicalOperator === 'or' ? 'selected' : ''}>Satisfazer QUALQUER UMA (OU / OR)</option>
+      `;
+      logicSelect.addEventListener('change', (e: any) => {
+        group.logicalOperator = e.target.value;
+        ctx.onNodeDataChanged();
+      });
+      titleAndLogic.appendChild(logicSelect);
+
+      const closeBracketSpan = document.createElement('span');
+      closeBracketSpan.style.cssText = 'font-size: 11px; font-weight: 700; color: #cbd5e1;';
+      closeBracketSpan.textContent = ')';
+      titleAndLogic.appendChild(closeBracketSpan);
+
+      groupHeader.appendChild(titleAndLogic);
+
+      if (dataObj.conditionGroups.length > 1) {
+        const delGroupBtn = document.createElement('button');
+        delGroupBtn.type = 'button';
+        delGroupBtn.innerHTML = '&times; Excluir Grupo';
+        delGroupBtn.style.cssText = 'background: transparent; color: #ef4444; border: none; font-size: 10px; font-weight: 600; cursor: pointer;';
+        delGroupBtn.addEventListener('click', () => {
+          dataObj.conditionGroups.splice(gIdx, 1);
+          ctx.renderInspector();
+          ctx.onNodeDataChanged();
+        });
+        groupHeader.appendChild(delGroupBtn);
+      }
+
+      groupEl.appendChild(groupHeader);
+
+      // Lista de regras dentro deste grupo
+      const rulesList = document.createElement('div');
+      rulesList.style.cssText = 'display: flex; flex-direction: column; gap: 6px; padding-left: 4px;';
+
+      if (!Array.isArray(group.rules) || group.rules.length === 0) {
+        group.rules = [
+          {
+            id: `rule_${Date.now()}_0`,
+            evaluationMode: 'comparison',
+            leftOperand: '',
+            operator: 'equals',
+            rightOperand: '',
+          },
+        ];
+      }
+
+      group.rules.forEach((rule: any, rIdx: number) => {
+        const ruleEl = this.createRuleEditorElement(
+          rule,
+          rIdx,
+          group.rules.length,
+          () => {
+            group.rules.splice(rIdx, 1);
+            if (group.rules.length === 0) {
+              group.rules.push({
+                id: `rule_${Date.now()}`,
+                evaluationMode: 'comparison',
+                leftOperand: '',
+                operator: 'equals',
+                rightOperand: '',
+              });
+            }
+            ctx.renderInspector();
+            ctx.onNodeDataChanged();
+          },
+          ctx
+        );
+        rulesList.appendChild(ruleEl);
+      });
+
+      groupEl.appendChild(rulesList);
+
+      const btnAddRuleInGroup = document.createElement('button');
+      btnAddRuleInGroup.type = 'button';
+      btnAddRuleInGroup.className = 'btn-xs';
+      btnAddRuleInGroup.style.cssText =
+        'width: 100%; padding: 4px; background: rgba(59, 130, 246, 0.1); color: #93c5fd; border: 1px dashed #3b82f6; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 600;';
+      btnAddRuleInGroup.textContent = `+ Adicionar Expressão ao Grupo #${gIdx + 1}`;
+      btnAddRuleInGroup.addEventListener('click', () => {
+        group.rules.push({
+          id: `rule_${Date.now()}`,
+          evaluationMode: 'comparison',
+          leftOperand: '',
+          operator: 'equals',
+          rightOperand: '',
+          jsExpression: '',
+        });
+        ctx.renderInspector();
+        ctx.onNodeDataChanged();
+      });
+      groupEl.appendChild(btnAddRuleInGroup);
+
+      container.appendChild(groupEl);
+
+      // Conector entre grupos (E / OU)
+      if (!isLastGroup) {
+        const connectorDiv = document.createElement('div');
+        connectorDiv.style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0;';
+
+        const lineLeft = document.createElement('div');
+        lineLeft.style.cssText = 'flex: 1; height: 1px; background: #334155;';
+        const lineRight = document.createElement('div');
+        lineRight.style.cssText = 'flex: 1; height: 1px; background: #334155;';
+
+        const connectorSelect = document.createElement('select');
+        connectorSelect.style.cssText = 'padding: 2px 8px; font-size: 10px; font-weight: 700; background: #1e293b; color: #f59e0b; border: 1px solid #d97706; border-radius: 12px; cursor: pointer; text-transform: uppercase;';
+        connectorSelect.innerHTML = `
+          <option value="or" ${(group.nextOperator || 'or') === 'or' ? 'selected' : ''}>OU (OR)</option>
+          <option value="and" ${group.nextOperator === 'and' ? 'selected' : ''}>E (AND)</option>
+        `;
+        connectorSelect.addEventListener('change', (e: any) => {
+          group.nextOperator = e.target.value;
+          ctx.onNodeDataChanged();
+        });
+
+        connectorDiv.appendChild(lineLeft);
+        connectorDiv.appendChild(connectorSelect);
+        connectorDiv.appendChild(lineRight);
+        container.appendChild(connectorDiv);
+      }
+    });
+
+    const btnAddGroup = document.createElement('button');
+    btnAddGroup.type = 'button';
+    btnAddGroup.className = 'btn-xs';
+    btnAddGroup.style.cssText =
+      'width: 100%; padding: 6px; background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1px dashed #6366f1; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-top: 4px;';
+    btnAddGroup.textContent = '+ Adicionar Outro Grupo ( (Expressão...) OU / E ...)';
+    btnAddGroup.addEventListener('click', () => {
+      dataObj.conditionGroups.push({
+        id: `grp_${Date.now()}`,
+        logicalOperator: 'and',
+        nextOperator: 'or',
         rules: [
           {
             id: `rule_${Date.now()}_0`,
@@ -230,14 +393,13 @@ export class FlowPropertiesRenderer {
             jsExpression: '',
           },
         ],
-        logicalOperator: 'and',
       });
-      ctx.expandedCaseIndices.add(newIdx);
-      ctx.renderInspector(`.switch-case-card-item[data-case-index="${newIdx}"]`);
+      ctx.renderInspector();
+      ctx.onNodeDataChanged();
     });
+    container.appendChild(btnAddGroup);
 
-    casesContainer.appendChild(btnAddCase);
-    form.appendChild(casesContainer);
+    return container;
   }
 
   public static createRuleEditorElement(
@@ -249,7 +411,7 @@ export class FlowPropertiesRenderer {
   ): HTMLElement {
     const ruleEl = document.createElement('div');
     ruleEl.style.cssText =
-      'background: #0b0f19; border: 1px solid #1e293b; border-radius: 5px; padding: 8px; display: flex; flex-direction: column; gap: 6px;';
+      'background: #0f172a; border: 1px solid #1e293b; border-radius: 5px; padding: 8px; display: flex; flex-direction: column; gap: 6px;';
 
     const mode = rule.evaluationMode || (rule.jsExpression && !rule.operator ? 'js_eval' : 'comparison');
 
@@ -319,21 +481,26 @@ export class FlowPropertiesRenderer {
         compFields.style.display = 'flex';
         jsFields.style.display = 'none';
       }
+      ctx.onNodeDataChanged();
     });
 
     compFields.querySelector('.rule-left')?.addEventListener('input', (e: any) => {
       rule.leftOperand = e.target.value;
+      ctx.onNodeDataChanged();
     });
     compFields.querySelector('.rule-op')?.addEventListener('change', (e: any) => {
       rule.operator = e.target.value;
+      ctx.onNodeDataChanged();
     });
     compFields.querySelector('.rule-right')?.addEventListener('input', (e: any) => {
       rule.rightOperand = e.target.value;
+      ctx.onNodeDataChanged();
     });
 
     const jsInput = jsFields.querySelector('.rule-js-code') as HTMLInputElement;
     jsInput?.addEventListener('input', (e: any) => {
       rule.jsExpression = e.target.value;
+      ctx.onNodeDataChanged();
     });
 
     jsFields.querySelector('.btn-open-rule-editor')?.addEventListener('click', () => {
@@ -357,89 +524,14 @@ export class FlowPropertiesRenderer {
   }
 
   public static renderWhile(form: HTMLElement, data: any, ctx: FlowPropertiesContext): void {
-    if (!Array.isArray(data.rules) || data.rules.length === 0) {
-      data.rules = [
-        {
-          id: `rule_${Date.now()}_0`,
-          evaluationMode: data.evaluationMode || (data.jsExpression && !data.operator ? 'js_eval' : 'comparison'),
-          leftOperand: data.leftOperand || '',
-          operator: data.operator || 'less_than',
-          rightOperand: data.rightOperand || '',
-          jsExpression: data.jsExpression || '',
-        },
-      ];
-    }
+    this.ensureConditionGroups(data);
 
     const whileContainer = document.createElement('div');
     whileContainer.style.cssText = 'display: flex; flex-direction: column; gap: 8px;';
 
-    const header = document.createElement('div');
-    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
-    header.innerHTML = `
-      <label style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Condições de Continuação (${data.rules.length})</label>
-    `;
-    whileContainer.appendChild(header);
-
-    if (data.rules.length > 1) {
-      const logicRow = document.createElement('div');
-      logicRow.style.cssText =
-        'display: flex; align-items: center; justify-content: space-between; background: #0f172a; padding: 6px 8px; border-radius: 4px; border: 1px solid #1e293b;';
-      logicRow.innerHTML = '<span style="font-size: 11px; color: #94a3b8; font-weight: 600;">Combinar Expressões:</span>';
-
-      const logicSelect = document.createElement('select');
-      logicSelect.style.cssText =
-        'padding: 3px 6px; font-size: 11px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px;';
-      logicSelect.innerHTML = `
-        <option value="and" ${(data.logicalOperator || 'and') === 'and' ? 'selected' : ''}>Satisfazer TODAS (E)</option>
-        <option value="or" ${data.logicalOperator === 'or' ? 'selected' : ''}>Satisfazer QUALQUER UMA (OU)</option>
-      `;
-      logicSelect.addEventListener('change', (e: any) => {
-        data.logicalOperator = e.target.value;
-      });
-      logicRow.appendChild(logicSelect);
-      whileContainer.appendChild(logicRow);
-    }
-
-    const rulesContainer = document.createElement('div');
-    rulesContainer.style.cssText = 'display: flex; flex-direction: column; gap: 6px;';
-
-    data.rules.forEach((rule: any, ruleIdx: number) => {
-      const ruleEl = this.createRuleEditorElement(rule, ruleIdx, data.rules.length, () => {
-        data.rules.splice(ruleIdx, 1);
-        if (data.rules.length === 0) {
-          data.rules.push({
-            id: `rule_${Date.now()}`,
-            evaluationMode: 'comparison',
-            leftOperand: '',
-            operator: 'less_than',
-            rightOperand: '',
-          });
-        }
-        ctx.renderInspector();
-      }, ctx);
-      rulesContainer.appendChild(ruleEl);
-    });
-
-    whileContainer.appendChild(rulesContainer);
-
-    const btnAddRule = document.createElement('button');
-    btnAddRule.type = 'button';
-    btnAddRule.className = 'btn-xs';
-    btnAddRule.style.cssText =
-      'width: 100%; padding: 5px; background: #1e293b; color: #93c5fd; border: 1px dashed #3b82f6; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 600; margin-top: 4px;';
-    btnAddRule.textContent = '+ Adicionar Outra Expressão / Condição';
-    btnAddRule.addEventListener('click', () => {
-      data.rules.push({
-        id: `rule_${Date.now()}`,
-        evaluationMode: 'comparison',
-        leftOperand: '',
-        operator: 'less_than',
-        rightOperand: '',
-        jsExpression: '',
-      });
-      ctx.renderInspector();
-    });
-    whileContainer.appendChild(btnAddRule);
+    // Construtor Visual de Condições Combinadas (Grupos E e OU)
+    const groupsBuilder = this.renderConditionGroupsBuilder(data, ctx);
+    whileContainer.appendChild(groupsBuilder);
 
     form.appendChild(whileContainer);
 
@@ -447,7 +539,10 @@ export class FlowPropertiesRenderer {
       form,
       'Limite Máximo de Iterações (Segurança)',
       data.maxIterations ?? 100,
-      (val) => (data.maxIterations = val)
+      (val) => {
+        data.maxIterations = val;
+        ctx.onNodeDataChanged();
+      }
     );
   }
 
@@ -500,7 +595,7 @@ export class FlowPropertiesRenderer {
   }
 
   public static renderIfElement(form: HTMLElement, data: any): void {
-    InspectorInputHelpers.addTextInput(form, 'Seletor do Elemento', data.selector || '', (val) => (data.selector = val));
+    InspectorInputHelpers.addSelectorInput(form, 'Seletor do Elemento', data.selector || '', (val) => (data.selector = val));
     InspectorInputHelpers.addSelectInput(
       form,
       'Tipo de Seletor',

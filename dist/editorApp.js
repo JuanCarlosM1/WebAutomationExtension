@@ -2136,6 +2136,302 @@ var CodeEditorComponent = class _CodeEditorComponent {
   }
 };
 
+// src/editor/modules/htmlElementAnalyzer.ts
+var HtmlElementAnalyzer = class {
+  static activeCallback;
+  static modalBackdrop;
+  /**
+   * Abre o Inspetor/Analisador de HTML.
+   * Se for passado onSelectSelector, ao escolher um elemento, esse seletor é retornado no callback.
+   */
+  static open(onSelectSelector) {
+    this.activeCallback = onSelectSelector;
+    this.renderModal();
+  }
+  /**
+   * Inicia o modo de seleção interativo na aba web ativa usando o content script
+   */
+  static startLivePicker(onPicked) {
+    if (onPicked) {
+      this.activeCallback = onPicked;
+    }
+    if (!chrome.tabs) {
+      const mockSelector = prompt("Digite o seletor CSS do elemento ou use o Analisador:", "#main-content");
+      if (mockSelector && this.activeCallback) {
+        this.activeCallback(mockSelector);
+      }
+      return;
+    }
+    chrome.tabs.query({}, (tabs) => {
+      const isWebTab = (t) => {
+        const u = t.url || "";
+        return u.startsWith("http://") || u.startsWith("https://") || u.startsWith("file://");
+      };
+      let targetTab = tabs.find((t) => t.active && isWebTab(t));
+      if (!targetTab) {
+        targetTab = tabs.filter((t) => isWebTab(t)).sort((a, b) => (b.id ?? 0) - (a.id ?? 0))[0];
+      }
+      if (!targetTab?.id) {
+        alert(
+          "Nenhuma aba de p\xE1gina web aberta (http/https/file) foi encontrada.\nPor favor, abra um site no navegador para selecionar elementos."
+        );
+        return;
+      }
+      const targetTabId = targetTab.id;
+      chrome.tabs.update(targetTabId, { active: true }, () => {
+        chrome.tabs.sendMessage(targetTabId, { action: "START_ELEMENT_PICKER" }, (response) => {
+          const err = chrome.runtime.lastError;
+          if (err || !response?.success) {
+            if (chrome.scripting?.executeScript) {
+              chrome.scripting.executeScript(
+                {
+                  target: { tabId: targetTabId },
+                  files: ["dist/contentDriver.js"]
+                },
+                () => {
+                  if (chrome.runtime.lastError) {
+                    return;
+                  }
+                  chrome.tabs.sendMessage(targetTabId, { action: "START_ELEMENT_PICKER" }, () => {
+                    void chrome.runtime.lastError;
+                  });
+                }
+              );
+            }
+          }
+        });
+      });
+    });
+  }
+  /**
+   * Conecta o ouvinte para receber elementos capturados do Content Script
+   */
+  static initMessageListener() {
+    if (!chrome.runtime?.onMessage)
+      return;
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.action === "ELEMENT_PICKED_EVENT") {
+        const { selector, analysis } = message.payload || {};
+        if (selector) {
+          if (this.activeCallback) {
+            this.activeCallback(selector);
+          }
+          this.showAnalysisModal(analysis || { target: { selector, tagName: "ELEMENT", classes: [] }, children: [] });
+        }
+      }
+    });
+  }
+  static renderModal() {
+    this.closeModal();
+    const backdrop = document.createElement("div");
+    backdrop.className = "flow-modal-backdrop html-analyzer-modal";
+    backdrop.style.cssText = `
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(10, 15, 26, 0.85);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100000;
+      padding: 16px;
+      font-family: var(--font-sans, system-ui, sans-serif);
+      animation: fadeIn 0.15s ease-out;
+    `;
+    backdrop.innerHTML = `
+      <div class="analyzer-card" style="
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        max-width: 840px;
+        width: 100%;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8), 0 0 30px rgba(99,102,241,0.2);
+        overflow: hidden;
+      ">
+        <!-- Header -->
+        <div style="padding: 16px 20px; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; background: #131d35;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(99, 102, 241, 0.2); color: #818cf8; display: flex; align-items: center; justify-content: center;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                <line x1="11" y1="8" x2="11" y2="14"></line>
+                <line x1="8" y1="11" x2="14" y2="11"></line>
+              </svg>
+            </div>
+            <div>
+              <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #f8fafc;">Analisador de Elementos HTML</h3>
+              <p style="margin: 2px 0 0; font-size: 11px; color: #94a3b8;">Capture e analise seletores limpos e simples de qualquer elemento web, pai e filhos</p>
+            </div>
+          </div>
+          <button id="btnCloseAnalyzer" style="background: transparent; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 6px;">\u2715</button>
+        </div>
+
+        <!-- Body -->
+        <div style="padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px;" id="analyzerBodyContent">
+          <!-- A\xE7\xE3o Principal: Iniciar Sele\xE7\xE3o na P\xE1gina Ativa -->
+          <div style="background: #172554; border: 1px solid #3b82f6; border-radius: 8px; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+            <div>
+              <h4 style="margin: 0; font-size: 13px; font-weight: 700; color: #93c5fd;">Capturar Elemento na P\xE1gina Web</h4>
+              <p style="margin: 4px 0 0; font-size: 11px; color: #cbd5e1;">Clique no bot\xE3o ao lado para apontar e clicar em qualquer elemento da p\xE1gina aberta.</p>
+            </div>
+            <button type="button" id="btnPickFromWebPage" class="btn btn-primary" style="background: #3b82f6; border-color: #3b82f6; padding: 8px 16px; font-size: 12px; font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span>Ativar Mira na P\xE1gina</span>
+            </button>
+          </div>
+
+          <!-- Campo de Teste / Inser\xE7\xE3o Manual de Seletor ou C\xF3digo HTML -->
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; text-transform: uppercase;">Ou digite/cole o Seletor CSS ou C\xF3digo HTML para inspecionar:</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="analyzerManualInput" placeholder="ex: #meu-elemento, button.btn-primary, input[name='email']" style="flex: 1; padding: 8px 12px; font-size: 12px; background: #090d16; color: white; border: 1px solid #334155; border-radius: 6px;" />
+              <button type="button" id="btnAnalyzeManual" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12px; font-weight: 600; white-space: nowrap;">
+                Analisar Seletor
+              </button>
+            </div>
+          </div>
+
+          <!-- \xC1rea de Resultados / \xC1rvore de Hierarquia (Alvo, Pai e Filhos) -->
+          <div id="analyzerResultsContainer" style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="background: #090d16; border: 1px dashed #334155; border-radius: 8px; padding: 24px; text-align: center; color: #64748b; font-size: 12px;">
+              \u{1F50D} Nenhum elemento analisado ainda. Clique em <strong>"Ativar Mira na P\xE1gina"</strong> ou digite um seletor acima.
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="padding: 12px 20px; border-top: 1px solid #1e293b; background: #131d35; display: flex; align-items: center; justify-content: space-between;">
+          <span style="font-size: 11px; color: #64748b;">Dica: Seletores com ID (#id) ou atributos \xFAnicos s\xE3o sempre priorizados para evitar fragilidade.</span>
+          <button type="button" id="btnCloseAnalyzerBottom" class="btn btn-secondary" style="padding: 6px 16px; font-size: 12px;">Fechar</button>
+        </div>
+      </div>
+    `;
+    backdrop.querySelector("#btnCloseAnalyzer")?.addEventListener("click", () => this.closeModal());
+    backdrop.querySelector("#btnCloseAnalyzerBottom")?.addEventListener("click", () => this.closeModal());
+    backdrop.querySelector("#btnPickFromWebPage")?.addEventListener("click", () => {
+      this.closeModal();
+      this.startLivePicker();
+    });
+    backdrop.querySelector("#btnAnalyzeManual")?.addEventListener("click", () => {
+      const input = backdrop.querySelector("#analyzerManualInput")?.value.trim();
+      if (!input)
+        return;
+      this.testAndShowLocalSelector(input);
+    });
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop)
+        this.closeModal();
+    });
+    document.body.appendChild(backdrop);
+    this.modalBackdrop = backdrop;
+  }
+  static closeModal() {
+    this.modalBackdrop?.remove();
+    document.querySelectorAll(".html-analyzer-modal").forEach((el) => el.remove());
+    this.modalBackdrop = void 0;
+  }
+  /**
+   * Exibe o modal com o resultado detalhado da análise (Pai, Alvo e Filhos)
+   */
+  static showAnalysisModal(analysis) {
+    this.renderModal();
+    const resultsContainer = document.getElementById("analyzerResultsContainer");
+    if (!resultsContainer)
+      return;
+    resultsContainer.innerHTML = "";
+    if (analysis.parent) {
+      resultsContainer.appendChild(this.createNodeCard("Elemento Pai (Container)", analysis.parent, "#64748b", "pai"));
+    }
+    resultsContainer.appendChild(this.createNodeCard("Elemento Selecionado (Alvo Principal)", analysis.target, "#6366f1", "alvo", true));
+    if (analysis.children && analysis.children.length > 0) {
+      const childrenSection = document.createElement("div");
+      childrenSection.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
+      childrenSection.innerHTML = `<label style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Elementos Filhos (${analysis.children.length}):</label>`;
+      analysis.children.slice(0, 6).forEach((child, idx) => {
+        childrenSection.appendChild(this.createNodeCard(`Filho #${idx + 1} &lt;${child.tagName.toLowerCase()}&gt;`, child, "#06b6d4", "filho"));
+      });
+      resultsContainer.appendChild(childrenSection);
+    }
+  }
+  static createNodeCard(title, node, borderColor, type, isPrimary = false) {
+    const card = document.createElement("div");
+    card.style.cssText = `
+      background: ${isPrimary ? "#111c38" : "#090d16"};
+      border: 1px solid ${borderColor};
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      position: relative;
+    `;
+    const tagBadge = `&lt;<span style="color: #60a5fa; font-weight: bold;">${node.tagName.toLowerCase()}</span>&gt;`;
+    const idSnippet = node.id ? `<span style="color: #f59e0b; font-family: monospace;">#${node.id}</span>` : "";
+    const classSnippet = node.classes.length > 0 ? `<span style="color: #10b981; font-family: monospace;">.${node.classes.slice(0, 2).join(".")}</span>` : "";
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; background: ${borderColor}25; color: ${borderColor}; border: 1px solid ${borderColor}50; padding: 2px 6px; border-radius: 4px;">${type}</span>
+          <span style="font-size: 12px; font-weight: 600; color: #f8fafc;">${title}</span>
+          <span style="font-size: 11px; font-family: monospace; color: #94a3b8;">${tagBadge} ${idSnippet} ${classSnippet}</span>
+        </div>
+        <button type="button" class="btn-copy-selector btn btn-secondary" style="padding: 4px 10px; font-size: 11px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span>Usar / Copiar</span>
+        </button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">
+        <div style="display: flex; flex-direction: column; gap: 2px; overflow: hidden;">
+          <span style="font-size: 10px; color: #94a3b8; font-weight: 700;">SELETOR CSS OTIMIZADO:</span>
+          <code style="font-size: 11px; color: #38bdf8; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${node.selector || "tag"}</code>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; overflow: hidden;">
+          <span style="font-size: 10px; color: #94a3b8; font-weight: 700;">XPATH:</span>
+          <code style="font-size: 11px; color: #fbbf24; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${node.xpath || "//tag"}</code>
+        </div>
+      </div>
+    `;
+    const copyBtn = card.querySelector(".btn-copy-selector");
+    copyBtn?.addEventListener("click", () => {
+      const chosenSelector = node.selector;
+      if (this.activeCallback) {
+        this.activeCallback(chosenSelector);
+      }
+      navigator.clipboard?.writeText(chosenSelector);
+      copyBtn.innerHTML = "<span>\u2713 Copiado!</span>";
+      setTimeout(() => {
+        copyBtn.innerHTML = `
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span>Usar / Copiar</span>
+        `;
+      }, 1500);
+    });
+    return card;
+  }
+  static testAndShowLocalSelector(rawInput) {
+    const tagName = rawInput.startsWith("#") ? "DIV" : rawInput.split(/[\.#\[]/)[0]?.toUpperCase() || "ELEMENT";
+    const hasId = rawInput.includes("#");
+    const idVal = hasId ? rawInput.split("#")[1]?.split(/[\.\[\s]/)[0] : void 0;
+    const analysis = {
+      target: {
+        tagName,
+        id: idVal,
+        classes: rawInput.includes(".") ? rawInput.split(".").slice(1).map((c) => c.split(/[\#\[\s]/)[0]) : [],
+        selector: rawInput,
+        xpath: idVal ? `//*[@id="${idVal}"]` : `//${tagName.toLowerCase()}`,
+        attributes: {}
+      },
+      children: []
+    };
+    this.showAnalysisModal(analysis);
+  }
+};
+
 // src/editor/modules/inspectorInputHelpers.ts
 var InspectorInputHelpers = class {
   static addTextInput(container, labelText, value, onChange) {
@@ -2143,6 +2439,40 @@ var InspectorInputHelpers = class {
     group.className = "form-group";
     group.innerHTML = `<label>${labelText}</label><input type="text" value="${value ?? ""}" />`;
     group.querySelector("input")?.addEventListener("input", (e) => onChange(e.target.value));
+    container.appendChild(group);
+  }
+  /**
+   * Adiciona um campo de seletor com botão de mira/analisador de HTML integrado
+   */
+  static addSelectorInput(container, labelText, value, onChange, placeholder = "ex: #meu-elemento, .btn-primary, [data-id]") {
+    const group = document.createElement("div");
+    group.className = "form-group";
+    group.innerHTML = `
+      <label>${labelText}</label>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <input type="text" value="${value ?? ""}" placeholder="${placeholder}" style="flex: 1;" />
+        <button type="button" class="btn btn-secondary btn-launch-analyzer" title="Ativar Analisador de HTML / Mira na P\xE1gina" style="padding: 6px 10px; font-size: 11px; white-space: nowrap; display: flex; align-items: center; gap: 4px; border-color: #6366f1; background: rgba(99, 102, 241, 0.15); color: #c7d2fe; cursor: pointer; border-radius: 6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <line x1="11" y1="8" x2="11" y2="14"></line>
+            <line x1="8" y1="11" x2="14" y2="11"></line>
+          </svg>
+          <span>Mirar</span>
+        </button>
+      </div>
+    `;
+    const inputEl = group.querySelector("input");
+    inputEl?.addEventListener("input", (e) => onChange(e.target.value));
+    const btnAnalyzer = group.querySelector(".btn-launch-analyzer");
+    btnAnalyzer?.addEventListener("click", () => {
+      HtmlElementAnalyzer.startLivePicker((pickedSelector) => {
+        if (inputEl) {
+          inputEl.value = pickedSelector;
+        }
+        onChange(pickedSelector);
+      });
+    });
     container.appendChild(group);
   }
   static addNumberInput(container, labelText, value, onChange) {
@@ -2161,7 +2491,16 @@ var InspectorInputHelpers = class {
       optionsHtml += `<option value="${opt.value}" ${isSelected ? "selected" : ""}>${opt.label}</option>`;
     });
     group.innerHTML = `<label>${labelText}</label><select>${optionsHtml}</select>`;
-    group.querySelector("select")?.addEventListener("change", (e) => onChange(e.target.value));
+    const selectEl = group.querySelector("select");
+    if (selectEl) {
+      selectEl.value = String(selectedValue ?? "");
+      selectEl.addEventListener("change", (e) => {
+        onChange(e.target.value);
+      });
+      selectEl.addEventListener("input", (e) => {
+        onChange(e.target.value);
+      });
+    }
     container.appendChild(group);
   }
   static addCheckboxInput(container, labelText, checked, onChange) {
@@ -2320,18 +2659,7 @@ var FlowPropertiesRenderer = class {
     if (!Array.isArray(data.cases))
       data.cases = [];
     data.cases.forEach((c, index) => {
-      if (!Array.isArray(c.rules) || c.rules.length === 0) {
-        c.rules = [
-          {
-            id: `rule_${Date.now()}_0`,
-            evaluationMode: c.evaluationMode || (c.jsExpression && !c.operator ? "js_eval" : "comparison"),
-            leftOperand: c.leftOperand || "",
-            operator: c.operator || "equals",
-            rightOperand: c.rightOperand || "",
-            jsExpression: c.jsExpression || ""
-          }
-        ];
-      }
+      this.ensureConditionGroups(c);
       const isExpanded = ctx.expandedCaseIndices.has(index);
       const caseCard = document.createElement("div");
       caseCard.className = "switch-case-card-item";
@@ -2378,58 +2706,8 @@ var FlowPropertiesRenderer = class {
           titleSpan.textContent = val || `Caso #${index + 1}`;
           ctx.onNodeDataChanged();
         });
-        if (c.rules.length > 1) {
-          const logicRow = document.createElement("div");
-          logicRow.style.cssText = "display: flex; align-items: center; justify-content: space-between; background: #0b0f19; padding: 6px 8px; border-radius: 4px; border: 1px solid #1e293b;";
-          logicRow.innerHTML = '<span style="font-size: 11px; color: #94a3b8; font-weight: 600;">Combinar Express\xF5es:</span>';
-          const logicSelect = document.createElement("select");
-          logicSelect.style.cssText = "padding: 3px 6px; font-size: 11px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px;";
-          logicSelect.innerHTML = `
-            <option value="and" ${(c.logicalOperator || "and") === "and" ? "selected" : ""}>Satisfazer TODAS (E)</option>
-            <option value="or" ${c.logicalOperator === "or" ? "selected" : ""}>Satisfazer QUALQUER UMA (OU)</option>
-          `;
-          logicSelect.addEventListener("change", (e) => {
-            c.logicalOperator = e.target.value;
-          });
-          logicRow.appendChild(logicSelect);
-          body.appendChild(logicRow);
-        }
-        const rulesList = document.createElement("div");
-        rulesList.style.cssText = "display: flex; flex-direction: column; gap: 6px;";
-        c.rules.forEach((rule, ruleIdx) => {
-          const ruleEl = this.createRuleEditorElement(rule, ruleIdx, c.rules.length, () => {
-            c.rules.splice(ruleIdx, 1);
-            if (c.rules.length === 0) {
-              c.rules.push({
-                id: `rule_${Date.now()}`,
-                evaluationMode: "comparison",
-                leftOperand: "",
-                operator: "equals",
-                rightOperand: ""
-              });
-            }
-            ctx.renderInspector();
-          }, ctx);
-          rulesList.appendChild(ruleEl);
-        });
-        body.appendChild(rulesList);
-        const btnAddRule = document.createElement("button");
-        btnAddRule.type = "button";
-        btnAddRule.className = "btn-xs";
-        btnAddRule.style.cssText = "width: 100%; padding: 5px; background: #1e293b; color: #93c5fd; border: 1px dashed #3b82f6; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 600;";
-        btnAddRule.textContent = "+ Adicionar Outra Express\xE3o Condicional";
-        btnAddRule.addEventListener("click", () => {
-          c.rules.push({
-            id: `rule_${Date.now()}`,
-            evaluationMode: "comparison",
-            leftOperand: "",
-            operator: "equals",
-            rightOperand: "",
-            jsExpression: ""
-          });
-          ctx.renderInspector();
-        });
-        body.appendChild(btnAddRule);
+        const groupsBuilder = this.renderConditionGroupsBuilder(c, ctx);
+        body.appendChild(groupsBuilder);
         caseCard.appendChild(body);
       }
       casesContainer.appendChild(caseCard);
@@ -2444,6 +2722,209 @@ var FlowPropertiesRenderer = class {
       data.cases.push({
         id: `case_${Date.now()}`,
         label: `Caso #${newIdx + 1}`,
+        conditionGroups: [
+          {
+            id: `grp_${Date.now()}_0`,
+            logicalOperator: "and",
+            nextOperator: "or",
+            rules: [
+              {
+                id: `rule_${Date.now()}_0`,
+                evaluationMode: "comparison",
+                leftOperand: "",
+                operator: "equals",
+                rightOperand: "",
+                jsExpression: ""
+              }
+            ]
+          }
+        ]
+      });
+      ctx.expandedCaseIndices.add(newIdx);
+      ctx.renderInspector(`.switch-case-card-item[data-case-index="${newIdx}"]`);
+    });
+    casesContainer.appendChild(btnAddCase);
+    form.appendChild(casesContainer);
+  }
+  /**
+   * Garante a inicialização consistente de conditionGroups a partir de dados existentes ou legados
+   */
+  static ensureConditionGroups(target) {
+    if (!Array.isArray(target.conditionGroups) || target.conditionGroups.length === 0) {
+      if (Array.isArray(target.rules) && target.rules.length > 0) {
+        target.conditionGroups = [
+          {
+            id: `grp_${Date.now()}_0`,
+            logicalOperator: target.logicalOperator || "and",
+            nextOperator: "or",
+            rules: JSON.parse(JSON.stringify(target.rules))
+          }
+        ];
+      } else {
+        target.conditionGroups = [
+          {
+            id: `grp_${Date.now()}_0`,
+            logicalOperator: "and",
+            nextOperator: "or",
+            rules: [
+              {
+                id: `rule_${Date.now()}_0`,
+                evaluationMode: target.evaluationMode || (target.jsExpression && !target.operator ? "js_eval" : "comparison"),
+                leftOperand: target.leftOperand || "",
+                operator: target.operator || "equals",
+                rightOperand: target.rightOperand || "",
+                jsExpression: target.jsExpression || ""
+              }
+            ]
+          }
+        ];
+      }
+    }
+  }
+  /**
+   * Renderiza o construtor visual de grupos de condições com AND e OR:
+   * ( (Expressão 1 AND Expressão 2) OU (Expressão 3 AND Expressão 4) OR Expressão 5 )
+   */
+  static renderConditionGroupsBuilder(dataObj, ctx) {
+    this.ensureConditionGroups(dataObj);
+    const container = document.createElement("div");
+    container.style.cssText = "display: flex; flex-direction: column; gap: 8px; margin-top: 4px;";
+    const header = document.createElement("div");
+    header.style.cssText = "display: flex; justify-content: space-between; align-items: center;";
+    header.innerHTML = `
+      <span style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">L\xF3gica Combinada (E / OU)</span>
+      <span style="font-size: 10px; color: #60a5fa;">${dataObj.conditionGroups.length} Grupo(s)</span>
+    `;
+    container.appendChild(header);
+    dataObj.conditionGroups.forEach((group, gIdx) => {
+      const isLastGroup = gIdx === dataObj.conditionGroups.length - 1;
+      const groupEl = document.createElement("div");
+      groupEl.style.cssText = "background: #080d1a; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px;";
+      const groupHeader = document.createElement("div");
+      groupHeader.style.cssText = "display: flex; justify-content: space-between; align-items: center;";
+      const titleAndLogic = document.createElement("div");
+      titleAndLogic.style.cssText = "display: flex; align-items: center; gap: 6px;";
+      titleAndLogic.innerHTML = `
+        <span style="font-size: 11px; font-weight: 700; color: #cbd5e1;">( Grupo #${gIdx + 1}:</span>
+      `;
+      const logicSelect = document.createElement("select");
+      logicSelect.style.cssText = "padding: 2px 6px; font-size: 10px; font-weight: 600; background: #172033; color: #93c5fd; border: 1px solid #3b82f6; border-radius: 4px; cursor: pointer;";
+      logicSelect.innerHTML = `
+        <option value="and" ${(group.logicalOperator || "and") === "and" ? "selected" : ""}>Satisfazer TODAS (E / AND)</option>
+        <option value="or" ${group.logicalOperator === "or" ? "selected" : ""}>Satisfazer QUALQUER UMA (OU / OR)</option>
+      `;
+      logicSelect.addEventListener("change", (e) => {
+        group.logicalOperator = e.target.value;
+        ctx.onNodeDataChanged();
+      });
+      titleAndLogic.appendChild(logicSelect);
+      const closeBracketSpan = document.createElement("span");
+      closeBracketSpan.style.cssText = "font-size: 11px; font-weight: 700; color: #cbd5e1;";
+      closeBracketSpan.textContent = ")";
+      titleAndLogic.appendChild(closeBracketSpan);
+      groupHeader.appendChild(titleAndLogic);
+      if (dataObj.conditionGroups.length > 1) {
+        const delGroupBtn = document.createElement("button");
+        delGroupBtn.type = "button";
+        delGroupBtn.innerHTML = "&times; Excluir Grupo";
+        delGroupBtn.style.cssText = "background: transparent; color: #ef4444; border: none; font-size: 10px; font-weight: 600; cursor: pointer;";
+        delGroupBtn.addEventListener("click", () => {
+          dataObj.conditionGroups.splice(gIdx, 1);
+          ctx.renderInspector();
+          ctx.onNodeDataChanged();
+        });
+        groupHeader.appendChild(delGroupBtn);
+      }
+      groupEl.appendChild(groupHeader);
+      const rulesList = document.createElement("div");
+      rulesList.style.cssText = "display: flex; flex-direction: column; gap: 6px; padding-left: 4px;";
+      if (!Array.isArray(group.rules) || group.rules.length === 0) {
+        group.rules = [
+          {
+            id: `rule_${Date.now()}_0`,
+            evaluationMode: "comparison",
+            leftOperand: "",
+            operator: "equals",
+            rightOperand: ""
+          }
+        ];
+      }
+      group.rules.forEach((rule, rIdx) => {
+        const ruleEl = this.createRuleEditorElement(
+          rule,
+          rIdx,
+          group.rules.length,
+          () => {
+            group.rules.splice(rIdx, 1);
+            if (group.rules.length === 0) {
+              group.rules.push({
+                id: `rule_${Date.now()}`,
+                evaluationMode: "comparison",
+                leftOperand: "",
+                operator: "equals",
+                rightOperand: ""
+              });
+            }
+            ctx.renderInspector();
+            ctx.onNodeDataChanged();
+          },
+          ctx
+        );
+        rulesList.appendChild(ruleEl);
+      });
+      groupEl.appendChild(rulesList);
+      const btnAddRuleInGroup = document.createElement("button");
+      btnAddRuleInGroup.type = "button";
+      btnAddRuleInGroup.className = "btn-xs";
+      btnAddRuleInGroup.style.cssText = "width: 100%; padding: 4px; background: rgba(59, 130, 246, 0.1); color: #93c5fd; border: 1px dashed #3b82f6; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 600;";
+      btnAddRuleInGroup.textContent = `+ Adicionar Express\xE3o ao Grupo #${gIdx + 1}`;
+      btnAddRuleInGroup.addEventListener("click", () => {
+        group.rules.push({
+          id: `rule_${Date.now()}`,
+          evaluationMode: "comparison",
+          leftOperand: "",
+          operator: "equals",
+          rightOperand: "",
+          jsExpression: ""
+        });
+        ctx.renderInspector();
+        ctx.onNodeDataChanged();
+      });
+      groupEl.appendChild(btnAddRuleInGroup);
+      container.appendChild(groupEl);
+      if (!isLastGroup) {
+        const connectorDiv = document.createElement("div");
+        connectorDiv.style.cssText = "display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0;";
+        const lineLeft = document.createElement("div");
+        lineLeft.style.cssText = "flex: 1; height: 1px; background: #334155;";
+        const lineRight = document.createElement("div");
+        lineRight.style.cssText = "flex: 1; height: 1px; background: #334155;";
+        const connectorSelect = document.createElement("select");
+        connectorSelect.style.cssText = "padding: 2px 8px; font-size: 10px; font-weight: 700; background: #1e293b; color: #f59e0b; border: 1px solid #d97706; border-radius: 12px; cursor: pointer; text-transform: uppercase;";
+        connectorSelect.innerHTML = `
+          <option value="or" ${(group.nextOperator || "or") === "or" ? "selected" : ""}>OU (OR)</option>
+          <option value="and" ${group.nextOperator === "and" ? "selected" : ""}>E (AND)</option>
+        `;
+        connectorSelect.addEventListener("change", (e) => {
+          group.nextOperator = e.target.value;
+          ctx.onNodeDataChanged();
+        });
+        connectorDiv.appendChild(lineLeft);
+        connectorDiv.appendChild(connectorSelect);
+        connectorDiv.appendChild(lineRight);
+        container.appendChild(connectorDiv);
+      }
+    });
+    const btnAddGroup = document.createElement("button");
+    btnAddGroup.type = "button";
+    btnAddGroup.className = "btn-xs";
+    btnAddGroup.style.cssText = "width: 100%; padding: 6px; background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1px dashed #6366f1; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-top: 4px;";
+    btnAddGroup.textContent = "+ Adicionar Outro Grupo ( (Express\xE3o...) OU / E ...)";
+    btnAddGroup.addEventListener("click", () => {
+      dataObj.conditionGroups.push({
+        id: `grp_${Date.now()}`,
+        logicalOperator: "and",
+        nextOperator: "or",
         rules: [
           {
             id: `rule_${Date.now()}_0`,
@@ -2453,18 +2934,17 @@ var FlowPropertiesRenderer = class {
             rightOperand: "",
             jsExpression: ""
           }
-        ],
-        logicalOperator: "and"
+        ]
       });
-      ctx.expandedCaseIndices.add(newIdx);
-      ctx.renderInspector(`.switch-case-card-item[data-case-index="${newIdx}"]`);
+      ctx.renderInspector();
+      ctx.onNodeDataChanged();
     });
-    casesContainer.appendChild(btnAddCase);
-    form.appendChild(casesContainer);
+    container.appendChild(btnAddGroup);
+    return container;
   }
   static createRuleEditorElement(rule, ruleIdx, totalRules, onDelete, ctx) {
     const ruleEl = document.createElement("div");
-    ruleEl.style.cssText = "background: #0b0f19; border: 1px solid #1e293b; border-radius: 5px; padding: 8px; display: flex; flex-direction: column; gap: 6px;";
+    ruleEl.style.cssText = "background: #0f172a; border: 1px solid #1e293b; border-radius: 5px; padding: 8px; display: flex; flex-direction: column; gap: 6px;";
     const mode = rule.evaluationMode || (rule.jsExpression && !rule.operator ? "js_eval" : "comparison");
     const ruleHeader = document.createElement("div");
     ruleHeader.style.cssText = "display: flex; justify-content: space-between; align-items: center;";
@@ -2525,19 +3005,24 @@ var FlowPropertiesRenderer = class {
         compFields.style.display = "flex";
         jsFields.style.display = "none";
       }
+      ctx.onNodeDataChanged();
     });
     compFields.querySelector(".rule-left")?.addEventListener("input", (e) => {
       rule.leftOperand = e.target.value;
+      ctx.onNodeDataChanged();
     });
     compFields.querySelector(".rule-op")?.addEventListener("change", (e) => {
       rule.operator = e.target.value;
+      ctx.onNodeDataChanged();
     });
     compFields.querySelector(".rule-right")?.addEventListener("input", (e) => {
       rule.rightOperand = e.target.value;
+      ctx.onNodeDataChanged();
     });
     const jsInput = jsFields.querySelector(".rule-js-code");
     jsInput?.addEventListener("input", (e) => {
       rule.jsExpression = e.target.value;
+      ctx.onNodeDataChanged();
     });
     jsFields.querySelector(".btn-open-rule-editor")?.addEventListener("click", () => {
       CodeEditorComponent.openCodeModal({
@@ -2558,84 +3043,20 @@ var FlowPropertiesRenderer = class {
     return ruleEl;
   }
   static renderWhile(form, data, ctx) {
-    if (!Array.isArray(data.rules) || data.rules.length === 0) {
-      data.rules = [
-        {
-          id: `rule_${Date.now()}_0`,
-          evaluationMode: data.evaluationMode || (data.jsExpression && !data.operator ? "js_eval" : "comparison"),
-          leftOperand: data.leftOperand || "",
-          operator: data.operator || "less_than",
-          rightOperand: data.rightOperand || "",
-          jsExpression: data.jsExpression || ""
-        }
-      ];
-    }
+    this.ensureConditionGroups(data);
     const whileContainer = document.createElement("div");
     whileContainer.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
-    const header = document.createElement("div");
-    header.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;";
-    header.innerHTML = `
-      <label style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Condi\xE7\xF5es de Continua\xE7\xE3o (${data.rules.length})</label>
-    `;
-    whileContainer.appendChild(header);
-    if (data.rules.length > 1) {
-      const logicRow = document.createElement("div");
-      logicRow.style.cssText = "display: flex; align-items: center; justify-content: space-between; background: #0f172a; padding: 6px 8px; border-radius: 4px; border: 1px solid #1e293b;";
-      logicRow.innerHTML = '<span style="font-size: 11px; color: #94a3b8; font-weight: 600;">Combinar Express\xF5es:</span>';
-      const logicSelect = document.createElement("select");
-      logicSelect.style.cssText = "padding: 3px 6px; font-size: 11px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px;";
-      logicSelect.innerHTML = `
-        <option value="and" ${(data.logicalOperator || "and") === "and" ? "selected" : ""}>Satisfazer TODAS (E)</option>
-        <option value="or" ${data.logicalOperator === "or" ? "selected" : ""}>Satisfazer QUALQUER UMA (OU)</option>
-      `;
-      logicSelect.addEventListener("change", (e) => {
-        data.logicalOperator = e.target.value;
-      });
-      logicRow.appendChild(logicSelect);
-      whileContainer.appendChild(logicRow);
-    }
-    const rulesContainer = document.createElement("div");
-    rulesContainer.style.cssText = "display: flex; flex-direction: column; gap: 6px;";
-    data.rules.forEach((rule, ruleIdx) => {
-      const ruleEl = this.createRuleEditorElement(rule, ruleIdx, data.rules.length, () => {
-        data.rules.splice(ruleIdx, 1);
-        if (data.rules.length === 0) {
-          data.rules.push({
-            id: `rule_${Date.now()}`,
-            evaluationMode: "comparison",
-            leftOperand: "",
-            operator: "less_than",
-            rightOperand: ""
-          });
-        }
-        ctx.renderInspector();
-      }, ctx);
-      rulesContainer.appendChild(ruleEl);
-    });
-    whileContainer.appendChild(rulesContainer);
-    const btnAddRule = document.createElement("button");
-    btnAddRule.type = "button";
-    btnAddRule.className = "btn-xs";
-    btnAddRule.style.cssText = "width: 100%; padding: 5px; background: #1e293b; color: #93c5fd; border: 1px dashed #3b82f6; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 600; margin-top: 4px;";
-    btnAddRule.textContent = "+ Adicionar Outra Express\xE3o / Condi\xE7\xE3o";
-    btnAddRule.addEventListener("click", () => {
-      data.rules.push({
-        id: `rule_${Date.now()}`,
-        evaluationMode: "comparison",
-        leftOperand: "",
-        operator: "less_than",
-        rightOperand: "",
-        jsExpression: ""
-      });
-      ctx.renderInspector();
-    });
-    whileContainer.appendChild(btnAddRule);
+    const groupsBuilder = this.renderConditionGroupsBuilder(data, ctx);
+    whileContainer.appendChild(groupsBuilder);
     form.appendChild(whileContainer);
     InspectorInputHelpers.addNumberInput(
       form,
       "Limite M\xE1ximo de Itera\xE7\xF5es (Seguran\xE7a)",
       data.maxIterations ?? 100,
-      (val) => data.maxIterations = val
+      (val) => {
+        data.maxIterations = val;
+        ctx.onNodeDataChanged();
+      }
     );
   }
   static renderFor(form, data, ctx) {
@@ -2684,7 +3105,7 @@ var FlowPropertiesRenderer = class {
     InspectorInputHelpers.addNumberInput(form, "Limite M\xE1ximo de Itera\xE7\xF5es", data.maxIterations ?? 100, (val) => data.maxIterations = val);
   }
   static renderIfElement(form, data) {
-    InspectorInputHelpers.addTextInput(form, "Seletor do Elemento", data.selector || "", (val) => data.selector = val);
+    InspectorInputHelpers.addSelectorInput(form, "Seletor do Elemento", data.selector || "", (val) => data.selector = val);
     InspectorInputHelpers.addSelectInput(
       form,
       "Tipo de Seletor",
@@ -2739,7 +3160,7 @@ var DomPropertiesRenderer = class {
     }
   }
   static renderClick(form, data) {
-    InspectorInputHelpers.addTextInput(form, "Seletor do Elemento", data.selector || "", (val) => data.selector = val);
+    InspectorInputHelpers.addSelectorInput(form, "Seletor do Elemento", data.selector || "", (val) => data.selector = val);
     InspectorInputHelpers.addSelectInput(
       form,
       "Tipo de Seletor",
@@ -2765,7 +3186,7 @@ var DomPropertiesRenderer = class {
     InspectorInputHelpers.addNumberInput(form, "Tempo Limite (ms)", data.timeoutMs ?? 5e3, (val) => data.timeoutMs = val);
   }
   static renderTypeInput(form, data, ctx) {
-    InspectorInputHelpers.addTextInput(form, "Seletor do Campo", data.selector || "", (val) => data.selector = val);
+    InspectorInputHelpers.addSelectorInput(form, "Seletor do Campo", data.selector || "", (val) => data.selector = val);
     InspectorInputHelpers.addSelectInput(
       form,
       "Tipo de Seletor",
@@ -2815,7 +3236,7 @@ var DomPropertiesRenderer = class {
       }
     );
     if (data.target === "element") {
-      InspectorInputHelpers.addTextInput(form, "Seletor do Elemento Alvo", data.selector || "", (val) => data.selector = val);
+      InspectorInputHelpers.addSelectorInput(form, "Seletor do Elemento Alvo", data.selector || "", (val) => data.selector = val);
       InspectorInputHelpers.addSelectInput(
         form,
         "Tipo de Seletor",
@@ -2873,7 +3294,7 @@ var DataPropertiesRenderer = class {
     InspectorInputHelpers.addNumberInput(form, "Tempo Limite (ms)", data.timeoutMs ?? 15e3, (val) => data.timeoutMs = val);
   }
   static renderExtractData(form, data, ctx) {
-    InspectorInputHelpers.addTextInput(form, "Seletor do Elemento", data.selector || "", (val) => data.selector = val);
+    InspectorInputHelpers.addSelectorInput(form, "Seletor do Elemento", data.selector || "", (val) => data.selector = val);
     InspectorInputHelpers.addSelectInput(
       form,
       "Tipo de Seletor",
@@ -2906,7 +3327,7 @@ var DataPropertiesRenderer = class {
     InspectorInputHelpers.addNumberInput(form, "Tempo Limite (ms)", data.timeoutMs ?? 5e3, (val) => data.timeoutMs = val);
   }
   static renderScrapeList(form, data, ctx) {
-    InspectorInputHelpers.addTextInput(form, "Seletor dos Itens / Cards", data.selector || ".card", (val) => data.selector = val);
+    InspectorInputHelpers.addSelectorInput(form, "Seletor dos Itens / Cards", data.selector || ".card", (val) => data.selector = val);
     InspectorInputHelpers.addSelectInput(
       form,
       "Tipo de Seletor",
@@ -3081,7 +3502,6 @@ var StartPropertiesRenderer = class {
             ctx.renderInspector();
           }
         );
-        InspectorInputHelpers.addCheckboxInput(body, "Disparo Ativo", trig.enabled !== false, (val) => trig.enabled = val);
         if (trig.type === "on_url_load") {
           if (!Array.isArray(trig.urlPatterns)) {
             trig.urlPatterns = trig.urlPattern ? [trig.urlPattern] : ["https://*/*"];
@@ -3090,6 +3510,43 @@ var StartPropertiesRenderer = class {
             trig.urlPatterns = newList;
             trig.urlPattern = newList[0] || "https://*/*";
           }, ctx);
+          InspectorInputHelpers.addCheckboxInput(
+            body,
+            "Ativar Apenas Quando um Elemento Espec\xEDfico Aparecer",
+            !!trig.requireElement,
+            (val) => {
+              trig.requireElement = val;
+              ctx.renderInspector();
+              ctx.onNodeDataChanged?.();
+            }
+          );
+          if (trig.requireElement) {
+            const onUrlElemBox = document.createElement("div");
+            onUrlElemBox.style.cssText = "background: #0b0f19; border: 1px solid #1e293b; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-top: 4px;";
+            InspectorInputHelpers.addSelectorInput(
+              onUrlElemBox,
+              "Seletor do Elemento Obrigat\xF3rio",
+              trig.requireElementSelector || "",
+              (val) => {
+                trig.requireElementSelector = val.trim();
+                ctx.onNodeDataChanged?.();
+              }
+            );
+            InspectorInputHelpers.addSelectInput(
+              onUrlElemBox,
+              "Tipo do Seletor",
+              trig.requireElementSelectorType || "css",
+              [
+                { value: "css", label: "Seletor CSS" },
+                { value: "xpath", label: "XPath" }
+              ],
+              (val) => {
+                trig.requireElementSelectorType = val;
+                ctx.onNodeDataChanged?.();
+              }
+            );
+            body.appendChild(onUrlElemBox);
+          }
         } else if (trig.type === "shortcut") {
           InspectorInputHelpers.addTextInput(body, "Combina\xE7\xE3o de Teclas (ex: Ctrl+Shift+U)", trig.shortcutKey || "Ctrl+Shift+U", (val) => trig.shortcutKey = val);
         } else if (trig.type === "schedule") {
@@ -3419,17 +3876,30 @@ var StartPropertiesRenderer = class {
         buttonText: "Executar Fluxo",
         iconType: "emoji",
         buttonIcon: "\u26A1",
+        size: "medium",
+        shape: "pill",
         position: "bottom-right",
         offsetX: 24,
+        offsetUnitX: "px",
         offsetY: 24,
+        offsetUnitY: "px",
         backgroundColor: "#6366f1",
         textColor: "#ffffff",
+        opacity: 1,
+        requireElement: false,
+        requireElementSelector: "",
+        requireElementSelectorType: "css",
+        filterBySites: false,
         urlPattern: "*://*/*"
       };
     }
     const fb = trig.floatingButton;
     if (!fb.iconType)
       fb.iconType = "emoji";
+    if (!fb.offsetUnitX)
+      fb.offsetUnitX = "px";
+    if (!fb.offsetUnitY)
+      fb.offsetUnitY = "px";
     InspectorInputHelpers.addTextInput(body, "Texto do Bot\xE3o", fb.buttonText || "", (val) => fb.buttonText = val);
     const iconGroup = document.createElement("div");
     iconGroup.style.cssText = "background: #0b0f19; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px;";
@@ -3516,6 +3986,94 @@ var StartPropertiesRenderer = class {
     iconGroup.appendChild(iconTypeSelect);
     iconGroup.appendChild(iconContentDiv);
     body.appendChild(iconGroup);
+    const customSizeContainer = document.createElement("div");
+    customSizeContainer.style.cssText = `background: #0d1527; border: 1px solid #1e3a8a; border-radius: 6px; padding: 10px; display: ${fb.size === "custom" ? "grid" : "none"}; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: -2px; margin-bottom: 6px;`;
+    const widthCol = document.createElement("div");
+    widthCol.style.cssText = "display: flex; flex-direction: column; gap: 4px;";
+    widthCol.innerHTML = '<label style="font-size: 10px; font-weight: 700; color: #93c5fd; text-transform: uppercase;">Largura (px)</label>';
+    const widthInp = document.createElement("input");
+    widthInp.type = "number";
+    widthInp.min = "30";
+    widthInp.max = "800";
+    widthInp.value = String(fb.customWidth ?? 160);
+    widthInp.style.cssText = "width: 100%; padding: 5px 6px; font-size: 12px; background: #172033; color: white; border: 1px solid #2563eb; border-radius: 4px;";
+    widthInp.addEventListener("input", (e) => {
+      fb.customWidth = Math.max(20, Number(e.target.value) || 160);
+      ctx.onNodeDataChanged?.();
+    });
+    widthCol.appendChild(widthInp);
+    customSizeContainer.appendChild(widthCol);
+    const heightCol = document.createElement("div");
+    heightCol.style.cssText = "display: flex; flex-direction: column; gap: 4px;";
+    heightCol.innerHTML = '<label style="font-size: 10px; font-weight: 700; color: #93c5fd; text-transform: uppercase;">Altura (px)</label>';
+    const heightInp = document.createElement("input");
+    heightInp.type = "number";
+    heightInp.min = "20";
+    heightInp.max = "400";
+    heightInp.value = String(fb.customHeight ?? 44);
+    heightInp.style.cssText = "width: 100%; padding: 5px 6px; font-size: 12px; background: #172033; color: white; border: 1px solid #2563eb; border-radius: 4px;";
+    heightInp.addEventListener("input", (e) => {
+      fb.customHeight = Math.max(16, Number(e.target.value) || 44);
+      ctx.onNodeDataChanged?.();
+    });
+    heightCol.appendChild(heightInp);
+    customSizeContainer.appendChild(heightCol);
+    const fontCol = document.createElement("div");
+    fontCol.style.cssText = "display: flex; flex-direction: column; gap: 4px;";
+    fontCol.innerHTML = '<label style="font-size: 10px; font-weight: 700; color: #93c5fd; text-transform: uppercase;">Fonte (px)</label>';
+    const fontInp = document.createElement("input");
+    fontInp.type = "number";
+    fontInp.min = "8";
+    fontInp.max = "48";
+    fontInp.value = String(fb.customFontSize ?? 14);
+    fontInp.style.cssText = "width: 100%; padding: 5px 6px; font-size: 12px; background: #172033; color: white; border: 1px solid #2563eb; border-radius: 4px;";
+    fontInp.addEventListener("input", (e) => {
+      fb.customFontSize = Math.max(8, Number(e.target.value) || 14);
+      ctx.onNodeDataChanged?.();
+    });
+    fontCol.appendChild(fontInp);
+    customSizeContainer.appendChild(fontCol);
+    InspectorInputHelpers.addSelectInput(
+      body,
+      "Tamanho do Bot\xE3o",
+      fb.size || "medium",
+      [
+        { value: "compact", label: "1. Ultra Compacto (M\xEDnimo)" },
+        { value: "small", label: "2. Pequeno (Discreto)" },
+        { value: "medium", label: "3. M\xE9dio (Padr\xE3o)" },
+        { value: "large", label: "4. Grande (Destaque)" },
+        { value: "custom", label: "5. Personalizado (Manual)" }
+      ],
+      (val) => {
+        fb.size = val;
+        if (fb.size === "custom") {
+          if (!fb.customWidth)
+            fb.customWidth = 160;
+          if (!fb.customHeight)
+            fb.customHeight = 44;
+          if (!fb.customFontSize)
+            fb.customFontSize = 14;
+        }
+        customSizeContainer.style.display = fb.size === "custom" ? "grid" : "none";
+        ctx.onNodeDataChanged?.();
+      }
+    );
+    body.appendChild(customSizeContainer);
+    InspectorInputHelpers.addSelectInput(
+      body,
+      "Formato do Bot\xE3o",
+      fb.shape || "pill",
+      [
+        { value: "pill", label: "P\xEDlula (Cantos 100% Redondos)" },
+        { value: "rounded", label: "Ret\xE2ngulo Arredondado" },
+        { value: "circle", label: "C\xEDrculo (\xCDcone Flutuante)" },
+        { value: "square", label: "Quadrado (Cantos Retos)" }
+      ],
+      (val) => {
+        fb.shape = val;
+        ctx.onNodeDataChanged?.();
+      }
+    );
     InspectorInputHelpers.addSelectInput(
       body,
       "Posi\xE7\xE3o na Tela",
@@ -3523,22 +4081,183 @@ var StartPropertiesRenderer = class {
       [
         { value: "bottom-right", label: "Inferior Direito (Padr\xE3o)" },
         { value: "bottom-left", label: "Inferior Esquerdo" },
+        { value: "bottom-center", label: "Inferior Centro" },
         { value: "top-right", label: "Superior Direito" },
-        { value: "top-left", label: "Superior Esquerdo" }
+        { value: "top-left", label: "Superior Esquerdo" },
+        { value: "top-center", label: "Superior Centro" },
+        { value: "center-left", label: "Centro Esquerdo" },
+        { value: "center-right", label: "Centro Direito" },
+        { value: "center", label: "Centro da Tela" }
       ],
-      (val) => fb.position = val
+      (val) => {
+        fb.position = val;
+        ctx.onNodeDataChanged?.();
+      }
     );
-    InspectorInputHelpers.addNumberInput(body, "Deslocamento X (px)", fb.offsetX ?? 24, (val) => fb.offsetX = val);
-    InspectorInputHelpers.addNumberInput(body, "Deslocamento Y (px)", fb.offsetY ?? 24, (val) => fb.offsetY = val);
-    ctx.colorPicker.createPaintColorPicker(body, "Cor de Fundo", fb.backgroundColor || "#6366f1", (val) => fb.backgroundColor = val);
-    ctx.colorPicker.createPaintColorPicker(body, "Cor do Texto", fb.textColor || "#ffffff", (val) => fb.textColor = val);
+    ctx.colorPicker.createPaintColorPicker(body, "Cor de Fundo", fb.backgroundColor || "#6366f1", (val) => {
+      fb.backgroundColor = val;
+      ctx.onNodeDataChanged?.();
+    });
+    ctx.colorPicker.createPaintColorPicker(body, "Cor do Texto", fb.textColor || "#ffffff", (val) => {
+      fb.textColor = val;
+      ctx.onNodeDataChanged?.();
+    });
+    const currentOpacity = fb.opacity !== void 0 ? Number(fb.opacity) : 1;
+    const currentOpacityPct = Math.max(0, Math.min(100, Math.round(currentOpacity * 100)));
+    const opacityGroup = document.createElement("div");
+    opacityGroup.className = "form-group";
+    opacityGroup.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+        <label style="margin: 0;">Opacidade do Bot\xE3o</label>
+        <span class="fb-opacity-label" style="font-size: 11px; font-weight: 700; color: #818cf8;">${currentOpacityPct}%</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <input type="range" min="0" max="100" value="${currentOpacityPct}" style="flex: 1; accent-color: #6366f1;" />
+      </div>
+    `;
+    const rangeEl = opacityGroup.querySelector('input[type="range"]');
+    const labelEl = opacityGroup.querySelector(".fb-opacity-label");
+    rangeEl?.addEventListener("input", (e) => {
+      const val = Number(e.target.value);
+      fb.opacity = Math.max(0, Math.min(1, val / 100));
+      if (labelEl)
+        labelEl.textContent = `${val}%`;
+      ctx.onNodeDataChanged?.();
+    });
+    body.appendChild(opacityGroup);
+    const offsetHGroup = document.createElement("div");
+    offsetHGroup.className = "form-group";
+    offsetHGroup.innerHTML = `
+      <label>Deslocamento Horizontal</label>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <input type="number" class="offset-h-val" value="${fb.offsetX ?? 24}" style="flex: 1; min-width: 0;" />
+        <select class="offset-h-unit" style="width: 70px; padding: 6px 8px; font-size: 12px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px; cursor: pointer;">
+          <option value="px" ${(fb.offsetUnitX || "px") === "px" ? "selected" : ""}>px</option>
+          <option value="%" ${fb.offsetUnitX === "%" ? "selected" : ""}>%</option>
+          <option value="rem" ${fb.offsetUnitX === "rem" ? "selected" : ""}>rem</option>
+          <option value="vw" ${fb.offsetUnitX === "vw" ? "selected" : ""}>vw</option>
+        </select>
+      </div>
+    `;
+    offsetHGroup.querySelector(".offset-h-val")?.addEventListener("input", (e) => {
+      fb.offsetX = Number(e.target.value);
+      ctx.onNodeDataChanged?.();
+    });
+    offsetHGroup.querySelector(".offset-h-unit")?.addEventListener("change", (e) => {
+      fb.offsetUnitX = e.target.value;
+      ctx.onNodeDataChanged?.();
+    });
+    body.appendChild(offsetHGroup);
+    const offsetVGroup = document.createElement("div");
+    offsetVGroup.className = "form-group";
+    offsetVGroup.innerHTML = `
+      <label>Deslocamento Vertical</label>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <input type="number" class="offset-v-val" value="${fb.offsetY ?? 24}" style="flex: 1; min-width: 0;" />
+        <select class="offset-v-unit" style="width: 70px; padding: 6px 8px; font-size: 12px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px; cursor: pointer;">
+          <option value="px" ${(fb.offsetUnitY || "px") === "px" ? "selected" : ""}>px</option>
+          <option value="%" ${fb.offsetUnitY === "%" ? "selected" : ""}>%</option>
+          <option value="rem" ${fb.offsetUnitY === "rem" ? "selected" : ""}>rem</option>
+          <option value="vh" ${fb.offsetUnitY === "vh" ? "selected" : ""}>vh</option>
+        </select>
+      </div>
+    `;
+    offsetVGroup.querySelector(".offset-v-val")?.addEventListener("input", (e) => {
+      fb.offsetY = Number(e.target.value);
+      ctx.onNodeDataChanged?.();
+    });
+    offsetVGroup.querySelector(".offset-v-unit")?.addEventListener("change", (e) => {
+      fb.offsetUnitY = e.target.value;
+      ctx.onNodeDataChanged?.();
+    });
+    body.appendChild(offsetVGroup);
+    InspectorInputHelpers.addCheckboxInput(
+      body,
+      "Permitir Arrastar o Bot\xE3o Flutuante (CTRL + Clique / Arraste)",
+      fb.allowDrag ?? true,
+      (val) => {
+        fb.allowDrag = val;
+        ctx.onNodeDataChanged?.();
+      }
+    );
+    const isRequireElem = Boolean(fb.requireElement);
+    const requireElemContainer = document.createElement("div");
+    requireElemContainer.style.cssText = "background: #0b0f19; border: 1px solid #1e293b; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-top: 4px; box-sizing: border-box; width: 100%; overflow: hidden;";
+    const requireElemHeader = document.createElement("div");
+    requireElemHeader.style.cssText = "display: flex; flex-direction: column; gap: 6px; width: 100%;";
+    requireElemHeader.innerHTML = `
+      <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; text-transform: uppercase; margin: 0; line-height: 1.4;">Exibir apenas quando elemento especificado estiver na aba</label>
+      <select class="select-req-elem-toggle select-toggle-control" style="width: 100%;">
+        <option value="false" ${!isRequireElem ? "selected" : ""}>N\xE3o (Sempre vis\xEDvel)</option>
+        <option value="true" ${isRequireElem ? "selected" : ""}>Sim (Apenas se elemento existir)</option>
+      </select>
+    `;
+    requireElemContainer.appendChild(requireElemHeader);
+    const requireElemDetails = document.createElement("div");
+    requireElemDetails.style.cssText = `display: ${isRequireElem ? "flex" : "none"}; flex-direction: column; gap: 8px; border-top: 1px solid #1e293b; padding-top: 8px; width: 100%; box-sizing: border-box;`;
+    InspectorInputHelpers.addSelectorInput(
+      requireElemDetails,
+      "Seletor do Elemento Obrigat\xF3rio",
+      fb.requireElementSelector || "",
+      (val) => {
+        fb.requireElementSelector = val.trim();
+        ctx.onNodeDataChanged?.();
+      }
+    );
+    InspectorInputHelpers.addSelectInput(
+      requireElemDetails,
+      "Tipo do Seletor",
+      fb.requireElementSelectorType || "css",
+      [
+        { value: "css", label: "Seletor CSS" },
+        { value: "xpath", label: "XPath" }
+      ],
+      (val) => {
+        fb.requireElementSelectorType = val;
+        ctx.onNodeDataChanged?.();
+      }
+    );
+    requireElemContainer.appendChild(requireElemDetails);
+    requireElemHeader.querySelector(".select-req-elem-toggle")?.addEventListener("change", (e) => {
+      const active = e.target.value === "true";
+      fb.requireElement = active;
+      requireElemDetails.style.display = active ? "flex" : "none";
+      ctx.onNodeDataChanged?.();
+    });
+    body.appendChild(requireElemContainer);
+    const isFilterSites = Boolean(fb.filterBySites);
+    const sitesContainer = document.createElement("div");
+    sitesContainer.style.cssText = "background: #0b0f19; border: 1px solid #1e293b; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-top: 4px; box-sizing: border-box; width: 100%; overflow: hidden;";
+    const sitesHeader = document.createElement("div");
+    sitesHeader.style.cssText = "display: flex; flex-direction: column; gap: 6px; width: 100%;";
+    sitesHeader.innerHTML = `
+      <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; text-transform: uppercase; margin: 0; line-height: 1.4;">Exibir apenas quando estiver em um ou mais sites espec\xEDficos</label>
+      <select class="select-sites-toggle select-toggle-control" style="width: 100%;">
+        <option value="false" ${!isFilterSites ? "selected" : ""}>N\xE3o (Exibir em todos os sites)</option>
+        <option value="true" ${isFilterSites ? "selected" : ""}>Sim (Filtrar por URLs)</option>
+      </select>
+    `;
+    sitesContainer.appendChild(sitesHeader);
+    const sitesDetails = document.createElement("div");
+    sitesDetails.style.cssText = `display: ${isFilterSites ? "flex" : "none"}; flex-direction: column; gap: 8px; border-top: 1px solid #1e293b; padding-top: 8px; width: 100%; box-sizing: border-box;`;
     if (!Array.isArray(trig.urlPatterns)) {
-      trig.urlPatterns = fb.urlPattern ? [fb.urlPattern] : ["*://*/*"];
+      trig.urlPatterns = fb.urlPattern && fb.urlPattern !== "*://*/*" ? [fb.urlPattern] : ["https://*/*"];
     }
-    this.renderUrlListSection(body, "URLs Em Que o Bot\xE3o Ser\xE1 Exibido", trig.urlPatterns, (newList) => {
+    this.renderUrlListSection(sitesDetails, "Sites / URLs Permitidas", trig.urlPatterns, (newList) => {
       trig.urlPatterns = newList;
       fb.urlPattern = newList[0] || "*://*/*";
     }, ctx);
+    sitesContainer.appendChild(sitesDetails);
+    sitesHeader.querySelector(".select-sites-toggle")?.addEventListener("change", (e) => {
+      const active = e.target.value === "true";
+      fb.filterBySites = active;
+      sitesDetails.style.display = active ? "flex" : "none";
+      if (!active) {
+        fb.urlPattern = "*://*/*";
+      }
+      ctx.onNodeDataChanged?.();
+    });
+    body.appendChild(sitesContainer);
   }
   static renderUrlListSection(container, labelText, currentList, onUpdate, ctx) {
     const urlSection = document.createElement("div");
@@ -3688,6 +4407,7 @@ var InspectorManager = class {
           renderInspector: (sel) => this.renderInspector(sel),
           expandedTriggerIndices: this.expandedTriggerIndices,
           colorPicker: this.colorPicker,
+          onNodeDataChanged: this.callbacks.onNodeDataChanged,
           showToast: this.callbacks.showToast
         });
         break;
@@ -3774,14 +4494,14 @@ var InspectorManager = class {
         break;
       case "press_key":
         this.addTextInput(form, "Tecla (ex: Enter, Escape, Tab, ArrowDown)", data.key || "Enter", (val) => data.key = val);
-        this.addTextInput(form, "Seletor Alvo (Opcional)", data.selector || "", (val) => data.selector = val);
+        InspectorInputHelpers.addSelectorInput(form, "Seletor Alvo (Opcional)", data.selector || "", (val) => data.selector = val);
         this.addSelectInput(form, "Tipo de Seletor", data.selectorType || "css", [
           { value: "css", label: "Seletor CSS" },
           { value: "xpath", label: "XPath" }
         ], (val) => data.selectorType = val);
         break;
       case "hover_focus":
-        this.addTextInput(form, "Seletor do Elemento", data.selector || "", (val) => data.selector = val);
+        InspectorInputHelpers.addSelectorInput(form, "Seletor do Elemento", data.selector || "", (val) => data.selector = val);
         this.addSelectInput(form, "Tipo de Seletor", data.selectorType || "css", [
           { value: "css", label: "Seletor CSS" },
           { value: "xpath", label: "XPath" }
@@ -3798,7 +4518,7 @@ var InspectorManager = class {
         });
         break;
       case "wait_for_element":
-        this.addTextInput(form, "Seletor do Elemento", data.selector || "", (val) => data.selector = val);
+        InspectorInputHelpers.addSelectorInput(form, "Seletor do Elemento", data.selector || "", (val) => data.selector = val);
         this.addSelectInput(form, "Tipo de Seletor", data.selectorType || "css", [
           { value: "css", label: "Seletor CSS" },
           { value: "xpath", label: "XPath" }
@@ -3865,7 +4585,7 @@ var InspectorManager = class {
         this.addTextInput(form, "Salvar Resultado na Vari\xE1vel (opcional)", data.saveResultToVar || "", (val) => data.saveResultToVar = val);
         break;
       case "inject_html":
-        this.addTextInput(form, "Seletor do Elemento Alvo", data.targetSelector || "body", (val) => data.targetSelector = val);
+        InspectorInputHelpers.addSelectorInput(form, "Seletor do Elemento Alvo", data.targetSelector || "body", (val) => data.targetSelector = val);
         this.addSelectInput(form, "Tipo de Seletor", data.selectorType || "css", [
           { value: "css", label: "Seletor CSS" },
           { value: "xpath", label: "XPath" }
@@ -3942,23 +4662,54 @@ var InspectorManager = class {
             <!-- Campos gerados dinamicamente -->
           </form>
         </div>
-        <div class="node-expand-footer">
-          <button id="btnDoneExpandedModal" class="btn btn-primary">Concluir Edi\xE7\xE3o</button>
+        <!-- Bot\xF5es de A\xE7\xE3o do Rodap\xE9 -->
+        <div class="node-expand-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-top: 1px solid #1e293b; background: #0b1120;">
+          <button type="button" id="btnDiscardExpandedModal" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; color: #f87171; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); cursor: pointer; border-radius: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            <span>Descartar Altera\xE7\xF5es</span>
+          </button>
+          <div style="display: flex; gap: 10px;">
+            <button type="button" id="btnDoneExpandedModal" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px; padding: 8px 22px; font-size: 13px; background: #6366f1; border-color: #6366f1; cursor: pointer; border-radius: 6px; font-weight: 600;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <span>Concluir e Aplicar</span>
+            </button>
+          </div>
         </div>
       </div>
     `;
+    const backupNodeData = JSON.parse(JSON.stringify(node.data || {}));
+    let changesCommitted = false;
     const formEl = backdrop.querySelector("#expandedNodeModalForm");
     this.populatePropertiesForm(formEl, node);
-    const close = () => this.closeExpandedModal();
-    backdrop.querySelector("#btnCloseExpandedModal")?.addEventListener("click", close);
-    backdrop.querySelector("#btnDoneExpandedModal")?.addEventListener("click", close);
+    const discardChanges = () => {
+      node.data = JSON.parse(JSON.stringify(backupNodeData));
+      this.closeExpandedModal();
+      this.renderInspector();
+      this.callbacks.onNodeDataChanged();
+      this.callbacks.showToast("Altera\xE7\xF5es no bloco foram descartadas.", "info");
+    };
+    const commitChanges = () => {
+      changesCommitted = true;
+      this.closeExpandedModal();
+      this.renderInspector();
+      this.callbacks.onNodeDataChanged();
+      this.callbacks.showToast("Altera\xE7\xF5es no bloco aplicadas com sucesso!", "success");
+    };
+    backdrop.querySelector("#btnDiscardExpandedModal")?.addEventListener("click", discardChanges);
+    backdrop.querySelector("#btnDoneExpandedModal")?.addEventListener("click", commitChanges);
+    const handleCloseDialog = () => {
+      if (!changesCommitted) {
+        commitChanges();
+      }
+    };
+    backdrop.querySelector("#btnCloseExpandedModal")?.addEventListener("click", handleCloseDialog);
     backdrop.addEventListener("click", (e) => {
       if (e.target === backdrop)
-        close();
+        handleCloseDialog();
     });
     const onKeyDown = (e) => {
       if (e.key === "Escape") {
-        close();
+        handleCloseDialog();
         window.removeEventListener("keydown", onKeyDown);
       }
     };
@@ -4558,7 +5309,8 @@ var CanvasManager = class {
       nodeEl.className = `graph-node ${catClass} ${selectedNodeId === node.id ? "selected" : ""}`;
       let codeBadgeHtml = "";
       const hasJsRule = (rules) => Array.isArray(rules) && rules.some((r) => r.evaluationMode === "js_eval");
-      const isCodeNode = ["inject_javascript", "inject_html", "inject_css", "web_component"].includes(node.type) || node.type === "for_loop" && node.data.loopType === "js_generator" || node.type === "set_variable" && node.data.evaluationType === "js_eval" || node.type === "while_loop" && hasJsRule(node.data.rules) || node.type === "switch" && Array.isArray(node.data.cases) && node.data.cases.some((c) => hasJsRule(c.rules));
+      const hasJsInGroups = (groups) => Array.isArray(groups) && groups.some((g) => hasJsRule(g.rules));
+      const isCodeNode = ["inject_javascript", "inject_html", "inject_css", "web_component"].includes(node.type) || node.type === "for_loop" && node.data.loopType === "js_generator" || node.type === "set_variable" && node.data.evaluationType === "js_eval" || node.type === "while_loop" && (hasJsRule(node.data.rules) || hasJsInGroups(node.data.conditionGroups)) || node.type === "switch" && Array.isArray(node.data.cases) && node.data.cases.some((c) => hasJsRule(c.rules) || hasJsInGroups(c.conditionGroups));
       if (isCodeNode) {
         const langMap = {
           inject_javascript: { label: "Editar JS", color: "#f59e0b" },
@@ -5293,14 +6045,17 @@ function showToast(message, type = "info") {
   lastToastMessages.set(message, now);
   const toast = document.createElement("div");
   toast.className = `toast toast-${type}`;
+  toast.title = "Clique para fechar";
   toast.textContent = message;
-  container.appendChild(toast);
-  setTimeout(() => {
+  const dismissToast = () => {
     toast.style.opacity = "0";
     toast.style.transform = "translateY(10px)";
-    toast.style.transition = "all 0.2s ease-out";
-    setTimeout(() => toast.remove(), 200);
-  }, 3500);
+    toast.style.transition = "all 0.15s ease-out";
+    setTimeout(() => toast.remove(), 150);
+  };
+  toast.addEventListener("click", dismissToast);
+  container.appendChild(toast);
+  setTimeout(dismissToast, 2200);
 }
 var DEFAULT_MODAL_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
 function showModalDialog(title, message, icon = DEFAULT_MODAL_SVG) {
@@ -5360,6 +6115,264 @@ function sanitizeGraph(graph) {
   });
   return clone;
 }
+
+// src/editor/modules/flowSettingsModal.ts
+var FlowSettingsModal = class {
+  static open(onSaveCallback) {
+    const existing = document.querySelector(".flow-settings-modal-backdrop");
+    existing?.remove();
+    chrome.storage.local.get("floating_buttons_layout_settings", (stored) => {
+      const currentConfig = stored.floating_buttons_layout_settings || {
+        stackDirection: "vertical",
+        maxColumns: 3,
+        maxRows: 5,
+        gap: 10
+      };
+      const backdrop = document.createElement("div");
+      backdrop.className = "flow-modal-backdrop flow-settings-modal-backdrop";
+      backdrop.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(8, 12, 20, 0.8);
+        backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100000;
+        padding: 16px;
+        font-family: var(--font-sans, system-ui, sans-serif);
+        animation: fadeIn 0.15s ease-out;
+      `;
+      let stackDirection = currentConfig.stackDirection || "vertical";
+      let maxColumns = currentConfig.maxColumns ?? 3;
+      let maxRows = currentConfig.maxRows ?? 5;
+      let gap = currentConfig.gap ?? 10;
+      const render = () => {
+        backdrop.innerHTML = `
+          <div class="flow-settings-card" style="
+            background: #0f172a;
+            border: 1px solid #3b82f6;
+            border-radius: 14px;
+            max-width: 540px;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75), 0 0 25px rgba(59, 130, 246, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+          ">
+            <!-- Header -->
+            <div style="padding: 16px 20px; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; background: #131d35;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(59, 130, 246, 0.2); color: #60a5fa; display: flex; align-items: center; justify-content: center; font-size: 16px;">
+                  \u2699\uFE0F
+                </div>
+                <div>
+                  <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #f8fafc;">Configura\xE7\xF5es do Visual Flow</h3>
+                  <p style="margin: 2px 0 0; font-size: 12px; color: #94a3b8;">Comportamento e empilhamento dos bot\xF5es flutuantes</p>
+                </div>
+              </div>
+              <button id="btnSettingsCloseX" style="background: transparent; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 6px;">\u2715</button>
+            </div>
+
+            <!-- Body -->
+            <div style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+              <!-- Se\xE7\xE3o Bot\xF5es Flutuantes Multi-Execu\xE7\xE3o -->
+              <div style="background: #090d16; border: 1px solid #1e293b; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 14px;">\u{1F5C2}\uFE0F</span>
+                  <span style="font-size: 13px; font-weight: 700; color: #e2e8f0;">Container de Bot\xF5es Flutuantes (Triggers)</span>
+                </div>
+                <p style="font-size: 12px; color: #94a3b8; line-height: 1.4; margin: 0;">
+                  Quando m\xFAltiplas automa\xE7\xF5es forem injetadas na mesma p\xE1gina web, seus bot\xF5es flutuantes ser\xE3o agrupados neste container para evitar sobreposi\xE7\xF5es desagrad\xE1veis.
+                </p>
+
+                <!-- Dire\xE7\xE3o de Empilhamento -->
+                <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
+                  <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; text-transform: uppercase;">Dire\xE7\xE3o do Empilhamento</label>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <button type="button" id="btnDirVertical" style="
+                      padding: 10px;
+                      background: ${stackDirection === "vertical" ? "#1e293b" : "#0b0f19"};
+                      border: 1px solid ${stackDirection === "vertical" ? "#3b82f6" : "#1e293b"};
+                      border-radius: 8px;
+                      color: ${stackDirection === "vertical" ? "#ffffff" : "#94a3b8"};
+                      cursor: pointer;
+                      display: flex;
+                      flex-direction: column;
+                      align-items: center;
+                      gap: 4px;
+                      transition: all 0.15s ease;
+                    ">
+                      <span style="font-size: 16px;">\u2B07\uFE0F</span>
+                      <span style="font-size: 12px; font-weight: 600;">Vertical (Coluna)</span>
+                      <span style="font-size: 10px; color: #64748b;">Empilha um abaixo do outro</span>
+                    </button>
+                    <button type="button" id="btnDirHorizontal" style="
+                      padding: 10px;
+                      background: ${stackDirection === "horizontal" ? "#1e293b" : "#0b0f19"};
+                      border: 1px solid ${stackDirection === "horizontal" ? "#3b82f6" : "#1e293b"};
+                      border-radius: 8px;
+                      color: ${stackDirection === "horizontal" ? "#ffffff" : "#94a3b8"};
+                      cursor: pointer;
+                      display: flex;
+                      flex-direction: column;
+                      align-items: center;
+                      gap: 4px;
+                      transition: all 0.15s ease;
+                    ">
+                      <span style="font-size: 16px;">\u27A1\uFE0F</span>
+                      <span style="font-size: 12px; font-weight: 600;">Horizontal (Linha)</span>
+                      <span style="font-size: 10px; color: #64748b;">Empilha lado a lado</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Limites de Linhas e Colunas -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px;">
+                  <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <label style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Limite de Colunas (Max):</label>
+                    <input type="number" id="inputMaxColumns" min="1" max="10" value="${maxColumns}" style="
+                      background: #172033;
+                      color: white;
+                      border: 1px solid #243049;
+                      border-radius: 6px;
+                      padding: 8px 10px;
+                      font-size: 12px;
+                    " />
+                    <span style="font-size: 10px; color: #64748b;">Quebra ap\xF3s atingir o limite</span>
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <label style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Limite de Linhas (Max):</label>
+                    <input type="number" id="inputMaxRows" min="1" max="20" value="${maxRows}" style="
+                      background: #172033;
+                      color: white;
+                      border: 1px solid #243049;
+                      border-radius: 6px;
+                      padding: 8px 10px;
+                      font-size: 12px;
+                    " />
+                    <span style="font-size: 10px; color: #64748b;">Quebra verticalmente</span>
+                  </div>
+                </div>
+
+                <!-- Espa\xE7amento (Gap) -->
+                <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Espa\xE7amento Entre Bot\xF5es (Gap):</label>
+                    <span id="labelGapValue" style="font-size: 11px; font-weight: bold; color: #60a5fa;">${gap}px</span>
+                  </div>
+                  <input type="range" id="rangeGap" min="4" max="32" value="${gap}" style="accent-color: #3b82f6;" />
+                </div>
+
+                <!-- Pr\xE9via din\xE2mica da pilha -->
+                <div style="
+                  background: #020617;
+                  border: 1px dashed #334155;
+                  border-radius: 8px;
+                  padding: 12px;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 8px;
+                  align-items: center;
+                  justify-content: center;
+                  min-height: 85px;
+                ">
+                  <span style="font-size: 10px; color: #64748b; font-family: monospace;">Pr\xE9-visualiza\xE7\xE3o do Container:</span>
+                  <div id="settingsPreviewContainer" style="
+                    display: flex;
+                    flex-direction: ${stackDirection === "vertical" ? "column" : "row"};
+                    flex-wrap: wrap;
+                    gap: ${gap}px;
+                    align-items: center;
+                    justify-content: center;
+                    max-width: ${stackDirection === "horizontal" ? `${maxColumns * 100}px` : "100%"};
+                  ">
+                    <div style="background: #4f46e5; color: white; padding: 4px 10px; border-radius: 9999px; font-size: 10px; font-weight: 600;">\u26A1 Fluxo A</div>
+                    <div style="background: #059669; color: white; padding: 4px 10px; border-radius: 9999px; font-size: 10px; font-weight: 600;">\u{1F680} Fluxo B</div>
+                    <div style="background: #d97706; color: white; padding: 4px 10px; border-radius: 9999px; font-size: 10px; font-weight: 600;">\u2699\uFE0F Fluxo C</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div style="padding: 14px 20px; border-top: 1px solid #1e293b; background: #131d35; display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
+              <button type="button" id="btnSettingsCancel" class="btn btn-secondary" style="padding: 7px 16px; font-size: 12px;">
+                Cancelar
+              </button>
+              <button type="button" id="btnSettingsSave" class="btn btn-primary" style="padding: 7px 20px; font-size: 12px; background: #3b82f6; border-color: #3b82f6;">
+                Salvar Configura\xE7\xF5es
+              </button>
+            </div>
+          </div>
+        `;
+        backdrop.querySelector("#btnDirVertical")?.addEventListener("click", () => {
+          stackDirection = "vertical";
+          render();
+        });
+        backdrop.querySelector("#btnDirHorizontal")?.addEventListener("click", () => {
+          stackDirection = "horizontal";
+          render();
+        });
+        const inputCols = backdrop.querySelector("#inputMaxColumns");
+        inputCols?.addEventListener("input", (e) => {
+          maxColumns = Math.max(1, Number(e.target.value) || 1);
+          updatePreview();
+        });
+        const inputRw = backdrop.querySelector("#inputMaxRows");
+        inputRw?.addEventListener("input", (e) => {
+          maxRows = Math.max(1, Number(e.target.value) || 1);
+          updatePreview();
+        });
+        const rangeG = backdrop.querySelector("#rangeGap");
+        const labelG = backdrop.querySelector("#labelGapValue");
+        rangeG?.addEventListener("input", (e) => {
+          gap = Number(e.target.value);
+          if (labelG)
+            labelG.textContent = `${gap}px`;
+          updatePreview();
+        });
+        const updatePreview = () => {
+          const preview = backdrop.querySelector("#settingsPreviewContainer");
+          if (preview) {
+            preview.style.flexDirection = stackDirection === "vertical" ? "column" : "row";
+            preview.style.gap = `${gap}px`;
+            preview.style.maxWidth = stackDirection === "horizontal" ? `${maxColumns * 100}px` : "100%";
+          }
+        };
+        const closeDialog = () => backdrop.remove();
+        backdrop.querySelector("#btnSettingsCloseX")?.addEventListener("click", closeDialog);
+        backdrop.querySelector("#btnSettingsCancel")?.addEventListener("click", closeDialog);
+        backdrop.querySelector("#btnSettingsSave")?.addEventListener("click", () => {
+          const newSettings = {
+            stackDirection,
+            maxColumns,
+            maxRows,
+            gap
+          };
+          chrome.storage.local.set({ floating_buttons_layout_settings: newSettings }, () => {
+            if (chrome.runtime?.sendMessage) {
+              chrome.runtime.sendMessage({ action: "SYNC_TRIGGERS" }).catch(() => {
+              });
+            }
+            onSaveCallback?.(newSettings);
+            closeDialog();
+          });
+        });
+      };
+      render();
+      backdrop.addEventListener("click", (e) => {
+        if (e.target === backdrop)
+          backdrop.remove();
+      });
+      document.body.appendChild(backdrop);
+    });
+  }
+};
 
 // src/editor/editorApp.ts
 var VisualEditorApp = class {
@@ -5494,6 +6507,13 @@ var VisualEditorApp = class {
     if (chrome.storage?.local) {
       await chrome.storage.local.set({ web_automations: this.tabManager.getSavedAutomations() });
     }
+    if (chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({
+        action: "SAVE_AUTOMATION",
+        payload: { graph: cleanGraph }
+      }).catch(() => {
+      });
+    }
     const saveBtnLabel = document.getElementById("saveButtonLabel");
     if (saveBtnLabel)
       saveBtnLabel.textContent = "Salvo! \u2713";
@@ -5502,6 +6522,7 @@ var VisualEditorApp = class {
         saveBtnLabel.textContent = "Salvar";
     }, 2e3);
     this.tabManager.renderTabs();
+    this.inspectorManager.renderInspector();
     showToast(`Automa\xE7\xE3o "${this.graph.metadata.name}" salva com sucesso!`, "success");
   }
   async runFlowDirectly(graph) {
@@ -5684,6 +6705,11 @@ var VisualEditorApp = class {
         this.canvasManager.render();
       });
     });
+    document.getElementById("btnOpenSettings")?.addEventListener("click", () => {
+      FlowSettingsModal.open(() => {
+        showToast("Configura\xE7\xF5es do Visual Flow salvas com sucesso!", "success");
+      });
+    });
     document.getElementById("btnImportJson")?.addEventListener("click", () => {
       document.getElementById("jsonFileInput")?.click();
     });
@@ -5715,6 +6741,11 @@ var VisualEditorApp = class {
     const btnToggleLeft = document.getElementById("btnToggleSidebarLeft");
     const btnToggleRight = document.getElementById("btnToggleSidebarRight");
     const btnActivityBlocks = document.getElementById("btnActivityBlocks");
+    const btnActivityAnalyzer = document.getElementById("btnActivityAnalyzer");
+    HtmlElementAnalyzer.initMessageListener();
+    btnActivityAnalyzer?.addEventListener("click", () => {
+      HtmlElementAnalyzer.open();
+    });
     const toggleSidebarLeft = (collapse) => {
       if (!sidebarLeft)
         return;

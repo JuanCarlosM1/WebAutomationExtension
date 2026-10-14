@@ -52,7 +52,7 @@ export class DataPropertiesRenderer {
   }
 
   public static renderExtractData(form: HTMLElement, data: any, ctx: DataPropertiesContext): void {
-    InspectorInputHelpers.addTextInput(form, 'Seletor do Elemento', data.selector || '', (val) => (data.selector = val));
+    InspectorInputHelpers.addSelectorInput(form, 'Seletor do Elemento', data.selector || '', (val) => (data.selector = val));
     InspectorInputHelpers.addSelectInput(
       form,
       'Tipo de Seletor',
@@ -88,7 +88,7 @@ export class DataPropertiesRenderer {
   }
 
   public static renderScrapeList(form: HTMLElement, data: any, ctx: DataPropertiesContext): void {
-    InspectorInputHelpers.addTextInput(form, 'Seletor dos Itens / Cards', data.selector || '.card', (val) => (data.selector = val));
+    InspectorInputHelpers.addSelectorInput(form, 'Seletor dos Itens / Cards', data.selector || '.card', (val) => (data.selector = val));
     InspectorInputHelpers.addSelectInput(
       form,
       'Tipo de Seletor',

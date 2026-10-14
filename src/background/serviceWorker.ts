@@ -119,6 +119,49 @@ class ExtensionController {
           });
         }
       }
+
+      // 3. Atualizar imediatamente os botões flutuantes em todas as abas abertas que correspondam às URLs
+      if (chrome.tabs) {
+        chrome.tabs.query({}, (tabs) => {
+          for (const tab of tabs) {
+            if (!tab.id || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://')) continue;
+
+            for (const auto of automations) {
+              const startNode = auto.nodes.find((n) => n.type === 'start');
+              if (!startNode) continue;
+              const triggers = getActiveTriggers(startNode.data as any);
+              const floatingTriggers = triggers.filter((t) => t.type === 'floating_button');
+
+              for (const trig of floatingTriggers) {
+                const patterns = trig.urlPatterns || (trig.urlPattern ? [trig.urlPattern] : ['*://*/*']);
+                const floatingPatterns = patterns.length > 0 ? patterns : ['*://*/*'];
+                const matches = floatingPatterns.some((p) => {
+                  if (!p || p === '*://*/*' || p === 'https://*/*' || p === '<all_urls>' || p === '.*') return true;
+                  try {
+                    const escaped = p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+                    return new RegExp(`^${escaped}$`, 'i').test(tab.url!);
+                  } catch {
+                    return false;
+                  }
+                });
+
+                if (matches && tab.id) {
+                  chrome.tabs.sendMessage(tab.id, {
+                    action: 'INJECT_FLOATING_TRIGGER_BUTTON',
+                    payload: {
+                      automationId: auto.metadata.id,
+                      automationName: auto.metadata.name,
+                      buttonConfig: trig.floatingButton,
+                    },
+                  }).catch(() => {
+                    // Silenciar caso a aba ainda não possua o script carregado
+                  });
+                }
+              }
+            }
+          }
+        });
+      }
     } catch (err) {
       console.warn('[WebAutomations] Erro ao sincronizar gatilhos:', err);
     }
@@ -246,10 +289,15 @@ class ExtensionController {
 
           // Gatilho por Botão Flutuante Personalizado
           if (trigger.type === 'floating_button') {
-            const floatingPatterns = patterns.length > 0 ? patterns : ['.*'];
+            const floatingPatterns = patterns.length > 0 ? patterns : ['*://*/*'];
             const matches = floatingPatterns.some((p) => {
-              const regex = new RegExp(p.replace(/\*/g, '.*'));
-              return regex.test(details.url);
+              if (!p || p === '*://*/*' || p === 'https://*/*' || p === '<all_urls>' || p === '.*') return true;
+              try {
+                const escaped = p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+                return new RegExp(`^${escaped}$`, 'i').test(details.url);
+              } catch {
+                return false;
+              }
             });
             if (matches && details.tabId) {
               chrome.tabs.sendMessage(details.tabId, {
@@ -394,6 +442,11 @@ class ExtensionController {
       case 'SAVE_AUTOMATION': {
         const graph: WebAutomationGraph = payload.graph;
         await this.saveAutomation(graph);
+        return { success: true };
+      }
+
+      case 'SYNC_TRIGGERS': {
+        await this.syncTriggers();
         return { success: true };
       }
 
