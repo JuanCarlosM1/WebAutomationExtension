@@ -54,6 +54,28 @@ async function build() {
   });
   console.log('✓ dist/popup.js gerado');
 
+  // 5. Settings App
+  await esbuild.build({
+    entryPoints: ['src/settings/settingsApp.ts'],
+    outfile: 'dist/settingsApp.js',
+    bundle: true,
+    format: 'esm',
+    target: 'chrome110',
+    sourcemap: true,
+  });
+  console.log('✓ dist/settingsApp.js gerado');
+
+  // 6. Analyzer App
+  await esbuild.build({
+    entryPoints: ['src/analyzer/analyzerApp.ts'],
+    outfile: 'dist/analyzerApp.js',
+    bundle: true,
+    format: 'esm',
+    target: 'chrome110',
+    sourcemap: true,
+  });
+  console.log('✓ dist/analyzerApp.js gerado');
+
   console.log('🎉 Compilação da extensão concluída com sucesso!');
 }
 

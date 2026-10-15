@@ -3,6 +3,7 @@
  */
 
 import { WebAutomationGraph } from '../../../../BibliotecaDeDev/src/types/schema';
+export { DialogMenu } from './dialogUtils';
 
 const lastToastMessages: Map<string, number> = new Map();
 

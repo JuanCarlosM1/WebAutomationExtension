@@ -646,7 +646,7 @@ body {
 
 /* Sidebar Left: Block Library */
 .sidebar-library {
-  width: 280px;
+  width: 320px;
   background-color: var(--bg-surface);
   border-right: 1px solid var(--border-subtle);
   display: flex;
@@ -655,18 +655,30 @@ body {
 }
 
 .sidebar-header {
-  padding: 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border-subtle);
+  height: 58px;
+  min-height: 58px;
+  max-height: 58px;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .sidebar-header h3 {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+  line-height: 1.2;
 }
 
 .sidebar-header p {
-  font-size: 12px;
-  color: var(--text-muted);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 2px 0 0 0;
+  line-height: 1.2;
 }
 
 .search-bar {
@@ -711,13 +723,17 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   margin-bottom: 6px;
   display: flex;
   align-items: center;
   gap: 10px;
   cursor: pointer;
   transition: all 0.15s ease;
+  height: 52px;
+  min-height: 52px;
+  max-height: 52px;
+  box-sizing: border-box;
 }
 
 .block-item:hover {
@@ -731,24 +747,44 @@ body {
 }
 
 .block-item-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
   font-weight: 700;
+  flex-shrink: 0;
+}
+
+.block-item > div:not(.block-item-icon) {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .block-item-title {
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
 }
 
 .block-item-desc {
   font-size: 10px;
   color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+  margin-top: 2px;
 }
 
 /* Category Colors */
@@ -1085,10 +1121,10 @@ body {
   position: absolute;
   bottom: 20px;
   left: 20px;
-  width: 190px;
-  height: 130px;
-  background: rgba(15, 23, 42, 0.88);
-  backdrop-filter: blur(8px);
+  width: 200px;
+  height: 140px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(10px);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   overflow: hidden;
@@ -1107,17 +1143,47 @@ body {
 }
 
 .minimap-header {
-  height: 22px;
-  background: rgba(30, 41, 59, 0.7);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  height: 26px;
+  background: rgba(30, 41, 59, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
+  padding: 0 4px 0 8px;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.05em;
   color: #94a3b8;
+}
+
+.minimap-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.minimap-zoom-controls button {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.1;
+  transition: all 0.12s ease;
+}
+
+.minimap-zoom-controls button:hover {
+  background: #334155;
+  border-color: #6366f1;
+  color: #38bdf8;
+}
+
+.minimap-zoom-controls button:active {
+  background: #4f46e5;
+  color: #ffffff;
 }
 
 .minimap-body {
@@ -1145,62 +1211,44 @@ body {
   transition: all 0.05s ease-out;
 }
 
-/* Floating Controls */
-.canvas-floating-controls {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  display: flex;
-  padding: 4px;
-  gap: 4px;
-  z-index: 50;
-}
-
-.canvas-floating-controls button {
-  background: transparent;
-  border: none;
-  color: var(--text-main);
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.canvas-floating-controls button:hover {
-  background: #1e293b;
-}
-
-.sidebar-inspector {
-  width: 340px;
-  min-width: 260px;
+.sidebar-inspector,
+.sidebar-library,
+.sidebar-colors {
+  width: 320px;
+  min-width: 240px;
   max-width: 600px;
   background-color: var(--bg-surface);
-  border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  border-left: none;
   display: flex;
   flex-direction: column;
   z-index: 20;
   position: relative;
+  box-sizing: border-box;
 }
 
-.sidebar-library {
-  width: 280px;
-  min-width: 220px;
-  max-width: 500px;
-  background-color: var(--bg-surface);
-  border-right: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  z-index: 20;
-  position: relative;
+/* Quando na aba de Configurações, a barra lateral e o redimensionador não devem estar acessíveis */
+#viewStudio:has(#viewSettings.active) .activity-bar-left,
+#viewStudio:has(#viewSettings.active) .sidebar-library,
+#viewStudio:has(#viewSettings.active) .sidebar-inspector,
+#viewStudio:has(#viewSettings.active) .sidebar-colors,
+#viewStudio:has(#viewSettings.active) .sidebar-resizer,
+.workspace.settings-mode .activity-bar-left,
+.workspace.settings-mode .sidebar-library,
+.workspace.settings-mode .sidebar-inspector,
+.workspace.settings-mode .sidebar-colors,
+.workspace.settings-mode .sidebar-resizer {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  min-width: 0 !important;
 }
 
 /* Transição rápida e suave apenas quando NÃO estiver arrastando manualmente */
 body:not(.is-resizing-active) .sidebar-inspector,
-body:not(.is-resizing-active) .sidebar-library {
+body:not(.is-resizing-active) .sidebar-library,
+body:not(.is-resizing-active) .sidebar-colors {
   transition: width 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -1217,7 +1265,8 @@ body.is-resizing-active * {
 
 /* Estado Recolhido / Escondido das Barras Laterais */
 .sidebar-library.collapsed,
-.sidebar-inspector.collapsed {
+.sidebar-inspector.collapsed,
+.sidebar-colors.collapsed {
   width: 0 !important;
   min-width: 0 !important;
   padding: 0 !important;

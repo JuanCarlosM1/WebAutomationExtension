@@ -479,6 +479,14 @@ class ExtensionController {
         };
       }
 
+      case 'RELAY_PICKER_KEY': {
+        const { tabId, key, code } = payload || {};
+        if (tabId && chrome.tabs?.sendMessage) {
+          chrome.tabs.sendMessage(tabId, { action: 'FORWARD_PICKER_KEY', payload: { key, code } }, () => void chrome.runtime.lastError);
+        }
+        return { success: true };
+      }
+
       default:
         return { success: false, error: `Ação não reconhecida: ${action}` };
     }

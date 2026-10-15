@@ -4,6 +4,8 @@
  * simples, robustos e inteligentes, identificando o elemento selecionado, seus filhos e seu pai.
  */
 
+import { DialogMenu } from './dialogUtils';
+
 export interface AnalyzedElementNode {
   tagName: string;
   id?: string;
@@ -24,27 +26,46 @@ export interface HtmlAnalysisResult {
 export class HtmlElementAnalyzer {
   private static activeCallback?: (selector: string) => void;
   private static modalBackdrop?: HTMLElement;
+  public static lastTargetTabId?: number;
+  public static isPickerActive = false;
 
   /**
-   * Abre o Inspetor/Analisador de HTML.
-   * Se for passado onSelectSelector, ao escolher um elemento, esse seletor é retornado no callback.
+   * Abre o Inspetor/Analisador de HTML em aba exclusiva ou modal flutuante
    */
   public static open(onSelectSelector?: (selector: string) => void): void {
-    this.activeCallback = onSelectSelector;
+    if (onSelectSelector) {
+      this.activeCallback = onSelectSelector;
+    }
     this.renderModal();
+  }
+
+  /**
+   * Abre o Analisador HTML em uma nova aba dedicada e exclusiva
+   */
+  public static openInNewTab(): void {
+    if (chrome.tabs?.create) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('analyzer.html') });
+    } else {
+      window.open('analyzer.html', '_blank');
+    }
   }
 
   /**
    * Inicia o modo de seleção interativo na aba web ativa usando o content script
    */
-  public static startLivePicker(onPicked?: (selector: string) => void): void {
+  public static async startLivePicker(onPicked?: (selector: string) => void): Promise<void> {
     if (onPicked) {
       this.activeCallback = onPicked;
     }
 
     if (!chrome.tabs) {
-      // Fallback em ambiente de dev/mock
-      const mockSelector = prompt('Digite o seletor CSS do elemento ou use o Analisador:', '#main-content');
+      // Fallback em ambiente de dev/mock com DialogMenu
+      const mockSelector = await DialogMenu.prompt({
+        title: 'Seletor CSS',
+        message: 'Digite o seletor CSS do elemento ou teste o analisador:',
+        defaultValue: '#main-content',
+        placeholder: '#meu-elemento',
+      });
       if (mockSelector && this.activeCallback) {
         this.activeCallback(mockSelector);
       }
@@ -65,7 +86,7 @@ export class HtmlElementAnalyzer {
       // 1. Tenta pegar a aba ativa da janela atual se for uma página web comum
       let targetTab = tabs.find((t) => t.active && isWebTab(t));
 
-      // 2. Se a aba ativa for a própria extensão (editor.html), pega a aba web mais recente
+      // 2. Se a aba ativa for a própria extensão (editor.html / analyzer.html), pega a aba web mais recente
       if (!targetTab) {
         targetTab = tabs
           .filter((t) => isWebTab(t))
@@ -73,21 +94,31 @@ export class HtmlElementAnalyzer {
       }
 
       if (!targetTab?.id) {
-        alert(
-          'Nenhuma aba de página web aberta (http/https/file) foi encontrada.\nPor favor, abra um site no navegador para selecionar elementos.'
-        );
+        this.renderModal();
+        DialogMenu.alert({
+          title: 'Nenhuma Página Web Encontrada',
+          message: 'Nenhuma aba com página web aberta (http/https/file) foi encontrada.\nPor favor, abra um site no navegador para selecionar elementos.',
+          type: 'warning',
+        });
         return;
       }
 
       const targetTabId = targetTab.id;
+      this.lastTargetTabId = targetTabId;
+      this.isPickerActive = true;
+
+      // Foca a janela do navegador onde a aba web está aberta
+      if (targetTab.windowId && chrome.windows?.update) {
+        chrome.windows.update(targetTab.windowId, { focused: true });
+      }
 
       // Foca na aba alvo para que o usuário veja e selecione o elemento diretamente
       chrome.tabs.update(targetTabId, { active: true }, () => {
-        // Envia mensagem para ativar o modo de mira no content script
-        chrome.tabs.sendMessage(targetTabId, { action: 'START_ELEMENT_PICKER' }, (response) => {
+        // Envia mensagem para abrir o analisador compacto e ativar a mira no content script
+        chrome.tabs.sendMessage(targetTabId, { action: 'OPEN_HTML_ANALYZER', payload: { startPicker: true } }, (response) => {
           const err = chrome.runtime.lastError;
           if (err || !response?.success) {
-            // Se o content driver ainda não foi injetado (por exemplo, página aberta antes da extensão ser instalada), injeta agora
+            // Se o content driver ainda não foi injetado, injeta agora
             if (chrome.scripting?.executeScript) {
               chrome.scripting.executeScript(
                 {
@@ -96,11 +127,9 @@ export class HtmlElementAnalyzer {
                 },
                 () => {
                   if (chrome.runtime.lastError) {
-                    // Ignora silenciosamente se o host não permitir injeção
                     return;
                   }
-                  chrome.tabs.sendMessage(targetTabId, { action: 'START_ELEMENT_PICKER' }, () => {
-                    // Limpa eventual lastError não verificado
+                  chrome.tabs.sendMessage(targetTabId, { action: 'OPEN_HTML_ANALYZER', payload: { startPicker: true } }, () => {
                     void chrome.runtime.lastError;
                   });
                 }
@@ -113,13 +142,14 @@ export class HtmlElementAnalyzer {
   }
 
   /**
-   * Conecta o ouvinte para receber elementos capturados do Content Script
+   * Conecta o ouvinte para receber elementos capturados do Content Script e atalhos de teclado remotos
    */
   public static initMessageListener(): void {
     if (!chrome.runtime?.onMessage) return;
 
     chrome.runtime.onMessage.addListener((message) => {
       if (message.action === 'ELEMENT_PICKED_EVENT') {
+        this.isPickerActive = false;
         const { selector, analysis } = message.payload || {};
         if (selector) {
           if (this.activeCallback) {
@@ -128,13 +158,34 @@ export class HtmlElementAnalyzer {
           // Abre ou atualiza o modal do analisador com os detalhes
           this.showAnalysisModal(analysis || { target: { selector, tagName: 'ELEMENT', classes: [] }, children: [] });
         }
+      } else if (message.action === 'PICKER_STATUS_CHANGED') {
+        this.isPickerActive = !!message.payload?.active;
       }
     });
+
+    // Requisito: Funções de teclado do analisador ativas na página web funcionam quando alguma aba da extensão estiver em foco
+    window.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (!this.isPickerActive && e.key !== 'Escape') return;
+
+      const keysToRelay = ['Escape', 'Enter', ' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+      if (keysToRelay.includes(e.key)) {
+        if (this.lastTargetTabId && chrome.tabs?.sendMessage) {
+          chrome.tabs.sendMessage(
+            this.lastTargetTabId,
+            { action: 'FORWARD_PICKER_KEY', payload: { key: e.key, code: e.code } },
+            () => void chrome.runtime.lastError
+          );
+        }
+        if (e.key === 'Escape') {
+          this.isPickerActive = false;
+        }
+      }
+    }, true);
   }
 
   private static panelPos?: { left: number; top: number };
 
-  private static renderModal(): void {
+  public static renderModal(): void {
     // Reaproveita o painel existente para não perder posição nem conteúdo
     if (this.modalBackdrop && document.body.contains(this.modalBackdrop)) return;
     document.querySelectorAll('.html-analyzer-modal').forEach((el) => el.remove());
@@ -159,12 +210,20 @@ export class HtmlElementAnalyzer {
     `;
 
     panel.innerHTML = `
-      <div id="analyzerDragHandle" title="Segure CTRL e arraste para mover" style="padding: 6px 10px; background: #131d35; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; gap: 8px; user-select: none;">
-        <span style="font-size: 12px; font-weight: 700; color: #f8fafc;">🔍 Analisador HTML <span style="font-weight: 400; color: #64748b; font-size: 10px;">(CTRL + arrastar)</span></span>
-        <button id="btnCloseAnalyzer" title="Fechar e desativar" style="background: transparent; border: none; color: #94a3b8; font-size: 15px; cursor: pointer; padding: 0 4px; border-radius: 4px;">✕</button>
+      <div id="analyzerDragHandle" title="Clique e arraste pela barra superior para mover" style="padding: 8px 12px; background: #131d35; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; gap: 8px; user-select: none; cursor: grab;">
+        <span style="font-size: 12px; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+          <span>🔍</span> Analisador HTML
+        </span>
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <button id="btnOpenInTabIcon" title="Abrir em Nova Aba Exclusiva" style="background: transparent; border: none; color: #94a3b8; font-size: 13px; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: color 0.15s;">⧉</button>
+          <button id="btnCloseAnalyzer" title="Fechar e desativar" style="background: transparent; border: none; color: #94a3b8; font-size: 15px; cursor: pointer; padding: 0 4px; border-radius: 4px; transition: color 0.15s;">✕</button>
+        </div>
       </div>
       <div id="analyzerBodyContent" style="padding: 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
-        <button type="button" id="btnPickFromWebPage" class="btn btn-primary" style="background: #3b82f6; border-color: #3b82f6; padding: 6px 10px; font-size: 11px; font-weight: 600; cursor: pointer;">🎯 Ativar Mira na Página</button>
+        <div style="display: flex; gap: 6px;">
+          <button type="button" id="btnPickFromWebPage" class="btn btn-primary" style="flex: 1; background: #3b82f6; border-color: #3b82f6; padding: 6px 10px; font-size: 11px; font-weight: 600; cursor: pointer;">🎯 Ativar Mira na Página</button>
+          <button type="button" id="btnOpenDedicatedTab" class="btn btn-secondary" style="padding: 6px 10px; font-size: 11px; white-space: nowrap;">Aba Exclusiva</button>
+        </div>
         <div style="display: flex; gap: 4px;">
           <input type="text" id="analyzerManualInput" placeholder="Seletor CSS (ex: #id, button.btn)" style="flex: 1; min-width: 0; padding: 5px 8px; font-size: 11px; background: #090d16; color: white; border: 1px solid #334155; border-radius: 6px;" />
           <button type="button" id="btnAnalyzeManual" class="btn btn-secondary" style="padding: 5px 10px; font-size: 11px; white-space: nowrap;">Analisar</button>
@@ -178,6 +237,8 @@ export class HtmlElementAnalyzer {
     `;
 
     panel.querySelector('#btnCloseAnalyzer')?.addEventListener('click', () => this.closeModal());
+    panel.querySelector('#btnOpenInTabIcon')?.addEventListener('click', () => this.openInNewTab());
+    panel.querySelector('#btnOpenDedicatedTab')?.addEventListener('click', () => this.openInNewTab());
 
     panel.querySelector('#btnPickFromWebPage')?.addEventListener('click', () => {
       this.startLivePicker();
@@ -193,27 +254,39 @@ export class HtmlElementAnalyzer {
       if (e.key === 'Enter') runManual();
     });
 
-    // Arrastar com CTRL + clique em qualquer ponto do painel
-    panel.addEventListener('mousedown', (e: MouseEvent) => {
-      if (!e.ctrlKey || e.button !== 0) return;
-      e.preventDefault();
-      const rect = panel.getBoundingClientRect();
-      const offX = e.clientX - rect.left;
-      const offY = e.clientY - rect.top;
-      const onMove = (me: MouseEvent) => {
-        const left = Math.max(0, Math.min(window.innerWidth - rect.width, me.clientX - offX));
-        const top = Math.max(0, Math.min(window.innerHeight - 40, me.clientY - offY));
-        panel.style.left = `${left}px`;
-        panel.style.top = `${top}px`;
-        this.panelPos = { left, top };
-      };
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-      };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    });
+    // Requisito: Arrastar a janela do analisador HTML quando se está clicando em sua barra superior
+    const dragHandle = panel.querySelector('#analyzerDragHandle') as HTMLElement;
+    if (dragHandle) {
+      dragHandle.addEventListener('mousedown', (e: MouseEvent) => {
+        if (e.button !== 0) return;
+        // Ignora se o clique foi em um botão dentro do header
+        if ((e.target as HTMLElement).closest('button')) return;
+
+        e.preventDefault();
+        dragHandle.style.cursor = 'grabbing';
+
+        const rect = panel.getBoundingClientRect();
+        const offX = e.clientX - rect.left;
+        const offY = e.clientY - rect.top;
+
+        const onMove = (me: MouseEvent) => {
+          const left = Math.max(0, Math.min(window.innerWidth - rect.width, me.clientX - offX));
+          const top = Math.max(0, Math.min(window.innerHeight - 40, me.clientY - offY));
+          panel.style.left = `${left}px`;
+          panel.style.top = `${top}px`;
+          this.panelPos = { left, top };
+        };
+
+        const onUp = () => {
+          dragHandle.style.cursor = 'grab';
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+        };
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      });
+    }
 
     document.body.appendChild(panel);
     this.modalBackdrop = panel;
@@ -223,6 +296,7 @@ export class HtmlElementAnalyzer {
     this.modalBackdrop?.remove();
     document.querySelectorAll('.html-analyzer-modal').forEach((el) => el.remove());
     this.modalBackdrop = undefined;
+    this.isPickerActive = false;
     // Desativa a mira na página web, se estiver ativa
     if (chrome.tabs?.query) {
       chrome.tabs.query({}, (tabs) => {

@@ -4,6 +4,8 @@
 import { CodeEditorComponent, CodeLanguage } from './codeEditorComponent';
 import { HtmlElementAnalyzer } from './htmlElementAnalyzer';
 
+import { CodeSyntaxHighlighter } from './codeSyntaxHighlighter';
+
 export class InspectorInputHelpers {
   public static addTextInput(
     container: HTMLElement,
@@ -144,29 +146,6 @@ export class InspectorInputHelpers {
     showToast?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void,
     _height = '200px'
   ): void {
-    const isExpandedModal = Boolean(container.closest('#expandedNodeModalForm'));
-
-    // No modal expandido geral do bloco, renderizamos o editor completo embutido
-    if (isExpandedModal) {
-      const group = document.createElement('div');
-      group.className = 'form-group code-editor-form-group';
-      const label = document.createElement('label');
-      label.textContent = labelText;
-      group.appendChild(label);
-
-      const editor = new CodeEditorComponent({
-        language,
-        value: value || '',
-        onChange,
-        title: labelText,
-        height: '240px',
-      });
-      group.appendChild(editor.getElement());
-      container.appendChild(group);
-      return;
-    }
-
-    // Na barra lateral direita, renderizamos uma prévia clicável que abre o editor sobre o canvas
     const group = document.createElement('div');
     group.className = 'form-group code-preview-group';
 
@@ -183,28 +162,29 @@ export class InspectorInputHelpers {
     }[language];
 
     const linesCount = (value || '').split('\n').length;
-    const previewSnippet = (value || '').trim().split('\n').slice(0, 3).join('\n') || '// (sem código)';
 
     group.innerHTML = `
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
         <label style="margin-bottom: 0;">${labelText}</label>
-        <span style="font-size: 10px; font-weight: 700; color: ${langBadgeColor}; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px;">${langTitle}</span>
-      </div>
-      <div class="code-field-trigger-card" title="Clique para abrir o editor de código completo sobre o canvas">
-        <div class="code-field-trigger-header">
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${langBadgeColor}" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-            <span style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Editar ${langTitle}</span>
-          </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
           <span class="code-field-line-count" style="font-size: 10px; color: #64748b;">${linesCount} linha${linesCount === 1 ? '' : 's'}</span>
+          <span style="font-size: 10px; font-weight: 700; color: ${langBadgeColor}; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px;">${langTitle}</span>
         </div>
-        <pre class="code-field-preview-code"><code>${this.escapeSnippet(previewSnippet)}</code></pre>
-        <div class="code-field-trigger-footer">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          <span>Abrir Editor sobre o Canvas</span>
-        </div>
+      </div>
+      <div class="code-field-preview-container" style="background: #090d16; border: 1px solid #1e293b; border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: all 0.2s ease; resize: none !important; user-select: none;" title="Clique no código para abrir o editor">
+        <pre class="code-field-preview-code" style="margin: 0; padding: 0; background: transparent; border: none; font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 11px; line-height: 1.5; color: #f1f5f9; max-height: 120px; overflow-y: auto; overflow-x: hidden; white-space: pre-wrap; word-break: break-all; resize: none !important;"><code>${CodeSyntaxHighlighter.highlight(value || '// Clique para abrir o editor de código', language)}</code></pre>
       </div>
     `;
+
+    const previewContainer = group.querySelector('.code-field-preview-container') as HTMLElement;
+    previewContainer?.addEventListener('mouseenter', () => {
+      previewContainer.style.borderColor = '#6366f1';
+      previewContainer.style.boxShadow = '0 0 12px rgba(99, 102, 241, 0.2)';
+    });
+    previewContainer?.addEventListener('mouseleave', () => {
+      previewContainer.style.borderColor = '#1e293b';
+      previewContainer.style.boxShadow = 'none';
+    });
 
     const openEditor = () => {
       CodeEditorComponent.openCodeModal({
@@ -212,15 +192,14 @@ export class InspectorInputHelpers {
         language,
         value: value || '',
         onSave: (newVal) => {
+          value = newVal;
           onChange(newVal);
-          // Atualiza prévia na barra lateral
           const newLines = (newVal || '').split('\n').length;
           const countEl = group.querySelector('.code-field-line-count');
           if (countEl) countEl.textContent = `${newLines} linha${newLines === 1 ? '' : 's'}`;
           const codeEl = group.querySelector('.code-field-preview-code code');
           if (codeEl) {
-            const snip = (newVal || '').trim().split('\n').slice(0, 3).join('\n') || '// (sem código)';
-            codeEl.innerHTML = this.escapeSnippet(snip);
+            codeEl.innerHTML = CodeSyntaxHighlighter.highlight(newVal || '// Clique para abrir o editor de código', language);
           }
           if (onNodeDataChanged) onNodeDataChanged();
           if (showToast) showToast('Código salvo com sucesso!', 'success');
@@ -228,7 +207,7 @@ export class InspectorInputHelpers {
       });
     };
 
-    group.querySelector('.code-field-trigger-card')?.addEventListener('click', openEditor);
+    previewContainer?.addEventListener('click', openEditor);
     container.appendChild(group);
   }
 

@@ -4,10 +4,11 @@
 
 import { WebAutomationGraph } from '../../../../BibliotecaDeDev/src/types/schema';
 import { DEFAULT_AUTOMATION } from '../../defaultAutomation';
+import { DialogMenu } from './dialogUtils';
 
 export interface WorkflowTabManagerCallbacks {
   onOpenFlow: (flow: WebAutomationGraph) => void;
-  onViewChange: (view: 'dashboard' | 'studio') => void;
+  onViewChange: (view: 'dashboard' | 'studio' | 'settings') => void;
   onRunFlowDirectly: (flow: WebAutomationGraph) => void;
   showToast: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void;
 }
@@ -16,9 +17,15 @@ export class WorkflowTabManager {
   private savedAutomations: WebAutomationGraph[] = [];
   private openTabs: WebAutomationGraph[] = [];
   private activeTabId: string = 'dashboard';
+  private isSettingsTabOpen = false;
+  private isDashboardTabOpen = true;
 
   constructor(private callbacks: WorkflowTabManagerCallbacks) {
     this.initTabsUI();
+  }
+
+  public cleanFlowName(name?: string): string {
+    return (name || 'Sem Título').replace(/\.(webautomation\.json|json)$/i, '').trim() || 'Sem Título';
   }
 
   public getSavedAutomations(): WebAutomationGraph[] {
@@ -42,7 +49,52 @@ export class WorkflowTabManager {
     this.renderTabs();
   }
 
+  public openDashboardTab(): void {
+    this.isDashboardTabOpen = true;
+    this.activeTabId = 'dashboard';
+    this.callbacks.onViewChange('dashboard');
+    this.renderTabs();
+  }
+
+  public closeDashboardTab(): void {
+    this.isDashboardTabOpen = false;
+    if (this.activeTabId === 'dashboard') {
+      if (this.openTabs.length > 0) {
+        const next = this.openTabs[this.openTabs.length - 1];
+        this.callbacks.onOpenFlow(next);
+      } else if (this.isSettingsTabOpen) {
+        this.openSettingsTab();
+      }
+    }
+    this.renderTabs();
+  }
+
+  public openSettingsTab(): void {
+    this.isSettingsTabOpen = true;
+    this.activeTabId = 'settings';
+    this.callbacks.onViewChange('settings');
+    this.renderTabs();
+  }
+
+  public closeSettingsTab(): void {
+    this.isSettingsTabOpen = false;
+    if (this.activeTabId === 'settings') {
+      if (this.openTabs.length > 0) {
+        const next = this.openTabs[this.openTabs.length - 1];
+        this.callbacks.onOpenFlow(next);
+      } else if (this.isDashboardTabOpen) {
+        this.openDashboardTab();
+      } else {
+        this.openDashboardTab();
+      }
+    }
+    this.renderTabs();
+  }
+
   public registerOpenTab(graph: WebAutomationGraph): void {
+    if (graph.metadata?.name) {
+      graph.metadata.name = this.cleanFlowName(graph.metadata.name);
+    }
     const existing = this.openTabs.find((t) => t.metadata?.id === graph.metadata?.id);
     if (!existing) {
       this.openTabs.push(graph);
@@ -55,6 +107,9 @@ export class WorkflowTabManager {
   }
 
   public updateFlowInTabsAndSaved(graph: WebAutomationGraph): void {
+    if (graph.metadata?.name) {
+      graph.metadata.name = this.cleanFlowName(graph.metadata.name);
+    }
     const sIdx = this.savedAutomations.findIndex((a) => a.metadata.id === graph.metadata.id);
     if (sIdx >= 0) {
       this.savedAutomations[sIdx] = JSON.parse(JSON.stringify(graph));
@@ -72,18 +127,34 @@ export class WorkflowTabManager {
   public async loadFromStorage(checkUrlParam: boolean = true): Promise<void> {
     if (chrome.storage?.local) {
       const data = await chrome.storage.local.get('web_automations');
-      this.savedAutomations = data.web_automations || [];
+      this.savedAutomations = (data.web_automations || []).map((a: any) => {
+        if (a.metadata?.name) a.metadata.name = this.cleanFlowName(a.metadata.name);
+        return a;
+      });
 
       if (this.savedAutomations.length === 0) {
-        this.savedAutomations = [JSON.parse(JSON.stringify(DEFAULT_AUTOMATION))];
+        const def = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
+        def.metadata.name = this.cleanFlowName(def.metadata.name);
+        this.savedAutomations = [def];
         await chrome.storage.local.set({ web_automations: this.savedAutomations });
       }
     } else {
-      this.savedAutomations = [JSON.parse(JSON.stringify(DEFAULT_AUTOMATION))];
+      const def = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
+      def.metadata.name = this.cleanFlowName(def.metadata.name);
+      this.savedAutomations = [def];
     }
+
+    this.renderDashboard();
+    this.renderTabs();
 
     if (checkUrlParam) {
       const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam === 'settings') {
+        this.openSettingsTab();
+        return;
+      }
+
       const flowId = urlParams.get('flowId');
       if (flowId) {
         const matched = this.savedAutomations.find((a) => a.metadata?.id === flowId);
@@ -95,29 +166,50 @@ export class WorkflowTabManager {
         }
       }
     }
-
-    this.renderDashboard();
-    this.renderTabs();
   }
 
   public renderTabs(): void {
-    const tabHome = document.getElementById('tabHomeBtn');
-    if (tabHome) {
-      tabHome.classList.toggle('active', this.activeTabId === 'dashboard');
-    }
-
     const container = document.getElementById('workflowTabsContainer');
     if (!container) return;
     container.innerHTML = '';
 
+    // 1. Aba Início dinâmica
+    if (this.isDashboardTabOpen) {
+      const homeTab = document.createElement('div');
+      const isHomeActive = this.activeTabId === 'dashboard';
+      homeTab.className = `app-tab-item tab-home ${isHomeActive ? 'active' : ''}`;
+      homeTab.title = 'Início (Gerenciador de Fluxos)';
+      homeTab.innerHTML = `
+        <span class="tab-home-icon" style="display:inline-flex;align-items:center;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </span>
+        <span class="tab-label">Início</span>
+        <span class="app-tab-close" data-id="dashboard" title="Fechar aba Início">✕</span>
+      `;
+
+      homeTab.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).classList.contains('app-tab-close')) return;
+        this.openDashboardTab();
+      });
+
+      homeTab.querySelector('.app-tab-close')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.closeDashboardTab();
+      });
+
+      container.appendChild(homeTab);
+    }
+
+    // 2. Abas de Workflows Abertos
     this.openTabs.forEach((flow) => {
       const tabEl = document.createElement('div');
       const isActive = this.activeTabId === flow.metadata?.id;
       tabEl.className = `app-tab-item ${isActive ? 'active' : ''}`;
-      tabEl.title = flow.metadata?.name || 'Fluxo';
+      const titleClean = this.cleanFlowName(flow.metadata?.name);
+      tabEl.title = titleClean;
 
       tabEl.innerHTML = `
-        <span class="tab-label">${flow.metadata?.name || 'Sem Título'}</span>
+        <span class="tab-label">${titleClean}</span>
         <span class="app-tab-close" data-id="${flow.metadata?.id}" title="Fechar aba">✕</span>
       `;
 
@@ -133,6 +225,30 @@ export class WorkflowTabManager {
 
       container.appendChild(tabEl);
     });
+
+    // 3. Aba de Configurações interna do Visual Flow
+    if (this.isSettingsTabOpen) {
+      const settingsTab = document.createElement('div');
+      const isSettingsActive = this.activeTabId === 'settings';
+      settingsTab.className = `app-tab-item ${isSettingsActive ? 'active' : ''}`;
+      settingsTab.title = 'Configurações do Visual Flow Studio';
+      settingsTab.innerHTML = `
+        <span class="tab-label">⚙️ Configurações</span>
+        <span class="app-tab-close" data-id="settings" title="Fechar aba">✕</span>
+      `;
+
+      settingsTab.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).classList.contains('app-tab-close')) return;
+        this.openSettingsTab();
+      });
+
+      settingsTab.querySelector('.app-tab-close')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.closeSettingsTab();
+      });
+
+      container.appendChild(settingsTab);
+    }
   }
 
   public closeTab(flowId: string): void {
@@ -145,9 +261,12 @@ export class WorkflowTabManager {
       if (this.openTabs.length > 0) {
         const nextFlow = this.openTabs[Math.max(0, idx - 1)];
         this.callbacks.onOpenFlow(nextFlow);
+      } else if (this.isDashboardTabOpen) {
+        this.openDashboardTab();
+      } else if (this.isSettingsTabOpen) {
+        this.openSettingsTab();
       } else {
-        this.activeTabId = 'dashboard';
-        this.callbacks.onViewChange('dashboard');
+        this.openDashboardTab();
       }
     }
 
@@ -196,7 +315,7 @@ export class WorkflowTabManager {
       card.innerHTML = `
         <div>
           <div class="flow-card-header">
-            <h3 class="flow-card-title">${auto.metadata?.name || 'Sem Título'}</h3>
+            <h3 class="flow-card-title">${this.cleanFlowName(auto.metadata?.name)}</h3>
             <span class="flow-tag">${triggerLabel}</span>
           </div>
           <p class="flow-card-desc">${auto.metadata?.description || 'Fluxo de automação visual.'}</p>
@@ -240,7 +359,13 @@ export class WorkflowTabManager {
 
       card.querySelector('.delete-flow-btn')?.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (confirm(`Deseja realmente excluir a automação "${auto.metadata?.name}"?`)) {
+        const confirmed = await DialogMenu.confirm({
+          title: 'Excluir Automação',
+          message: `Deseja realmente excluir a automação "${auto.metadata?.name}"? Esta ação removerá o fluxo do storage local.`,
+          confirmText: 'Excluir',
+          isDanger: true,
+        });
+        if (confirmed) {
           this.savedAutomations = this.savedAutomations.filter((a) => a.metadata.id !== auto.metadata.id);
           this.closeTab(auto.metadata.id);
           if (chrome.storage?.local) {
@@ -256,11 +381,6 @@ export class WorkflowTabManager {
   }
 
   private initTabsUI(): void {
-    const tabHome = document.getElementById('tabHomeBtn');
-    tabHome?.addEventListener('click', () => {
-      this.activeTabId = 'dashboard';
-      this.callbacks.onViewChange('dashboard');
-      this.renderTabs();
-    });
+    // Abas gerenciadas dinamicamente em renderTabs()
   }
 }

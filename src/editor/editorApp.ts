@@ -10,12 +10,12 @@ import { ColorPickerManager } from './modules/colorPickerManager';
 import { InspectorManager } from './modules/inspectorManager';
 import { CanvasManager } from './modules/canvasManager';
 import { WorkflowTabManager } from './modules/tabManager';
-import { showToast, showModalDialog, sanitizeGraph } from './modules/editorUtils';
+import { showToast, showModalDialog, sanitizeGraph, DialogMenu } from './modules/editorUtils';
 import { FlowSettingsModal } from './modules/flowSettingsModal';
 import { HtmlElementAnalyzer } from './modules/htmlElementAnalyzer';
 
 class VisualEditorApp {
-  private currentView: 'dashboard' | 'studio' = 'dashboard';
+  private currentView: 'dashboard' | 'studio' | 'settings' = 'dashboard';
   private graph: WebAutomationGraph;
   private selectedNodeId?: string;
 
@@ -26,6 +26,7 @@ class VisualEditorApp {
 
   constructor() {
     this.graph = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
+    this.graph.metadata.name = this.cleanFlowName(this.graph.metadata.name);
 
     // 1. Inicializar ColorPickerManager
     this.colorPickerManager = new ColorPickerManager(
@@ -61,7 +62,12 @@ class VisualEditorApp {
       },
       onNodeSelect: (nodeId) => {
         this.selectedNodeId = nodeId;
-        this.inspectorManager.renderInspector();
+        if (nodeId) {
+          this.openInspectorSidebar();
+        } else {
+          this.inspectorManager.renderInspector();
+          this.ensureSidebarOpen();
+        }
       },
       showToast: (msg, type) => showToast(msg, type),
       showModalDialog: (title, msg, icon) => showModalDialog(title, msg, icon),
@@ -80,13 +86,63 @@ class VisualEditorApp {
 
     this.initBlockCatalogUI();
     this.initGlobalEvents();
+    this.initSettingsEvents();
     this.tabManager.loadFromStorage();
   }
 
-  private switchView(view: 'dashboard' | 'studio'): void {
+  public cleanFlowName(name?: string): string {
+    return (name || 'Minha Automação').replace(/\.(webautomation\.json|json)$/i, '').trim() || 'Minha Automação';
+  }
+
+  private switchView(view: 'dashboard' | 'studio' | 'settings'): void {
     this.currentView = view;
     document.getElementById('viewDashboard')?.classList.toggle('active', view === 'dashboard');
-    document.getElementById('viewStudio')?.classList.toggle('active', view === 'studio');
+    document.getElementById('viewStudio')?.classList.toggle('active', view === 'studio' || view === 'settings');
+
+    const mainWorkspace = document.getElementById('mainWorkspace');
+    const canvasContainer = document.getElementById('canvasContainer');
+    const viewSettings = document.getElementById('viewSettings');
+    const btnActivitySettings = document.getElementById('btnActivitySettings');
+    const activityBarLeft = document.getElementById('activityBarLeft');
+    const sidebarLeft = document.getElementById('sidebarLibrary');
+    const sidebarRight = document.getElementById('sidebarInspector');
+    const sidebarColors = document.getElementById('sidebarColors');
+    const resizerLeft = document.getElementById('resizerLeft');
+
+    if (view === 'settings') {
+      mainWorkspace?.classList.add('settings-mode');
+      if (canvasContainer) canvasContainer.style.display = 'none';
+      if (viewSettings) {
+        viewSettings.style.display = 'block';
+        viewSettings.classList.add('active');
+      }
+      if (activityBarLeft) activityBarLeft.style.display = 'none';
+      if (sidebarLeft) sidebarLeft.style.display = 'none';
+      if (sidebarRight) sidebarRight.style.display = 'none';
+      if (sidebarColors) sidebarColors.style.display = 'none';
+      if (resizerLeft) resizerLeft.style.display = 'none';
+
+      btnActivitySettings?.classList.add('active');
+      this.loadSettingsUI();
+      window.history.replaceState({}, '', `${window.location.pathname}?tab=settings`);
+    } else {
+      mainWorkspace?.classList.remove('settings-mode');
+      if (canvasContainer) canvasContainer.style.display = '';
+      if (viewSettings) {
+        viewSettings.style.display = 'none';
+        viewSettings.classList.remove('active');
+      }
+      if (activityBarLeft) activityBarLeft.style.display = '';
+      if (sidebarLeft) sidebarLeft.style.display = '';
+      if (sidebarRight) sidebarRight.style.display = '';
+      if (sidebarColors) sidebarColors.style.display = '';
+      if (resizerLeft) resizerLeft.style.display = '';
+
+      btnActivitySettings?.classList.remove('active');
+      if (view === 'studio') {
+        this.ensureSidebarOpen();
+      }
+    }
 
     if (view === 'dashboard') {
       this.tabManager.setActiveTabId('dashboard');
@@ -100,12 +156,15 @@ class VisualEditorApp {
 
   private openStudio(graph: WebAutomationGraph): void {
     this.graph = JSON.parse(JSON.stringify(graph));
+    if (this.graph.metadata?.name) {
+      this.graph.metadata.name = this.cleanFlowName(this.graph.metadata.name);
+    }
     this.selectedNodeId = undefined;
 
     this.tabManager.registerOpenTab(this.graph);
 
     const titleInput = document.getElementById('flowTitleInput') as HTMLInputElement;
-    if (titleInput) titleInput.value = this.graph.metadata?.name || 'Minha Automação';
+    if (titleInput) titleInput.value = this.cleanFlowName(this.graph.metadata?.name);
 
     if (this.graph.metadata?.id) {
       const newUrl = `${window.location.pathname}?flowId=${encodeURIComponent(this.graph.metadata.id)}`;
@@ -158,7 +217,8 @@ class VisualEditorApp {
   private async saveCurrentFlow(): Promise<void> {
     const titleInput = document.getElementById('flowTitleInput') as HTMLInputElement;
     if (titleInput && titleInput.value.trim()) {
-      this.graph.metadata.name = titleInput.value.trim();
+      this.graph.metadata.name = this.cleanFlowName(titleInput.value.trim());
+      titleInput.value = this.graph.metadata.name;
     }
     this.graph.metadata.updatedAt = new Date().toISOString();
 
@@ -242,10 +302,11 @@ class VisualEditorApp {
 
   private exportJson(): void {
     const cleanGraph = sanitizeGraph(this.graph);
+    const safeName = (this.cleanFlowName(cleanGraph.metadata?.name) || 'automacao').replace(/\s+/g, '_');
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(cleanGraph, null, 2));
     const dlAnchor = document.createElement('a');
     dlAnchor.setAttribute('href', dataStr);
-    dlAnchor.setAttribute('download', `${(this.graph.metadata?.name || 'automacao').replace(/\s+/g, '_')}.webautomation.json`);
+    dlAnchor.setAttribute('download', `${safeName}.webautomation.json`);
     dlAnchor.click();
   }
 
@@ -318,7 +379,9 @@ class VisualEditorApp {
   private initGlobalEvents(): void {
     // Botões do Dashboard e Topo
     document.getElementById('btnCreateNewFlow')?.addEventListener('click', () => this.createNewFlow());
-    document.getElementById('btnTabNewFlow')?.addEventListener('click', () => this.createNewFlow());
+    document.getElementById('btnTabNewFlow')?.addEventListener('click', () => {
+      this.tabManager.openDashboardTab();
+    });
     document.getElementById('btnDashboardImport')?.addEventListener('click', () => {
       document.getElementById('jsonFileInput')?.click();
     });
@@ -370,6 +433,11 @@ class VisualEditorApp {
     // Navegação Voltar/Avançar
     window.addEventListener('popstate', () => {
       const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam === 'settings') {
+        this.tabManager.openSettingsTab();
+        return;
+      }
       const flowId = urlParams.get('flowId');
       if (flowId) {
         const matched = this.tabManager.getSavedAutomations().find((a) => a.metadata?.id === flowId);
@@ -381,8 +449,14 @@ class VisualEditorApp {
       }
     });
 
-    document.getElementById('btnClearCanvas')?.addEventListener('click', () => {
-      if (confirm('Deseja limpar todos os nós e ligações deste fluxo?')) {
+    document.getElementById('btnClearCanvas')?.addEventListener('click', async () => {
+      const confirmed = await DialogMenu.confirm({
+        title: 'Limpar Canvas',
+        message: 'Deseja realmente limpar todos os nós e ligações deste fluxo? Esta ação não pode ser desfeita.',
+        confirmText: 'Limpar Canvas',
+        isDanger: true,
+      });
+      if (confirmed) {
         this.graph.nodes = [];
         this.graph.edges = [];
         this.selectedNodeId = undefined;
@@ -401,9 +475,7 @@ class VisualEditorApp {
     });
 
     document.getElementById('btnOpenSettings')?.addEventListener('click', () => {
-      FlowSettingsModal.open(() => {
-        showToast('Configurações do Visual Flow salvas com sucesso!', 'success');
-      });
+      this.tabManager.openSettingsTab();
     });
 
     document.getElementById('btnImportJson')?.addEventListener('click', () => {
@@ -422,46 +494,63 @@ class VisualEditorApp {
             this.saveCurrentFlow();
             showToast('Fluxo importado com sucesso!', 'success');
           } else {
-            alert('Formato de arquivo inválido. Certifique-se de que é um .webautomation.json válido.');
+            DialogMenu.alert({
+              title: 'Arquivo Inválido',
+              message: 'Formato de arquivo inválido. Certifique-se de que é um .webautomation.json válido.',
+              type: 'error',
+            });
           }
         } catch (err: any) {
-          alert('Erro ao carregar JSON: ' + err.message);
+          DialogMenu.alert({
+            title: 'Erro ao Carregar',
+            message: 'Erro ao carregar JSON: ' + err.message,
+            type: 'error',
+          });
         }
       };
       reader.readAsText(file);
     });
 
-    // Sidebars colapsáveis e redimensionáveis
+    // Sidebars colapsáveis e redimensionáveis no lado esquerdo
     const sidebarLeft = document.getElementById('sidebarLibrary');
     const sidebarRight = document.getElementById('sidebarInspector');
+    const sidebarColors = document.getElementById('sidebarColors');
     const resizerLeft = document.getElementById('resizerLeft');
-    const resizerRight = document.getElementById('resizerRight');
     const btnToggleLeft = document.getElementById('btnToggleSidebarLeft');
     const btnToggleRight = document.getElementById('btnToggleSidebarRight');
+    const btnToggleColors = document.getElementById('btnToggleSidebarColors');
     const btnActivityBlocks = document.getElementById('btnActivityBlocks');
+    const btnActivityInspector = document.getElementById('btnActivityInspector');
+    const btnActivityColors = document.getElementById('btnActivityColors');
     const btnActivityAnalyzer = document.getElementById('btnActivityAnalyzer');
+    const btnActivitySettings = document.getElementById('btnActivitySettings');
+    const btnDashboardSettings = document.getElementById('btnDashboardSettings');
 
     // Inicializar listener de mensagens do Analisador HTML (comunicação com a página ativa)
     HtmlElementAnalyzer.initMessageListener();
 
     btnActivityAnalyzer?.addEventListener('click', () => {
       HtmlElementAnalyzer.open();
+      HtmlElementAnalyzer.startLivePicker();
     });
 
-    const toggleSidebarLeft = (collapse?: boolean) => {
-      if (!sidebarLeft) return;
-      const shouldCollapse = collapse !== undefined ? collapse : !sidebarLeft.classList.contains('collapsed');
-      sidebarLeft.classList.toggle('collapsed', shouldCollapse);
-      btnActivityBlocks?.classList.toggle('active', !shouldCollapse);
-      if (resizerLeft) resizerLeft.style.display = shouldCollapse ? 'none' : 'block';
-    };
+    btnActivitySettings?.addEventListener('click', () => {
+      this.tabManager.openSettingsTab();
+    });
 
-    btnActivityBlocks?.addEventListener('click', () => toggleSidebarLeft());
-    btnToggleLeft?.addEventListener('click', () => toggleSidebarLeft(true));
+    btnDashboardSettings?.addEventListener('click', () => {
+      this.tabManager.openSettingsTab();
+    });
+
+    btnActivityBlocks?.addEventListener('click', () => this.openBlocksSidebar());
+    btnActivityInspector?.addEventListener('click', () => this.openInspectorSidebar());
+    btnActivityColors?.addEventListener('click', () => this.openColorsSidebar());
+    btnToggleLeft?.addEventListener('click', () => this.openBlocksSidebar());
+    btnToggleColors?.addEventListener('click', () => this.openBlocksSidebar());
     btnToggleRight?.addEventListener('click', () => {
       this.selectedNodeId = undefined;
       document.querySelectorAll('.graph-node').forEach((el) => el.classList.remove('selected'));
-      this.inspectorManager.renderInspector();
+      this.openBlocksSidebar();
     });
 
     document.getElementById('btnExpandInspectorModal')?.addEventListener('click', () => {
@@ -470,64 +559,40 @@ class VisualEditorApp {
       }
     });
 
-    // Resizer Left (Biblioteca de Blocos)
-    if (resizerLeft && sidebarLeft) {
-      let isResizingLeft = false;
+    // Resizer Left (Controla a largura do painel ativo à esquerda)
+    if (resizerLeft) {
+      let isResizing = false;
       resizerLeft.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        isResizingLeft = true;
+        isResizing = true;
         resizerLeft.classList.add('resizing');
         document.body.classList.add('is-resizing-active');
 
+        const activePanel = (sidebarColors && !sidebarColors.classList.contains('collapsed'))
+          ? sidebarColors
+          : (sidebarRight && !sidebarRight.classList.contains('collapsed'))
+          ? sidebarRight
+          : sidebarLeft;
+
         const onMouseMove = (moveEvent: MouseEvent) => {
-          if (!isResizingLeft) return;
+          if (!isResizing) return;
           moveEvent.preventDefault();
           moveEvent.stopPropagation();
-          const newWidth = Math.max(200, Math.min(520, moveEvent.clientX));
-          sidebarLeft.style.width = `${newWidth}px`;
+          const activityBarWidth = 48;
+          const newWidth = Math.max(240, Math.min(600, moveEvent.clientX - activityBarWidth));
+          const wStr = `${newWidth}px`;
+          if (sidebarLeft) sidebarLeft.style.width = wStr;
+          if (sidebarRight) sidebarRight.style.width = wStr;
+          if (sidebarColors) sidebarColors.style.width = wStr;
         };
 
         const onMouseUp = (upEvent: MouseEvent) => {
-          if (!isResizingLeft) return;
+          if (!isResizing) return;
           upEvent.preventDefault();
           upEvent.stopPropagation();
-          isResizingLeft = false;
+          isResizing = false;
           resizerLeft.classList.remove('resizing');
-          document.body.classList.remove('is-resizing-active');
-          window.removeEventListener('mousemove', onMouseMove, true);
-          window.removeEventListener('mouseup', onMouseUp, true);
-        };
-
-        window.addEventListener('mousemove', onMouseMove, true);
-        window.addEventListener('mouseup', onMouseUp, true);
-      });
-    }
-
-    // Resizer Right (Propriedades do Bloco)
-    if (resizerRight && sidebarRight) {
-      let isResizingRight = false;
-      resizerRight.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        isResizingRight = true;
-        resizerRight.classList.add('resizing');
-        document.body.classList.add('is-resizing-active');
-
-        const onMouseMove = (moveEvent: MouseEvent) => {
-          if (!isResizingRight) return;
-          moveEvent.preventDefault();
-          moveEvent.stopPropagation();
-          const newWidth = Math.max(240, Math.min(650, window.innerWidth - moveEvent.clientX));
-          sidebarRight.style.width = `${newWidth}px`;
-        };
-
-        const onMouseUp = (upEvent: MouseEvent) => {
-          if (!isResizingRight) return;
-          upEvent.preventDefault();
-          upEvent.stopPropagation();
-          isResizingRight = false;
-          resizerRight.classList.remove('resizing');
           document.body.classList.remove('is-resizing-active');
           window.removeEventListener('mousemove', onMouseMove, true);
           window.removeEventListener('mouseup', onMouseUp, true);
@@ -540,7 +605,9 @@ class VisualEditorApp {
 
     // Runtime messages
     chrome.runtime?.onMessage?.addListener((msg) => {
-      if (msg.type === 'NODE_START') {
+      if (msg.type === 'OPEN_SETTINGS_TAB' || msg.action === 'OPEN_SETTINGS_TAB') {
+        this.tabManager.openSettingsTab();
+      } else if (msg.type === 'NODE_START') {
         this.highlightActiveNode(msg.nodeId);
       } else if (msg.type === 'NODE_COMPLETE') {
         this.unhighlightActiveNode(msg.nodeId);
@@ -549,6 +616,257 @@ class VisualEditorApp {
       } else if (msg.type === 'STATUS_CHANGE') {
         this.appendLog({ timestamp: Date.now(), level: 'info', message: `Status alterado para: ${msg.status}` });
       }
+    });
+  }
+
+  public openBlocksSidebar(): void {
+    if (this.currentView === 'settings') return;
+    const sidebarLeft = document.getElementById('sidebarLibrary');
+    const sidebarRight = document.getElementById('sidebarInspector');
+    const sidebarColors = document.getElementById('sidebarColors');
+    const resizerLeft = document.getElementById('resizerLeft');
+    const btnActivityBlocks = document.getElementById('btnActivityBlocks');
+    const btnActivityInspector = document.getElementById('btnActivityInspector');
+    const btnActivityColors = document.getElementById('btnActivityColors');
+
+    sidebarLeft?.classList.remove('collapsed');
+    btnActivityBlocks?.classList.add('active');
+
+    sidebarRight?.classList.add('collapsed');
+    btnActivityInspector?.classList.remove('active');
+
+    sidebarColors?.classList.add('collapsed');
+    btnActivityColors?.classList.remove('active');
+
+    if (resizerLeft) resizerLeft.style.display = 'block';
+  }
+
+  public openInspectorSidebar(): void {
+    if (this.currentView === 'settings') return;
+    const sidebarLeft = document.getElementById('sidebarLibrary');
+    const sidebarRight = document.getElementById('sidebarInspector');
+    const sidebarColors = document.getElementById('sidebarColors');
+    const resizerLeft = document.getElementById('resizerLeft');
+    const btnActivityBlocks = document.getElementById('btnActivityBlocks');
+    const btnActivityInspector = document.getElementById('btnActivityInspector');
+    const btnActivityColors = document.getElementById('btnActivityColors');
+
+    sidebarRight?.classList.remove('collapsed');
+    btnActivityInspector?.classList.add('active');
+
+    sidebarLeft?.classList.add('collapsed');
+    btnActivityBlocks?.classList.remove('active');
+
+    sidebarColors?.classList.add('collapsed');
+    btnActivityColors?.classList.remove('active');
+
+    this.inspectorManager.renderInspector();
+    if (resizerLeft) resizerLeft.style.display = 'block';
+  }
+
+  public openColorsSidebar(): void {
+    if (this.currentView === 'settings') return;
+    const sidebarLeft = document.getElementById('sidebarLibrary');
+    const sidebarRight = document.getElementById('sidebarInspector');
+    const sidebarColors = document.getElementById('sidebarColors');
+    const resizerLeft = document.getElementById('resizerLeft');
+    const btnActivityBlocks = document.getElementById('btnActivityBlocks');
+    const btnActivityInspector = document.getElementById('btnActivityInspector');
+    const btnActivityColors = document.getElementById('btnActivityColors');
+
+    sidebarColors?.classList.remove('collapsed');
+    btnActivityColors?.classList.add('active');
+
+    sidebarLeft?.classList.add('collapsed');
+    btnActivityBlocks?.classList.remove('active');
+
+    sidebarRight?.classList.add('collapsed');
+    btnActivityInspector?.classList.remove('active');
+
+    this.colorPickerManager.renderColorsSidebar();
+    if (resizerLeft) resizerLeft.style.display = 'block';
+  }
+
+  public ensureSidebarOpen(): void {
+    if (this.currentView === 'settings') return;
+    const sidebarLeft = document.getElementById('sidebarLibrary');
+    const sidebarRight = document.getElementById('sidebarInspector');
+    const sidebarColors = document.getElementById('sidebarColors');
+
+    const isLeftOpen = sidebarLeft && !sidebarLeft.classList.contains('collapsed');
+    const isRightOpen = sidebarRight && !sidebarRight.classList.contains('collapsed');
+    const isColorsOpen = sidebarColors && !sidebarColors.classList.contains('collapsed');
+
+    if (!isLeftOpen && !isRightOpen && !isColorsOpen) {
+      this.openBlocksSidebar();
+    }
+  }
+
+  private loadSettingsUI(): void {
+    if (!chrome.storage?.local) return;
+    chrome.storage.local.get([
+      'floating_buttons_layout_settings',
+      'studio_preferences',
+      'mcp_settings',
+      'web_automations'
+    ], (stored) => {
+      const layout = stored.floating_buttons_layout_settings || {
+        stackDirection: 'vertical',
+        gap: 10,
+        maxColumns: 3,
+        maxRows: 5,
+      };
+      const studio = stored.studio_preferences || {
+        autoSave: 'always',
+        edgeType: 'bezier',
+        showMinimap: true,
+        snapToGrid: true,
+      };
+      const mcp = stored.mcp_settings || {
+        enabled: false,
+        port: 3001,
+      };
+
+      const setSelect = (id: string, val: any) => {
+        const el = document.getElementById(id) as HTMLSelectElement;
+        if (el && val !== undefined) el.value = String(val);
+      };
+      const setInput = (id: string, val: any) => {
+        const el = document.getElementById(id) as HTMLInputElement;
+        if (el && val !== undefined) el.value = String(val);
+      };
+      const setCheck = (id: string, val: any) => {
+        const el = document.getElementById(id) as HTMLInputElement;
+        if (el && val !== undefined) el.checked = Boolean(val);
+      };
+
+      setSelect('settingsStackDirection', layout.stackDirection);
+      setInput('settingsGapInput', layout.gap);
+      setInput('settingsMaxColumnsInput', layout.maxColumns);
+      setInput('settingsMaxRowsInput', layout.maxRows);
+
+      setSelect('settingsAutoSaveInterval', studio.autoSave);
+      setSelect('settingsDefaultEdgeType', studio.edgeType);
+      setCheck('settingsShowMinimapDefault', studio.showMinimap);
+      setCheck('settingsSnapToGridDefault', studio.snapToGrid);
+
+      setCheck('settingsMcpEnabled', mcp.enabled);
+      setInput('settingsMcpPortInput', mcp.port);
+
+      const statsEl = document.getElementById('settingsStorageSummaryText');
+      if (statsEl) {
+        const flows = stored.web_automations || [];
+        const jsonStr = JSON.stringify(stored);
+        const kb = (new TextEncoder().encode(jsonStr).length / 1024).toFixed(1);
+        statsEl.textContent = `${flows.length} fluxo(s) salvos (~${kb} KB utilizados)`;
+      }
+    });
+  }
+
+  private initSettingsEvents(): void {
+    const btnSave = document.getElementById('btnSaveVisualSettings');
+    btnSave?.addEventListener('click', () => {
+      const getVal = (id: string) => (document.getElementById(id) as HTMLInputElement)?.value;
+      const getCheck = (id: string) => (document.getElementById(id) as HTMLInputElement)?.checked;
+
+      const layout = {
+        stackDirection: getVal('settingsStackDirection') || 'vertical',
+        gap: parseInt(getVal('settingsGapInput') || '10', 10),
+        maxColumns: parseInt(getVal('settingsMaxColumnsInput') || '3', 10),
+        maxRows: parseInt(getVal('settingsMaxRowsInput') || '5', 10),
+      };
+
+      const studio = {
+        autoSave: getVal('settingsAutoSaveInterval') || 'always',
+        edgeType: getVal('settingsDefaultEdgeType') || 'bezier',
+        showMinimap: getCheck('settingsShowMinimapDefault'),
+        snapToGrid: getCheck('settingsSnapToGridDefault'),
+      };
+
+      const mcp = {
+        enabled: getCheck('settingsMcpEnabled'),
+        port: parseInt(getVal('settingsMcpPortInput') || '3001', 10),
+      };
+
+      if (chrome.storage?.local) {
+        chrome.storage.local.set({
+          floating_buttons_layout_settings: layout,
+          studio_preferences: studio,
+          mcp_settings: mcp,
+        }, () => {
+          showToast('Configurações salvas com sucesso!', 'success');
+          try {
+            chrome.tabs?.query({}, (tabs) => {
+              tabs.forEach((t) => {
+                if (t.id) {
+                  chrome.tabs.sendMessage(t.id, {
+                    type: 'UPDATE_FLOATING_BUTTONS_LAYOUT',
+                    settings: layout,
+                  }).catch(() => {});
+                }
+              });
+            });
+          } catch (_) {}
+        });
+      }
+    });
+
+    document.getElementById('btnSettingsResetPositions')?.addEventListener('click', () => {
+      DialogMenu.confirm({
+        title: 'Restaurar Posições?',
+        message: 'Deseja restaurar as posições padrão de todos os botões flutuantes arrastados?',
+        confirmText: 'Restaurar',
+        isDanger: true,
+      }).then((confirmed) => {
+        if (confirmed) {
+          chrome.storage?.local?.remove('floating_buttons_positions', () => {
+            showToast('Posições padrão restauradas!', 'success');
+          });
+        }
+      });
+    });
+
+    document.getElementById('btnSettingsExportAllData')?.addEventListener('click', async () => {
+      if (!chrome.storage?.local) return;
+      const all = await chrome.storage.local.get(null);
+      const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `webautomations_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Backup exportado com sucesso!', 'success');
+    });
+
+    const fileInput = document.getElementById('settingsBackupFileInput') as HTMLInputElement;
+    document.getElementById('btnSettingsImportAllData')?.addEventListener('click', () => {
+      fileInput?.click();
+    });
+
+    fileInput?.addEventListener('change', (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        try {
+          const content = JSON.parse(ev.target?.result as string);
+          if (content && typeof content === 'object') {
+            await chrome.storage.local.set(content);
+            showToast('Backup restaurado com sucesso!', 'success');
+            this.loadSettingsUI();
+            this.tabManager.loadFromStorage(false);
+          }
+        } catch (err: any) {
+          DialogMenu.alert({
+            title: 'Erro na Restauração',
+            message: 'O arquivo selecionado não contém um JSON válido: ' + err.message,
+            type: 'error',
+          });
+        }
+      };
+      reader.readAsText(file);
+      fileInput.value = '';
     });
   }
 }

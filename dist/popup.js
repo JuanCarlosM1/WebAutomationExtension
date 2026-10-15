@@ -27,6 +27,82 @@ document.addEventListener("DOMContentLoaded", async () => {
     const targetUrl = chrome.runtime.getURL ? chrome.runtime.getURL("editor.html") : "editor.html";
     openInNewWindow(targetUrl);
   });
+  document.getElementById("btnOpenHtmlAnalyzer")?.addEventListener("click", () => {
+    if (chrome.tabs?.query) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        let target = tabs[0];
+        const isExt = (url) => !url || url.startsWith("chrome-extension://") || url.startsWith("chrome://");
+        if (!target || isExt(target.url)) {
+          chrome.tabs.query({}, (allTabs) => {
+            const webTab = allTabs.find((t) => !isExt(t.url));
+            if (webTab?.id) {
+              if (webTab.windowId && chrome.windows?.update) {
+                chrome.windows.update(webTab.windowId, { focused: true });
+              }
+              chrome.tabs.update(webTab.id, { active: true }, () => {
+                activatePickerInTab(webTab.id);
+              });
+            } else {
+              window.close();
+            }
+          });
+          return;
+        }
+        activatePickerInTab(target.id);
+      });
+    }
+  });
+  function activatePickerInTab(tabId) {
+    chrome.tabs.sendMessage(tabId, { action: "OPEN_HTML_ANALYZER", payload: { startPicker: true } }, (res) => {
+      if (chrome.runtime.lastError || !res?.success) {
+        if (chrome.scripting?.executeScript) {
+          chrome.scripting.executeScript(
+            {
+              target: { tabId },
+              files: ["dist/contentDriver.js"]
+            },
+            () => {
+              chrome.tabs.sendMessage(tabId, { action: "OPEN_HTML_ANALYZER", payload: { startPicker: true } }, () => {
+                window.close();
+              });
+            }
+          );
+          return;
+        }
+      }
+      window.close();
+    });
+  }
+  document.getElementById("btnOpenSettingsPopup")?.addEventListener("click", () => {
+    const editorPageUrl = chrome.runtime.getURL ? chrome.runtime.getURL("editor.html") : "editor.html";
+    const targetUrl = `${editorPageUrl}?tab=settings`;
+    if (chrome.tabs?.query) {
+      chrome.tabs.query({}, (tabs) => {
+        const existingTab = tabs.find((t) => t.url && t.url.includes("editor.html"));
+        if (existingTab && existingTab.id) {
+          chrome.tabs.update(existingTab.id, { active: true }, () => {
+            if (existingTab.windowId && chrome.windows?.update) {
+              chrome.windows.update(existingTab.windowId, { focused: true });
+            }
+            if (chrome.runtime?.sendMessage) {
+              chrome.runtime.sendMessage({ type: "OPEN_SETTINGS_TAB", action: "OPEN_SETTINGS_TAB" });
+            }
+            setTimeout(() => window.close(), 60);
+          });
+          return;
+        }
+        if (chrome.tabs?.create) {
+          chrome.tabs.create({ url: targetUrl }, () => window.close());
+        } else {
+          window.open(targetUrl, "_blank");
+          window.close();
+        }
+      });
+    } else {
+      window.open(targetUrl, "_blank");
+      window.close();
+    }
+  });
   if (chrome.runtime?.sendMessage && mcpToggle && mcpStatusText) {
     chrome.runtime.sendMessage({ action: "GET_MCP_STATUS" }, (res) => {
       if (res?.success) {
@@ -70,9 +146,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         const item = document.createElement("div");
         item.className = "item";
         item.style.cssText = "display: flex; align-items: center; justify-content: space-between; gap: 8px;";
+        const cleanTitle = (auto.metadata?.name || "Automa\xE7\xE3o").replace(/\.(webautomation\.json|json)$/i, "");
         item.innerHTML = `
-          <div class="flow-link" style="cursor: pointer; flex: 1; min-width: 0;" title="Abrir fluxo &quot;${auto.metadata?.name || "Automa\xE7\xE3o"}&quot; no Visual Flow">
-            <div class="flow-title" style="font-weight: 600; font-size: 12px; color: #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.15s ease;">${auto.metadata?.name || "Automa\xE7\xE3o"}</div>
+          <div class="flow-link" style="cursor: pointer; flex: 1; min-width: 0;" title="Abrir fluxo &quot;${cleanTitle}&quot; no Visual Flow">
+            <div class="flow-title" style="font-weight: 600; font-size: 12px; color: #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.15s ease;">${cleanTitle}</div>
             <div style="font-size: 10px; color: #94a3b8; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
               <span>${auto.nodes?.length || 0} blocos</span>
               <span>\u2022</span>

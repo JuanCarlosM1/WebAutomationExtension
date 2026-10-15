@@ -32,7 +32,7 @@
     "default_title": "WebAutomations Control"
   },
   "options_ui": {
-    "page": "editor.html",
+    "page": "settings.html",
     "open_in_tab": true
   },
   "commands": {

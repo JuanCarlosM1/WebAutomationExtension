@@ -275,8 +275,7 @@ export class CanvasManager {
       const isCodeNode = ['inject_javascript', 'inject_html', 'inject_css', 'web_component'].includes(node.type) ||
         (node.type === 'for_loop' && (node.data as any).loopType === 'js_generator') ||
         (node.type === 'set_variable' && (node.data as any).evaluationType === 'js_eval') ||
-        (node.type === 'while_loop' && (hasJsRule((node.data as any).rules) || hasJsInGroups((node.data as any).conditionGroups))) ||
-        (node.type === 'switch' && Array.isArray((node.data as any).cases) && (node.data as any).cases.some((c: any) => hasJsRule(c.rules) || hasJsInGroups(c.conditionGroups)));
+        (node.type === 'while_loop' && (hasJsRule((node.data as any).rules) || hasJsInGroups((node.data as any).conditionGroups)));
 
       if (isCodeNode) {
         const langMap: Record<string, { label: string; color: string }> = {
@@ -287,7 +286,6 @@ export class CanvasManager {
           for_loop: { label: 'Editar JS', color: '#f59e0b' },
           set_variable: { label: 'Editar Expressão JS', color: '#f59e0b' },
           while_loop: { label: 'Editar Condição JS', color: '#f59e0b' },
-          switch: { label: 'Editar Condição JS', color: '#f59e0b' },
         };
         const meta = langMap[node.type] || { label: 'Editar Código', color: '#6366f1' };
         codeBadgeHtml = `
@@ -549,7 +547,7 @@ export class CanvasManager {
               this.callbacks.showToast('Expressão JS salva!', 'success');
             },
           });
-        } else if (node.type === 'while_loop' || node.type === 'switch' || node.type === 'web_component') {
+        } else if (node.type === 'while_loop' || node.type === 'web_component') {
           // Para blocos com múltiplas partes ou regras condicionais, abre o modal centralizado do bloco
           this.callbacks.onOpenNodeModal?.(node.id);
         }
@@ -883,18 +881,21 @@ export class CanvasManager {
       { passive: false }
     );
 
-    // Controles de zoom nos botões flutuantes
-    document.getElementById('btnZoomIn')?.addEventListener('click', () => {
+    // Controles de zoom integrados ao cabeçalho do minimapa
+    document.getElementById('btnZoomIn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
       const rect = canvas.getBoundingClientRect();
       this.setZoom(this.zoom * 1.2, rect.width / 2, rect.height / 2);
     });
 
-    document.getElementById('btnZoomOut')?.addEventListener('click', () => {
+    document.getElementById('btnZoomOut')?.addEventListener('click', (e) => {
+      e.stopPropagation();
       const rect = canvas.getBoundingClientRect();
       this.setZoom(this.zoom / 1.2, rect.width / 2, rect.height / 2);
     });
 
-    document.getElementById('btnZoomReset')?.addEventListener('click', () => {
+    document.getElementById('btnZoomReset')?.addEventListener('click', (e) => {
+      e.stopPropagation();
       this.resetTransform();
     });
   }

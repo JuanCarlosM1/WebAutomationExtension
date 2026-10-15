@@ -355,130 +355,151 @@ var BLOCK_CATALOG = [
 ];
 
 // src/editor/modules/colorPickerManager.ts
-var ColorPickerManager = class {
+var ColorPickerManager = class _ColorPickerManager {
   constructor(getGraph, showToast2, onPaletteChanged) {
     this.getGraph = getGraph;
     this.showToast = showToast2;
     this.onPaletteChanged = onPaletteChanged;
   }
-  getFlowColorPalette() {
+  static activeFlowColors = [];
+  getFlowNamedColors() {
     const graph = this.getGraph();
     if (!Array.isArray(graph.colorPalette)) {
       graph.colorPalette = [
-        "#6366f1",
-        "#3b82f6",
-        "#10b981",
-        "#f59e0b",
-        "#ef4444",
-        "#8b5cf6",
-        "#06b6d4",
-        "#ec4899"
+        { name: "primaria", hex: "#6366f1" },
+        { name: "secundaria", hex: "#3b82f6" },
+        { name: "sucesso", hex: "#10b981" },
+        { name: "alerta", hex: "#f59e0b" },
+        { name: "erro", hex: "#ef4444" },
+        { name: "destaque", hex: "#8b5cf6" },
+        { name: "info", hex: "#06b6d4" },
+        { name: "rosa", hex: "#ec4899" }
       ];
+    } else {
+      graph.colorPalette = graph.colorPalette.map((item, idx) => {
+        if (typeof item === "string") {
+          return { name: `cor_${idx + 1}`, hex: item };
+        }
+        return { name: item.name || `cor_${idx + 1}`, hex: item.hex || "#6366f1" };
+      });
     }
+    _ColorPickerManager.activeFlowColors = graph.colorPalette;
     return graph.colorPalette;
   }
-  openFlowPaletteModal(onCloseOrChange) {
-    const existing = document.querySelector(".flow-palette-modal-backdrop");
-    existing?.remove();
-    const palette = this.getFlowColorPalette();
-    const backdrop = document.createElement("div");
-    backdrop.className = "flow-modal-backdrop flow-palette-modal-backdrop";
-    const triggerChange = () => {
-      this.onPaletteChanged?.();
-      onCloseOrChange?.();
-      window.dispatchEvent(new CustomEvent("flow-palette-updated"));
+  getFlowColorPalette() {
+    return this.getFlowNamedColors().map((c) => c.hex);
+  }
+  renderColorsSidebar() {
+    const container = document.getElementById("colorsSidebarContent");
+    if (!container)
+      return;
+    container.innerHTML = "";
+    const colors = this.getFlowNamedColors();
+    const desc = document.createElement("p");
+    desc.style.cssText = "font-size: 11px; color: var(--text-muted); line-height: 1.4; margin-bottom: 4px;";
+    desc.textContent = "Defina cores com nomes personalizados. Chame-as no editor de c\xF3digo digitando flowColors.<nome> ou colors.<nome>.";
+    container.appendChild(desc);
+    const listContainer = document.createElement("div");
+    listContainer.style.cssText = "display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 300px); overflow-y: auto; padding-right: 2px;";
+    colors.forEach((col, idx) => {
+      const row = document.createElement("div");
+      row.style.cssText = "display: flex; align-items: center; gap: 8px; background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 6px 10px; height: 42px; min-height: 42px; box-sizing: border-box;";
+      const swatchWrap = document.createElement("div");
+      swatchWrap.style.cssText = "position: relative; width: 28px; height: 28px; flex-shrink: 0;";
+      const swatch = document.createElement("div");
+      swatch.style.cssText = `width: 100%; height: 100%; border-radius: 4px; background: ${col.hex}; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;`;
+      const nativeInp = document.createElement("input");
+      nativeInp.type = "color";
+      nativeInp.value = col.hex;
+      nativeInp.style.cssText = "position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; padding: 0;";
+      swatchWrap.appendChild(swatch);
+      swatchWrap.appendChild(nativeInp);
+      const nameInp = document.createElement("input");
+      nameInp.type = "text";
+      nameInp.value = col.name;
+      nameInp.placeholder = "Nome da cor";
+      nameInp.title = "Nome da cor chamado no editor de c\xF3digo";
+      nameInp.style.cssText = "flex: 1; min-width: 60px; height: 28px; box-sizing: border-box; font-size: 11px; padding: 4px 6px; background: #172033; color: #38bdf8; font-weight: 600; border: 1px solid #243049; border-radius: 4px;";
+      const hexInp = document.createElement("input");
+      hexInp.type = "text";
+      hexInp.value = col.hex;
+      hexInp.style.cssText = "width: 70px; height: 28px; box-sizing: border-box; font-family: monospace; font-size: 11px; padding: 4px 6px; background: #172033; color: #f1f5f9; border: 1px solid #243049; border-radius: 4px;";
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.innerHTML = "&times;";
+      delBtn.title = "Remover cor";
+      delBtn.style.cssText = "background: transparent; border: none; color: #ef4444; font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; height: 28px; display: flex; align-items: center; justify-content: center;";
+      nativeInp.addEventListener("input", (e) => {
+        col.hex = e.target.value;
+        swatch.style.background = col.hex;
+        hexInp.value = col.hex;
+        this.saveAndTrigger();
+      });
+      hexInp.addEventListener("change", (e) => {
+        let val = e.target.value.trim();
+        if (val && !val.startsWith("#"))
+          val = `#${val}`;
+        col.hex = val;
+        swatch.style.background = col.hex;
+        nativeInp.value = col.hex;
+        this.saveAndTrigger();
+      });
+      nameInp.addEventListener("input", (e) => {
+        col.name = e.target.value.trim().replace(/[^a-zA-Z0-9_$]/g, "_");
+        this.saveAndTrigger();
+      });
+      delBtn.addEventListener("click", () => {
+        colors.splice(idx, 1);
+        this.saveAndTrigger();
+        this.renderColorsSidebar();
+      });
+      row.appendChild(swatchWrap);
+      row.appendChild(nameInp);
+      row.appendChild(hexInp);
+      row.appendChild(delBtn);
+      listContainer.appendChild(row);
+    });
+    container.appendChild(listContainer);
+    const addCard = document.createElement("div");
+    addCard.style.cssText = "margin-top: 10px; padding-top: 10px; border-top: 1px solid #1e293b; display: flex; flex-direction: column; gap: 6px;";
+    addCard.innerHTML = `
+      <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Adicionar Nova Cor</label>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <input type="color" id="newSidebarColorPicker" value="#10b981" style="width: 32px; height: 30px; border: 1px solid #334155; border-radius: 4px; background: transparent; cursor: pointer; padding: 0;" />
+        <input type="text" id="newSidebarColorName" placeholder="Nome (ex: destaque)" style="flex: 1; padding: 4px 6px; font-size: 11px; background: #172033; color: #f1f5f9; border: 1px solid #243049; border-radius: 4px;" />
+        <button type="button" id="btnAddNewSidebarColor" class="btn btn-secondary" style="padding: 5px 10px; font-size: 11px; white-space: nowrap;">+ Adicionar</button>
+      </div>
+    `;
+    const picker = addCard.querySelector("#newSidebarColorPicker");
+    const nameField = addCard.querySelector("#newSidebarColorName");
+    const addBtn = addCard.querySelector("#btnAddNewSidebarColor");
+    const handleAdd = () => {
+      const hex = picker.value || "#10b981";
+      const name = (nameField.value.trim() || `cor_${colors.length + 1}`).replace(/[^a-zA-Z0-9_$]/g, "_");
+      colors.push({ name, hex });
+      this.saveAndTrigger();
+      this.renderColorsSidebar();
+      this.showToast(`Cor "${name}" adicionada!`, "success");
     };
-    const renderPaletteModalContent = () => {
-      backdrop.innerHTML = `
-        <div class="flow-modal-card" style="max-width: 480px; width: 100%; border: 1px solid #8b5cf6;">
-          <div class="flow-modal-header">
-            <div class="flow-modal-icon" style="background: rgba(139, 92, 246, 0.15); color: #a855f7;">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
-            </div>
-            <div class="flow-modal-title" style="color: #f8fafc; font-weight: 700;">Cores do Fluxo</div>
-          </div>
-          <div class="flow-modal-body" style="display: flex; flex-direction: column; gap: 12px;">
-            <p style="font-size: 12px; color: #94a3b8; line-height: 1.4;">
-              Defina as cores personalizadas deste fluxo. Todas as cores adicionadas aqui ficam acess\xEDveis instantaneamente em qualquer seletor de cor no editor.
-            </p>
-            <div class="custom-palette-list" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-height: 220px; overflow-y: auto;">
-              ${palette.map((color, idx) => `
-                <div style="background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 4px; align-items: center; position: relative;">
-                  <button type="button" class="del-palette-color-btn" data-idx="${idx}" title="Remover" style="position: absolute; top: 2px; right: 4px; background: transparent; border: none; color: #ef4444; font-size: 14px; font-weight: bold; cursor: pointer; line-height: 1; padding: 2px 4px;">&times;</button>
-                  <div style="width: 100%; height: 26px; background: ${color}; border-radius: 4px; border: 1px solid rgba(0,0,0,0.3); box-shadow: inset 0 0 2px rgba(255,255,255,0.2);"></div>
-                  <span style="font-size: 10px; font-family: monospace; color: #cbd5e1; user-select: all;">${color}</span>
-                </div>
-              `).join("")}
-            </div>
-
-            <div style="display: flex; gap: 8px; align-items: center; padding-top: 10px; border-top: 1px solid #1e293b;">
-              <input type="color" id="newPaletteColorPicker" value="#10b981" style="width: 36px; height: 32px; border: 1px solid #334155; border-radius: 6px; background: transparent; cursor: pointer; padding: 0;" />
-              <input type="text" id="newPaletteColorInput" value="#10b981" placeholder="#10b981" style="flex: 1; padding: 6px 10px; font-size: 12px; font-family: monospace; background: #172033; color: white; border: 1px solid #243049; border-radius: 6px;" />
-              <button type="button" id="btnAddColorToFlowPalette" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">+ Adicionar Cor</button>
-            </div>
-          </div>
-          <div class="flow-modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid #1e293b; padding-top: 12px;">
-            <button type="button" class="btn btn-primary flow-palette-close-btn" style="background: #8b5cf6; border-color: #8b5cf6; padding: 6px 16px;">Salvar & Concluir</button>
-          </div>
-        </div>
-      `;
-      const pickerEl = backdrop.querySelector("#newPaletteColorPicker");
-      const inputEl = backdrop.querySelector("#newPaletteColorInput");
-      const addBtn = backdrop.querySelector("#btnAddColorToFlowPalette");
-      pickerEl?.addEventListener("input", (e) => {
-        inputEl.value = e.target.value;
-      });
-      inputEl?.addEventListener("input", (e) => {
-        const val = e.target.value.trim();
-        if (val.startsWith("#") && (val.length === 4 || val.length === 7)) {
-          pickerEl.value = val.length === 4 ? `#${val[1]}${val[1]}${val[2]}${val[2]}${val[3]}${val[3]}` : val;
-        }
-      });
-      const handleAddColor = () => {
-        let val = inputEl.value.trim();
-        if (val) {
-          if (!val.startsWith("#"))
-            val = `#${val}`;
-          if (!palette.some((c) => c.toLowerCase() === val.toLowerCase())) {
-            palette.push(val);
-            this.getGraph().colorPalette = palette;
-            renderPaletteModalContent();
-            triggerChange();
-          } else {
-            this.showToast("Esta cor j\xE1 existe na paleta do fluxo.", "info");
-          }
-        }
-      };
-      addBtn?.addEventListener("click", handleAddColor);
-      inputEl?.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          handleAddColor();
-        }
-      });
-      backdrop.querySelectorAll(".del-palette-color-btn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const idx = Number(btn.dataset.idx);
-          palette.splice(idx, 1);
-          this.getGraph().colorPalette = palette;
-          renderPaletteModalContent();
-          triggerChange();
-        });
-      });
-      const closeModal = () => {
-        backdrop.remove();
-        onCloseOrChange?.();
-      };
-      backdrop.querySelector(".flow-palette-close-btn")?.addEventListener("click", closeModal);
-    };
-    renderPaletteModalContent();
-    backdrop.addEventListener("click", (e) => {
-      if (e.target === backdrop) {
-        backdrop.remove();
-        onCloseOrChange?.();
+    addBtn?.addEventListener("click", handleAdd);
+    nameField?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleAdd();
       }
     });
-    document.body.appendChild(backdrop);
+    container.appendChild(addCard);
+  }
+  saveAndTrigger() {
+    const graph = this.getGraph();
+    _ColorPickerManager.activeFlowColors = graph.colorPalette;
+    this.onPaletteChanged?.();
+    window.dispatchEvent(new CustomEvent("flow-palette-updated"));
+  }
+  openFlowPaletteModal(_onCloseOrChange) {
+    this.renderColorsSidebar();
+    const btnActivity = document.getElementById("btnActivityColors");
+    btnActivity?.click();
   }
   createPaintColorPicker(container, labelText, initialColor, onChange) {
     let currentColor = initialColor || "#6366f1";
@@ -1447,9 +1468,6 @@ var CodeEditorComponent = class _CodeEditorComponent {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             <span>Copiar</span>
           </button>
-          <button type="button" class="ce-btn btn-fullscreen-code" title="Expandir editor em tela cheia">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-          </button>
         </div>
       </div>
 
@@ -1557,10 +1575,6 @@ var CodeEditorComponent = class _CodeEditorComponent {
       this.textarea.focus();
       this.textarea.setSelectionRange(0, this.textarea.value.length);
       this.updateCursorStatus();
-    });
-    const fullscreenBtn = this.container.querySelector(".btn-fullscreen-code");
-    fullscreenBtn?.addEventListener("click", () => {
-      this.toggleFullscreen();
     });
   }
   handleKeydown(e) {
@@ -1826,6 +1840,37 @@ var CodeEditorComponent = class _CodeEditorComponent {
       const builtins = JS_BUILTIN_SUGGESTIONS;
       const seen = /* @__PURE__ */ new Set();
       const combined = [];
+      const flowColors = ColorPickerManager.activeFlowColors || [];
+      flowColors.forEach((fc) => {
+        if (fc.name) {
+          combined.push({
+            label: `flowColors.${fc.name}`,
+            type: "variable",
+            insertText: `flowColors.${fc.name}`,
+            detail: `Cor do Fluxo (${fc.hex})`
+          });
+          combined.push({
+            label: `colors.${fc.name}`,
+            type: "variable",
+            insertText: `colors.${fc.name}`,
+            detail: `Cor do Fluxo (${fc.hex})`
+          });
+        }
+      });
+      if (flowColors.length > 0) {
+        combined.push({
+          label: "flowColors",
+          type: "variable",
+          insertText: "flowColors",
+          detail: "Objeto de Cores do Fluxo"
+        });
+        combined.push({
+          label: "colors",
+          type: "variable",
+          insertText: "colors",
+          detail: "Objeto de Cores do Fluxo"
+        });
+      }
       declared.forEach((item) => {
         if (!seen.has(item.label)) {
           seen.add(item.label);
@@ -1840,7 +1885,25 @@ var CodeEditorComponent = class _CodeEditorComponent {
       });
       return combined;
     } else if (lang === "css") {
-      return CSS_SUGGESTIONS;
+      const cssCombined = [...CSS_SUGGESTIONS];
+      const flowColors = ColorPickerManager.activeFlowColors || [];
+      flowColors.forEach((fc) => {
+        if (fc.name) {
+          cssCombined.push({
+            label: `var(--color-${fc.name})`,
+            type: "property",
+            insertText: `var(--color-${fc.name})`,
+            detail: `Cor do Fluxo (${fc.hex})`
+          });
+          cssCombined.push({
+            label: `${fc.hex} /* ${fc.name} */`,
+            type: "property",
+            insertText: fc.hex,
+            detail: `Cor do Fluxo: ${fc.name}`
+          });
+        }
+      });
+      return cssCombined;
     } else if (lang === "html") {
       return HTML_SUGGESTIONS;
     }
@@ -2242,27 +2305,316 @@ var CodeEditorComponent = class _CodeEditorComponent {
   }
 };
 
+// src/editor/modules/dialogUtils.ts
+var DialogMenu = class {
+  /**
+   * Exibe um menu de confirmação assíncrono (substituto de confirm)
+   */
+  static confirm(options) {
+    const opts = typeof options === "string" ? { message: options } : options;
+    return new Promise((resolve) => {
+      this.closeExisting();
+      const backdrop = document.createElement("div");
+      backdrop.className = "flow-dialog-backdrop";
+      backdrop.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(4, 7, 15, 0.78);
+        backdrop-filter: blur(6px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2147483647;
+        padding: 16px;
+        animation: dialogFadeIn 0.15s ease-out;
+        font-family: var(--font-sans, 'Plus Jakarta Sans', system-ui, sans-serif);
+      `;
+      const title = opts.title || "Confirma\xE7\xE3o Necess\xE1ria";
+      const confirmText = opts.confirmText || "Confirmar";
+      const cancelText = opts.cancelText || "Cancelar";
+      const isDanger = opts.isDanger !== false;
+      const card = document.createElement("div");
+      card.className = "flow-dialog-card";
+      card.style.cssText = `
+        background: #0f172a;
+        border: 1px solid ${isDanger ? "#ef4444" : "#3b82f6"};
+        border-radius: 12px;
+        box-shadow: 0 20px 45px rgba(0, 0, 0, 0.75), 0 0 25px ${isDanger ? "rgba(239, 68, 68, 0.2)" : "rgba(59, 130, 246, 0.2)"};
+        max-width: 440px;
+        width: 100%;
+        overflow: hidden;
+        animation: dialogScaleIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+        display: flex;
+        flex-direction: column;
+      `;
+      card.innerHTML = `
+        <div style="padding: 14px 18px; border-bottom: 1px solid #1e293b; background: #131d35; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 16px;">${isDanger ? "\u26A0\uFE0F" : "\u2753"}</span>
+          <h3 style="margin: 0; font-size: 13px; font-weight: 700; color: #f8fafc; flex: 1;">${title}</h3>
+        </div>
+        <div style="padding: 18px; font-size: 12px; line-height: 1.5; color: #cbd5e1;">
+          ${opts.message}
+        </div>
+        <div style="padding: 12px 18px; border-top: 1px solid #1e293b; background: #0b1120; display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" id="dialogBtnCancel" style="
+            background: #1e293b; color: #cbd5e1; border: 1px solid #334155; border-radius: 6px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+          ">${cancelText}</button>
+          <button type="button" id="dialogBtnConfirm" style="
+            background: ${isDanger ? "#ef4444" : "#3b82f6"}; color: white; border: none; border-radius: 6px; padding: 7px 16px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+          ">${confirmText}</button>
+        </div>
+      `;
+      backdrop.appendChild(card);
+      document.body.appendChild(backdrop);
+      const btnCancel = card.querySelector("#dialogBtnCancel");
+      const btnConfirm = card.querySelector("#dialogBtnConfirm");
+      const cleanup = (result) => {
+        window.removeEventListener("keydown", onKey);
+        backdrop.remove();
+        resolve(result);
+      };
+      const onKey = (e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          cleanup(false);
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          cleanup(true);
+        }
+      };
+      btnCancel.addEventListener("click", () => cleanup(false));
+      btnConfirm.addEventListener("click", () => cleanup(true));
+      backdrop.addEventListener("click", (e) => {
+        if (e.target === backdrop)
+          cleanup(false);
+      });
+      window.addEventListener("keydown", onKey);
+      btnConfirm.focus();
+    });
+  }
+  /**
+   * Exibe um menu de alerta assíncrono (substituto de alert)
+   */
+  static alert(options) {
+    const opts = typeof options === "string" ? { message: options } : options;
+    return new Promise((resolve) => {
+      this.closeExisting();
+      const backdrop = document.createElement("div");
+      backdrop.className = "flow-dialog-backdrop";
+      backdrop.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(4, 7, 15, 0.78);
+        backdrop-filter: blur(6px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2147483647;
+        padding: 16px;
+        animation: dialogFadeIn 0.15s ease-out;
+        font-family: var(--font-sans, 'Plus Jakarta Sans', system-ui, sans-serif);
+      `;
+      const type = opts.type || "info";
+      let icon = "\u2139\uFE0F";
+      let borderColor = "#3b82f6";
+      if (type === "error") {
+        icon = "\u274C";
+        borderColor = "#ef4444";
+      } else if (type === "warning") {
+        icon = "\u26A0\uFE0F";
+        borderColor = "#f59e0b";
+      } else if (type === "success") {
+        icon = "\u2705";
+        borderColor = "#10b981";
+      }
+      const title = opts.title || (type === "error" ? "Aten\xE7\xE3o / Erro" : type === "warning" ? "Aviso" : "Informa\xE7\xE3o");
+      const confirmText = opts.confirmText || "Entendido";
+      const card = document.createElement("div");
+      card.className = "flow-dialog-card";
+      card.style.cssText = `
+        background: #0f172a;
+        border: 1px solid ${borderColor};
+        border-radius: 12px;
+        box-shadow: 0 20px 45px rgba(0, 0, 0, 0.75), 0 0 25px ${borderColor}33;
+        max-width: 440px;
+        width: 100%;
+        overflow: hidden;
+        animation: dialogScaleIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+        display: flex;
+        flex-direction: column;
+      `;
+      card.innerHTML = `
+        <div style="padding: 14px 18px; border-bottom: 1px solid #1e293b; background: #131d35; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 16px;">${icon}</span>
+          <h3 style="margin: 0; font-size: 13px; font-weight: 700; color: #f8fafc; flex: 1;">${title}</h3>
+        </div>
+        <div style="padding: 18px; font-size: 12px; line-height: 1.5; color: #cbd5e1; white-space: pre-line;">
+          ${opts.message}
+        </div>
+        <div style="padding: 12px 18px; border-top: 1px solid #1e293b; background: #0b1120; display: flex; justify-content: flex-end;">
+          <button type="button" id="dialogBtnOk" style="
+            background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 7px 20px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+          ">${confirmText}</button>
+        </div>
+      `;
+      backdrop.appendChild(card);
+      document.body.appendChild(backdrop);
+      const btnOk = card.querySelector("#dialogBtnOk");
+      const cleanup = () => {
+        window.removeEventListener("keydown", onKey);
+        backdrop.remove();
+        resolve();
+      };
+      const onKey = (e) => {
+        if (e.key === "Escape" || e.key === "Enter") {
+          e.preventDefault();
+          cleanup();
+        }
+      };
+      btnOk.addEventListener("click", cleanup);
+      backdrop.addEventListener("click", (e) => {
+        if (e.target === backdrop)
+          cleanup();
+      });
+      window.addEventListener("keydown", onKey);
+      btnOk.focus();
+    });
+  }
+  /**
+   * Exibe um menu com campo de entrada de texto (substituto de prompt)
+   */
+  static prompt(options) {
+    const opts = typeof options === "string" ? { message: options } : options;
+    return new Promise((resolve) => {
+      this.closeExisting();
+      const backdrop = document.createElement("div");
+      backdrop.className = "flow-dialog-backdrop";
+      backdrop.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(4, 7, 15, 0.78);
+        backdrop-filter: blur(6px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2147483647;
+        padding: 16px;
+        animation: dialogFadeIn 0.15s ease-out;
+        font-family: var(--font-sans, 'Plus Jakarta Sans', system-ui, sans-serif);
+      `;
+      const title = opts.title || "Entrada de Dados";
+      const confirmText = opts.confirmText || "Salvar";
+      const cancelText = opts.cancelText || "Cancelar";
+      const defaultValue = opts.defaultValue || "";
+      const placeholder = opts.placeholder || "";
+      const card = document.createElement("div");
+      card.className = "flow-dialog-card";
+      card.style.cssText = `
+        background: #0f172a;
+        border: 1px solid #3b82f6;
+        border-radius: 12px;
+        box-shadow: 0 20px 45px rgba(0, 0, 0, 0.75), 0 0 25px rgba(59, 130, 246, 0.2);
+        max-width: 440px;
+        width: 100%;
+        overflow: hidden;
+        animation: dialogScaleIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+        display: flex;
+        flex-direction: column;
+      `;
+      card.innerHTML = `
+        <div style="padding: 14px 18px; border-bottom: 1px solid #1e293b; background: #131d35; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 16px;">\u270F\uFE0F</span>
+          <h3 style="margin: 0; font-size: 13px; font-weight: 700; color: #f8fafc; flex: 1;">${title}</h3>
+        </div>
+        <div style="padding: 18px; font-size: 12px; line-height: 1.5; color: #cbd5e1; display: flex; flex-direction: column; gap: 10px;">
+          <span>${opts.message}</span>
+          <input type="text" id="dialogPromptInput" value="${defaultValue}" placeholder="${placeholder}" style="
+            width: 100%; box-sizing: border-box; padding: 8px 12px; font-size: 12px; background: #090d16; color: #f8fafc; border: 1px solid #334155; border-radius: 6px; outline: none; transition: border-color 0.15s;
+          " />
+        </div>
+        <div style="padding: 12px 18px; border-top: 1px solid #1e293b; background: #0b1120; display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" id="dialogBtnCancel" style="
+            background: #1e293b; color: #cbd5e1; border: 1px solid #334155; border-radius: 6px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+          ">${cancelText}</button>
+          <button type="button" id="dialogBtnConfirm" style="
+            background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 7px 16px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+          ">${confirmText}</button>
+        </div>
+      `;
+      backdrop.appendChild(card);
+      document.body.appendChild(backdrop);
+      const input = card.querySelector("#dialogPromptInput");
+      const btnCancel = card.querySelector("#dialogBtnCancel");
+      const btnConfirm = card.querySelector("#dialogBtnConfirm");
+      input.focus();
+      input.select();
+      const cleanup = (val) => {
+        window.removeEventListener("keydown", onKey);
+        backdrop.remove();
+        resolve(val);
+      };
+      const onKey = (e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          cleanup(null);
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          cleanup(input.value);
+        }
+      };
+      btnCancel.addEventListener("click", () => cleanup(null));
+      btnConfirm.addEventListener("click", () => cleanup(input.value));
+      backdrop.addEventListener("click", (e) => {
+        if (e.target === backdrop)
+          cleanup(null);
+      });
+      window.addEventListener("keydown", onKey);
+    });
+  }
+  static closeExisting() {
+    document.querySelectorAll(".flow-dialog-backdrop").forEach((el) => el.remove());
+  }
+};
+
 // src/editor/modules/htmlElementAnalyzer.ts
 var HtmlElementAnalyzer = class {
   static activeCallback;
   static modalBackdrop;
+  static lastTargetTabId;
+  static isPickerActive = false;
   /**
-   * Abre o Inspetor/Analisador de HTML.
-   * Se for passado onSelectSelector, ao escolher um elemento, esse seletor é retornado no callback.
+   * Abre o Inspetor/Analisador de HTML em aba exclusiva ou modal flutuante
    */
   static open(onSelectSelector) {
-    this.activeCallback = onSelectSelector;
+    if (onSelectSelector) {
+      this.activeCallback = onSelectSelector;
+    }
     this.renderModal();
+  }
+  /**
+   * Abre o Analisador HTML em uma nova aba dedicada e exclusiva
+   */
+  static openInNewTab() {
+    if (chrome.tabs?.create) {
+      chrome.tabs.create({ url: chrome.runtime.getURL("analyzer.html") });
+    } else {
+      window.open("analyzer.html", "_blank");
+    }
   }
   /**
    * Inicia o modo de seleção interativo na aba web ativa usando o content script
    */
-  static startLivePicker(onPicked) {
+  static async startLivePicker(onPicked) {
     if (onPicked) {
       this.activeCallback = onPicked;
     }
     if (!chrome.tabs) {
-      const mockSelector = prompt("Digite o seletor CSS do elemento ou use o Analisador:", "#main-content");
+      const mockSelector = await DialogMenu.prompt({
+        title: "Seletor CSS",
+        message: "Digite o seletor CSS do elemento ou teste o analisador:",
+        defaultValue: "#main-content",
+        placeholder: "#meu-elemento"
+      });
       if (mockSelector && this.activeCallback) {
         this.activeCallback(mockSelector);
       }
@@ -2278,14 +2630,22 @@ var HtmlElementAnalyzer = class {
         targetTab = tabs.filter((t) => isWebTab(t)).sort((a, b) => (b.id ?? 0) - (a.id ?? 0))[0];
       }
       if (!targetTab?.id) {
-        alert(
-          "Nenhuma aba de p\xE1gina web aberta (http/https/file) foi encontrada.\nPor favor, abra um site no navegador para selecionar elementos."
-        );
+        this.renderModal();
+        DialogMenu.alert({
+          title: "Nenhuma P\xE1gina Web Encontrada",
+          message: "Nenhuma aba com p\xE1gina web aberta (http/https/file) foi encontrada.\nPor favor, abra um site no navegador para selecionar elementos.",
+          type: "warning"
+        });
         return;
       }
       const targetTabId = targetTab.id;
+      this.lastTargetTabId = targetTabId;
+      this.isPickerActive = true;
+      if (targetTab.windowId && chrome.windows?.update) {
+        chrome.windows.update(targetTab.windowId, { focused: true });
+      }
       chrome.tabs.update(targetTabId, { active: true }, () => {
-        chrome.tabs.sendMessage(targetTabId, { action: "START_ELEMENT_PICKER" }, (response) => {
+        chrome.tabs.sendMessage(targetTabId, { action: "OPEN_HTML_ANALYZER", payload: { startPicker: true } }, (response) => {
           const err = chrome.runtime.lastError;
           if (err || !response?.success) {
             if (chrome.scripting?.executeScript) {
@@ -2298,7 +2658,7 @@ var HtmlElementAnalyzer = class {
                   if (chrome.runtime.lastError) {
                     return;
                   }
-                  chrome.tabs.sendMessage(targetTabId, { action: "START_ELEMENT_PICKER" }, () => {
+                  chrome.tabs.sendMessage(targetTabId, { action: "OPEN_HTML_ANALYZER", payload: { startPicker: true } }, () => {
                     void chrome.runtime.lastError;
                   });
                 }
@@ -2310,13 +2670,14 @@ var HtmlElementAnalyzer = class {
     });
   }
   /**
-   * Conecta o ouvinte para receber elementos capturados do Content Script
+   * Conecta o ouvinte para receber elementos capturados do Content Script e atalhos de teclado remotos
    */
   static initMessageListener() {
     if (!chrome.runtime?.onMessage)
       return;
     chrome.runtime.onMessage.addListener((message) => {
       if (message.action === "ELEMENT_PICKED_EVENT") {
+        this.isPickerActive = false;
         const { selector, analysis } = message.payload || {};
         if (selector) {
           if (this.activeCallback) {
@@ -2324,8 +2685,27 @@ var HtmlElementAnalyzer = class {
           }
           this.showAnalysisModal(analysis || { target: { selector, tagName: "ELEMENT", classes: [] }, children: [] });
         }
+      } else if (message.action === "PICKER_STATUS_CHANGED") {
+        this.isPickerActive = !!message.payload?.active;
       }
     });
+    window.addEventListener("keydown", (e) => {
+      if (!this.isPickerActive && e.key !== "Escape")
+        return;
+      const keysToRelay = ["Escape", "Enter", " ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+      if (keysToRelay.includes(e.key)) {
+        if (this.lastTargetTabId && chrome.tabs?.sendMessage) {
+          chrome.tabs.sendMessage(
+            this.lastTargetTabId,
+            { action: "FORWARD_PICKER_KEY", payload: { key: e.key, code: e.code } },
+            () => void chrome.runtime.lastError
+          );
+        }
+        if (e.key === "Escape") {
+          this.isPickerActive = false;
+        }
+      }
+    }, true);
   }
   static panelPos;
   static renderModal() {
@@ -2351,12 +2731,20 @@ var HtmlElementAnalyzer = class {
       overflow: hidden;
     `;
     panel.innerHTML = `
-      <div id="analyzerDragHandle" title="Segure CTRL e arraste para mover" style="padding: 6px 10px; background: #131d35; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; gap: 8px; user-select: none;">
-        <span style="font-size: 12px; font-weight: 700; color: #f8fafc;">\u{1F50D} Analisador HTML <span style="font-weight: 400; color: #64748b; font-size: 10px;">(CTRL + arrastar)</span></span>
-        <button id="btnCloseAnalyzer" title="Fechar e desativar" style="background: transparent; border: none; color: #94a3b8; font-size: 15px; cursor: pointer; padding: 0 4px; border-radius: 4px;">\u2715</button>
+      <div id="analyzerDragHandle" title="Clique e arraste pela barra superior para mover" style="padding: 8px 12px; background: #131d35; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; gap: 8px; user-select: none; cursor: grab;">
+        <span style="font-size: 12px; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+          <span>\u{1F50D}</span> Analisador HTML
+        </span>
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <button id="btnOpenInTabIcon" title="Abrir em Nova Aba Exclusiva" style="background: transparent; border: none; color: #94a3b8; font-size: 13px; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: color 0.15s;">\u29C9</button>
+          <button id="btnCloseAnalyzer" title="Fechar e desativar" style="background: transparent; border: none; color: #94a3b8; font-size: 15px; cursor: pointer; padding: 0 4px; border-radius: 4px; transition: color 0.15s;">\u2715</button>
+        </div>
       </div>
       <div id="analyzerBodyContent" style="padding: 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
-        <button type="button" id="btnPickFromWebPage" class="btn btn-primary" style="background: #3b82f6; border-color: #3b82f6; padding: 6px 10px; font-size: 11px; font-weight: 600; cursor: pointer;">\u{1F3AF} Ativar Mira na P\xE1gina</button>
+        <div style="display: flex; gap: 6px;">
+          <button type="button" id="btnPickFromWebPage" class="btn btn-primary" style="flex: 1; background: #3b82f6; border-color: #3b82f6; padding: 6px 10px; font-size: 11px; font-weight: 600; cursor: pointer;">\u{1F3AF} Ativar Mira na P\xE1gina</button>
+          <button type="button" id="btnOpenDedicatedTab" class="btn btn-secondary" style="padding: 6px 10px; font-size: 11px; white-space: nowrap;">Aba Exclusiva</button>
+        </div>
         <div style="display: flex; gap: 4px;">
           <input type="text" id="analyzerManualInput" placeholder="Seletor CSS (ex: #id, button.btn)" style="flex: 1; min-width: 0; padding: 5px 8px; font-size: 11px; background: #090d16; color: white; border: 1px solid #334155; border-radius: 6px;" />
           <button type="button" id="btnAnalyzeManual" class="btn btn-secondary" style="padding: 5px 10px; font-size: 11px; white-space: nowrap;">Analisar</button>
@@ -2369,6 +2757,8 @@ var HtmlElementAnalyzer = class {
       </div>
     `;
     panel.querySelector("#btnCloseAnalyzer")?.addEventListener("click", () => this.closeModal());
+    panel.querySelector("#btnOpenInTabIcon")?.addEventListener("click", () => this.openInNewTab());
+    panel.querySelector("#btnOpenDedicatedTab")?.addEventListener("click", () => this.openInNewTab());
     panel.querySelector("#btnPickFromWebPage")?.addEventListener("click", () => {
       this.startLivePicker();
     });
@@ -2383,27 +2773,34 @@ var HtmlElementAnalyzer = class {
       if (e.key === "Enter")
         runManual();
     });
-    panel.addEventListener("mousedown", (e) => {
-      if (!e.ctrlKey || e.button !== 0)
-        return;
-      e.preventDefault();
-      const rect = panel.getBoundingClientRect();
-      const offX = e.clientX - rect.left;
-      const offY = e.clientY - rect.top;
-      const onMove = (me) => {
-        const left = Math.max(0, Math.min(window.innerWidth - rect.width, me.clientX - offX));
-        const top = Math.max(0, Math.min(window.innerHeight - 40, me.clientY - offY));
-        panel.style.left = `${left}px`;
-        panel.style.top = `${top}px`;
-        this.panelPos = { left, top };
-      };
-      const onUp = () => {
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-      };
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-    });
+    const dragHandle = panel.querySelector("#analyzerDragHandle");
+    if (dragHandle) {
+      dragHandle.addEventListener("mousedown", (e) => {
+        if (e.button !== 0)
+          return;
+        if (e.target.closest("button"))
+          return;
+        e.preventDefault();
+        dragHandle.style.cursor = "grabbing";
+        const rect = panel.getBoundingClientRect();
+        const offX = e.clientX - rect.left;
+        const offY = e.clientY - rect.top;
+        const onMove = (me) => {
+          const left = Math.max(0, Math.min(window.innerWidth - rect.width, me.clientX - offX));
+          const top = Math.max(0, Math.min(window.innerHeight - 40, me.clientY - offY));
+          panel.style.left = `${left}px`;
+          panel.style.top = `${top}px`;
+          this.panelPos = { left, top };
+        };
+        const onUp = () => {
+          dragHandle.style.cursor = "grab";
+          window.removeEventListener("mousemove", onMove);
+          window.removeEventListener("mouseup", onUp);
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+      });
+    }
     document.body.appendChild(panel);
     this.modalBackdrop = panel;
   }
@@ -2411,6 +2808,7 @@ var HtmlElementAnalyzer = class {
     this.modalBackdrop?.remove();
     document.querySelectorAll(".html-analyzer-modal").forEach((el) => el.remove());
     this.modalBackdrop = void 0;
+    this.isPickerActive = false;
     if (chrome.tabs?.query) {
       chrome.tabs.query({}, (tabs) => {
         tabs.forEach((t) => {
@@ -2610,24 +3008,6 @@ var InspectorInputHelpers = class {
     container.appendChild(group);
   }
   static addCodeEditorInput(container, labelText, language, value, onChange, onNodeDataChanged, showToast2, _height = "200px") {
-    const isExpandedModal = Boolean(container.closest("#expandedNodeModalForm"));
-    if (isExpandedModal) {
-      const group2 = document.createElement("div");
-      group2.className = "form-group code-editor-form-group";
-      const label = document.createElement("label");
-      label.textContent = labelText;
-      group2.appendChild(label);
-      const editor = new CodeEditorComponent({
-        language,
-        value: value || "",
-        onChange,
-        title: labelText,
-        height: "240px"
-      });
-      group2.appendChild(editor.getElement());
-      container.appendChild(group2);
-      return;
-    }
     const group = document.createElement("div");
     group.className = "form-group code-preview-group";
     const langBadgeColor = {
@@ -2641,33 +3021,34 @@ var InspectorInputHelpers = class {
       css: "CSS"
     }[language];
     const linesCount = (value || "").split("\n").length;
-    const previewSnippet = (value || "").trim().split("\n").slice(0, 3).join("\n") || "// (sem c\xF3digo)";
     group.innerHTML = `
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
         <label style="margin-bottom: 0;">${labelText}</label>
-        <span style="font-size: 10px; font-weight: 700; color: ${langBadgeColor}; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px;">${langTitle}</span>
-      </div>
-      <div class="code-field-trigger-card" title="Clique para abrir o editor de c\xF3digo completo sobre o canvas">
-        <div class="code-field-trigger-header">
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${langBadgeColor}" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-            <span style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Editar ${langTitle}</span>
-          </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
           <span class="code-field-line-count" style="font-size: 10px; color: #64748b;">${linesCount} linha${linesCount === 1 ? "" : "s"}</span>
+          <span style="font-size: 10px; font-weight: 700; color: ${langBadgeColor}; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px;">${langTitle}</span>
         </div>
-        <pre class="code-field-preview-code"><code>${this.escapeSnippet(previewSnippet)}</code></pre>
-        <div class="code-field-trigger-footer">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          <span>Abrir Editor sobre o Canvas</span>
-        </div>
+      </div>
+      <div class="code-field-preview-container" style="background: #090d16; border: 1px solid #1e293b; border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: all 0.2s ease; resize: none !important; user-select: none;" title="Clique no c\xF3digo para abrir o editor">
+        <pre class="code-field-preview-code" style="margin: 0; padding: 0; background: transparent; border: none; font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 11px; line-height: 1.5; color: #f1f5f9; max-height: 120px; overflow-y: auto; overflow-x: hidden; white-space: pre-wrap; word-break: break-all; resize: none !important;"><code>${CodeSyntaxHighlighter.highlight(value || "// Clique para abrir o editor de c\xF3digo", language)}</code></pre>
       </div>
     `;
+    const previewContainer = group.querySelector(".code-field-preview-container");
+    previewContainer?.addEventListener("mouseenter", () => {
+      previewContainer.style.borderColor = "#6366f1";
+      previewContainer.style.boxShadow = "0 0 12px rgba(99, 102, 241, 0.2)";
+    });
+    previewContainer?.addEventListener("mouseleave", () => {
+      previewContainer.style.borderColor = "#1e293b";
+      previewContainer.style.boxShadow = "none";
+    });
     const openEditor = () => {
       CodeEditorComponent.openCodeModal({
         title: labelText,
         language,
         value: value || "",
         onSave: (newVal) => {
+          value = newVal;
           onChange(newVal);
           const newLines = (newVal || "").split("\n").length;
           const countEl = group.querySelector(".code-field-line-count");
@@ -2675,8 +3056,7 @@ var InspectorInputHelpers = class {
             countEl.textContent = `${newLines} linha${newLines === 1 ? "" : "s"}`;
           const codeEl = group.querySelector(".code-field-preview-code code");
           if (codeEl) {
-            const snip = (newVal || "").trim().split("\n").slice(0, 3).join("\n") || "// (sem c\xF3digo)";
-            codeEl.innerHTML = this.escapeSnippet(snip);
+            codeEl.innerHTML = CodeSyntaxHighlighter.highlight(newVal || "// Clique para abrir o editor de c\xF3digo", language);
           }
           if (onNodeDataChanged)
             onNodeDataChanged();
@@ -2685,7 +3065,7 @@ var InspectorInputHelpers = class {
         }
       });
     };
-    group.querySelector(".code-field-trigger-card")?.addEventListener("click", openEditor);
+    previewContainer?.addEventListener("click", openEditor);
     container.appendChild(group);
   }
   static escapeSnippet(str) {
@@ -2694,7 +3074,7 @@ var InspectorInputHelpers = class {
 };
 
 // src/editor/modules/inspector/flowProperties.ts
-var FlowPropertiesRenderer = class {
+var FlowPropertiesRenderer = class _FlowPropertiesRenderer {
   static renderDelay(form, data, ctx) {
     InspectorInputHelpers.addCheckboxInput(form, "Usar Tempo Rand\xF4mico", !!data.isRandom, (val) => {
       data.isRandom = val;
@@ -2747,11 +3127,21 @@ var FlowPropertiesRenderer = class {
       data.cases = [];
     data.cases.forEach((c, index) => {
       this.ensureConditionGroups(c);
+      if (index > 0) {
+        const pathDivider = document.createElement("div");
+        pathDivider.style.cssText = "display: flex; align-items: center; justify-content: center; gap: 8px; margin: 4px 0;";
+        pathDivider.innerHTML = `
+          <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #334155, #334155);"></div>
+          <span style="font-size: 8px; font-weight: 800; color: #64748b; letter-spacing: 0.8px; text-transform: uppercase; background: #0b1120; padding: 2px 8px; border-radius: 4px; border: 1px solid #1e293b;">CAMINHO ALTERNATIVO</span>
+          <div style="flex: 1; height: 1px; background: linear-gradient(90deg, #334155, #334155, transparent);"></div>
+        `;
+        casesContainer.appendChild(pathDivider);
+      }
       const isExpanded = ctx.expandedCaseIndices.has(index);
       const caseCard = document.createElement("div");
       caseCard.className = "switch-case-card-item";
       caseCard.setAttribute("data-case-index", String(index));
-      caseCard.style.cssText = `background: #0f172a; border: 1px solid ${isExpanded ? "#3b82f6" : "#1e293b"}; border-radius: 6px; overflow: hidden; transition: border-color 0.15s;`;
+      caseCard.style.cssText = `background: #0f172a; border: 1px solid ${isExpanded ? "#3b82f6" : "#1e293b"}; border-left: 4px solid ${isExpanded ? "#3b82f6" : "#6366f1"}; border-radius: 6px; overflow: hidden; transition: border-color 0.15s;`;
       const accordionHeader = document.createElement("div");
       accordionHeader.style.cssText = `padding: 8px 10px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; background: ${isExpanded ? "#1e293b70" : "#0f172a"}; user-select: none; gap: 8px;`;
       const headerLeft = document.createElement("div");
@@ -2761,21 +3151,84 @@ var FlowPropertiesRenderer = class {
       iconSpan.textContent = isExpanded ? "\u25BC" : "\u25B6";
       const titleSpan = document.createElement("span");
       titleSpan.style.cssText = `font-size: 12px; font-weight: ${isExpanded ? "600" : "500"}; color: ${isExpanded ? "#60a5fa" : "#cbd5e1"}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;`;
-      titleSpan.textContent = c.label || `Caso #${index + 1}`;
+      titleSpan.textContent = c.label || `Caminho #${index + 1}`;
       headerLeft.appendChild(iconSpan);
       headerLeft.appendChild(titleSpan);
+      const headerActions = document.createElement("div");
+      headerActions.style.cssText = "display: flex; align-items: center; gap: 4px;";
+      const btnExpandPath = document.createElement("button");
+      btnExpandPath.type = "button";
+      btnExpandPath.title = "Abrir editor expandido deste caminho (com seletor de caminhos)";
+      btnExpandPath.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      `;
+      btnExpandPath.style.cssText = "background: transparent; color: #818cf8; border: none; font-size: 12px; cursor: pointer; line-height: 1; padding: 4px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; transition: color 0.15s;";
+      btnExpandPath.addEventListener("mouseenter", () => btnExpandPath.style.color = "#c7d2fe");
+      btnExpandPath.addEventListener("mouseleave", () => btnExpandPath.style.color = "#818cf8");
+      btnExpandPath.addEventListener("click", (e) => {
+        e.stopPropagation();
+        _FlowPropertiesRenderer.openExpandedPathModal(data, index, ctx);
+      });
+      const btnRename = document.createElement("button");
+      btnRename.type = "button";
+      btnRename.title = "Renomear este caminho";
+      btnRename.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      `;
+      btnRename.style.cssText = "background: transparent; color: #94a3b8; border: none; font-size: 12px; cursor: pointer; line-height: 1; padding: 4px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; transition: color 0.15s;";
+      btnRename.addEventListener("mouseenter", () => btnRename.style.color = "#38bdf8");
+      btnRename.addEventListener("mouseleave", () => btnRename.style.color = "#94a3b8");
+      btnRename.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const currentName = c.label || `Caminho #${index + 1}`;
+        const newName = await DialogMenu.prompt({
+          title: "Renomear Caminho Condicional",
+          message: "Digite o novo nome para este caminho:",
+          defaultValue: currentName,
+          placeholder: "Ex: Sucesso, Status 200...",
+          confirmText: "Salvar Nome"
+        });
+        if (newName !== null && newName.trim()) {
+          c.label = newName.trim();
+          titleSpan.textContent = c.label;
+          ctx.onNodeDataChanged();
+          ctx.renderInspector();
+        }
+      });
       const btnDel = document.createElement("button");
       btnDel.type = "button";
       btnDel.innerHTML = "&times;";
       btnDel.title = "Remover este caminho";
-      btnDel.style.cssText = "background: transparent; color: #ef4444; border: none; font-size: 16px; cursor: pointer; line-height: 1; padding: 2px 4px;";
-      btnDel.addEventListener("click", (e) => {
+      btnDel.style.cssText = "background: transparent; color: #ef4444; border: none; font-size: 16px; cursor: pointer; line-height: 1; padding: 2px 4px; transition: opacity 0.15s;";
+      btnDel.addEventListener("click", async (e) => {
         e.stopPropagation();
-        data.cases.splice(index, 1);
-        ctx.renderInspector();
+        const caseName = c.label || `Caminho #${index + 1}`;
+        const confirmed = await DialogMenu.confirm({
+          title: "Excluir Caminho do Switch",
+          message: `Deseja realmente excluir o caminho "${caseName}"? Esta a\xE7\xE3o remover\xE1 o caminho e todas as condi\xE7\xF5es associadas a ele.`,
+          confirmText: "Excluir Caminho",
+          isDanger: true
+        });
+        if (confirmed) {
+          data.cases.splice(index, 1);
+          ctx.onNodeDataChanged();
+          ctx.renderInspector();
+          ctx.showToast("Caminho removido com sucesso.", "info");
+        }
       });
+      headerActions.appendChild(btnExpandPath);
+      headerActions.appendChild(btnRename);
+      headerActions.appendChild(btnDel);
       accordionHeader.appendChild(headerLeft);
-      accordionHeader.appendChild(btnDel);
+      accordionHeader.appendChild(headerActions);
       accordionHeader.addEventListener("click", () => {
         if (ctx.expandedCaseIndices.has(index)) {
           ctx.expandedCaseIndices.delete(index);
@@ -2788,11 +3241,6 @@ var FlowPropertiesRenderer = class {
       if (isExpanded) {
         const body = document.createElement("div");
         body.style.cssText = "padding: 10px; border-top: 1px solid #1e293b; display: flex; flex-direction: column; gap: 8px;";
-        InspectorInputHelpers.addTextInput(body, "T\xEDtulo do Caminho", c.label || "", (val) => {
-          c.label = val;
-          titleSpan.textContent = val || `Caso #${index + 1}`;
-          ctx.onNodeDataChanged();
-        });
         const groupsBuilder = this.renderConditionGroupsBuilder(c, ctx);
         body.appendChild(groupsBuilder);
         caseCard.appendChild(body);
@@ -2808,7 +3256,7 @@ var FlowPropertiesRenderer = class {
       const newIdx = data.cases.length;
       data.cases.push({
         id: `case_${Date.now()}`,
-        label: `Caso #${newIdx + 1}`,
+        label: `Caminho #${newIdx + 1}`,
         conditionGroups: [
           {
             id: `grp_${Date.now()}_0`,
@@ -2985,21 +3433,22 @@ var FlowPropertiesRenderer = class {
       container.appendChild(groupEl);
       if (!isLastGroup) {
         const connectorDiv = document.createElement("div");
-        connectorDiv.style.cssText = "display: flex; align-items: center; justify-content: center; gap: 8px; margin: 4px 0;";
+        connectorDiv.className = "group-separator";
+        connectorDiv.style.cssText = "display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0;";
         const lineLeft = document.createElement("div");
-        lineLeft.style.cssText = "flex: 1; height: 1px; background: #334155;";
+        lineLeft.style.cssText = "flex: 1; height: 0; border-top: 2px dashed #6366f190;";
         const lineRight = document.createElement("div");
-        lineRight.style.cssText = "flex: 1; height: 1px; background: #334155;";
+        lineRight.style.cssText = "flex: 1; height: 0; border-top: 2px dashed #6366f190;";
         const groupConnectorBtn = document.createElement("button");
         groupConnectorBtn.type = "button";
-        groupConnectorBtn.title = "Clique para alternar: E / OU / N\xE3o E / N\xE3o OU";
+        groupConnectorBtn.title = "Clique para alternar operador entre grupos: E / OU / N\xE3o E / N\xE3o OU";
         const order = ["and", "or", "and_not", "or_not"];
-        const labels = { and: "E", or: "OU", and_not: "N\xE3o E", or_not: "N\xE3o OU" };
-        const colors = { and: "#38bdf8", or: "#f59e0b", and_not: "#ef4444", or_not: "#ec4899" };
+        const labels = { and: "E", or: "OU", and_not: "N\xC3O E", or_not: "N\xC3O OU" };
+        const colors = { and: "#818cf8", or: "#f59e0b", and_not: "#ef4444", or_not: "#ec4899" };
         const refreshGroupBtn = () => {
           const cur = order.includes(group.nextOperator) ? group.nextOperator : "or";
-          groupConnectorBtn.textContent = labels[cur];
-          groupConnectorBtn.style.cssText = `padding: 2px 14px; font-size: 10px; font-weight: 700; background: #1e293b; color: ${colors[cur]}; border: 1px solid ${colors[cur]}; border-radius: 12px; cursor: pointer; text-transform: uppercase; min-width: 60px;`;
+          groupConnectorBtn.textContent = `GRUPO: ${labels[cur]}`;
+          groupConnectorBtn.style.cssText = `padding: 4px 14px; font-size: 10px; font-weight: 800; background: #1e1b4b; color: ${colors[cur]}; border: 1.5px solid ${colors[cur]}; border-radius: 16px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);`;
         };
         refreshGroupBtn();
         groupConnectorBtn.addEventListener("click", () => {
@@ -3049,21 +3498,22 @@ var FlowPropertiesRenderer = class {
    */
   static createConnectorButton(rule, ctx) {
     const order = ["and", "or", "and_not", "or_not"];
-    const labels = { and: "E", or: "OU", and_not: "N\xE3o E", or_not: "N\xE3o OU" };
+    const labels = { and: "E", or: "OU", and_not: "N\xC3O E", or_not: "N\xC3O OU" };
     const colors = { and: "#38bdf8", or: "#f59e0b", and_not: "#ef4444", or_not: "#ec4899" };
     const wrap = document.createElement("div");
-    wrap.style.cssText = "display: flex; align-items: center; justify-content: center; gap: 8px;";
+    wrap.className = "expression-separator";
+    wrap.style.cssText = "display: flex; align-items: center; justify-content: center; gap: 8px; margin: 3px 0;";
     const lineL = document.createElement("div");
-    lineL.style.cssText = "flex: 1; height: 1px; background: #334155;";
+    lineL.style.cssText = "flex: 1; height: 0; border-top: 1px dotted rgba(56, 189, 248, 0.45);";
     const lineR = document.createElement("div");
-    lineR.style.cssText = "flex: 1; height: 1px; background: #334155;";
+    lineR.style.cssText = "flex: 1; height: 0; border-top: 1px dotted rgba(56, 189, 248, 0.45);";
     const btn = document.createElement("button");
     btn.type = "button";
     btn.title = "Clique para alternar: E / OU / N\xE3o E / N\xE3o OU";
     const refresh = () => {
       const c = order.includes(rule.connector) ? rule.connector : "and";
       btn.textContent = labels[c];
-      btn.style.cssText = `padding: 2px 14px; font-size: 10px; font-weight: 700; background: #1e293b; color: ${colors[c]}; border: 1px solid ${colors[c]}; border-radius: 12px; cursor: pointer; text-transform: uppercase; min-width: 60px;`;
+      btn.style.cssText = `padding: 2px 10px; font-size: 9px; font-weight: 700; background: #082f49; color: ${colors[c]}; border: 1px solid ${colors[c]}; border-radius: 8px; cursor: pointer; text-transform: uppercase;`;
     };
     refresh();
     btn.addEventListener("click", () => {
@@ -3124,50 +3574,29 @@ var FlowPropertiesRenderer = class {
     const jsFields = document.createElement("div");
     jsFields.style.cssText = `display: ${mode === "js_eval" ? "flex" : "none"}; flex-direction: column; gap: 4px;`;
     jsFields.innerHTML = `
-      <div style="display: flex; gap: 4px; align-items: flex-start;">
-        <textarea class="rule-js-code" rows="4" placeholder="Express\xE3o JS (ex: status === 200)" style="flex: 1; min-height: 84px; line-height: 1.5; padding: 6px 8px; font-size: 11px; font-family: monospace; background: #172033; color: #38bdf8; border: 1px solid #243049; border-radius: 4px; resize: vertical;">${InspectorInputHelpers.escapeSnippet(rule.jsExpression || "")}</textarea>
-        <button type="button" class="btn-open-rule-editor" title="Abrir no editor JS completo sobre o canvas" style="padding: 6px 8px; background: rgba(99, 102, 241, 0.2); border: 1px solid #6366f1; color: #818cf8; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-        </button>
+      <div class="rule-code-preview" style="background: #090d16; border: 1px solid #243049; border-radius: 6px; padding: 8px 10px; font-family: var(--font-mono, monospace); font-size: 11px; line-height: 1.5; color: #f1f5f9; cursor: pointer; resize: none !important; max-height: 100px; overflow-y: auto; overflow-x: hidden; white-space: pre-wrap; word-break: break-all; transition: border-color 0.2s, box-shadow 0.2s;" title="Clique no c\xF3digo para editar a express\xE3o JS">
+        ${CodeSyntaxHighlighter.highlight(rule.jsExpression || "// Clique no c\xF3digo para editar express\xE3o JS", "javascript")}
       </div>
     `;
-    modeSelect.addEventListener("change", (e) => {
-      rule.evaluationMode = e.target.value;
-      if (rule.evaluationMode === "js_eval") {
-        compFields.style.display = "none";
-        jsFields.style.display = "flex";
-      } else {
-        compFields.style.display = "flex";
-        jsFields.style.display = "none";
-      }
-      ctx.onNodeDataChanged();
+    const codePreviewEl = jsFields.querySelector(".rule-code-preview");
+    codePreviewEl?.addEventListener("mouseenter", () => {
+      codePreviewEl.style.borderColor = "#6366f1";
+      codePreviewEl.style.boxShadow = "0 0 10px rgba(99, 102, 241, 0.25)";
     });
-    compFields.querySelector(".rule-left")?.addEventListener("input", (e) => {
-      rule.leftOperand = e.target.value;
-      ctx.onNodeDataChanged();
+    codePreviewEl?.addEventListener("mouseleave", () => {
+      codePreviewEl.style.borderColor = "#243049";
+      codePreviewEl.style.boxShadow = "none";
     });
-    compFields.querySelector(".rule-op")?.addEventListener("change", (e) => {
-      rule.operator = e.target.value;
-      ctx.onNodeDataChanged();
-    });
-    compFields.querySelector(".rule-right")?.addEventListener("input", (e) => {
-      rule.rightOperand = e.target.value;
-      ctx.onNodeDataChanged();
-    });
-    const jsInput = jsFields.querySelector(".rule-js-code");
-    jsInput?.addEventListener("input", (e) => {
-      rule.jsExpression = e.target.value;
-      ctx.onNodeDataChanged();
-    });
-    jsFields.querySelector(".btn-open-rule-editor")?.addEventListener("click", () => {
+    codePreviewEl?.addEventListener("click", () => {
       CodeEditorComponent.openCodeModal({
-        title: `Express\xE3o JavaScript (Regra #${ruleIdx + 1})`,
+        title: `Express\xE3o JavaScript (Express\xE3o #${ruleIdx + 1})`,
         language: "javascript",
         value: rule.jsExpression || "",
         onSave: (newVal) => {
           rule.jsExpression = newVal;
-          if (jsInput)
-            jsInput.value = newVal;
+          if (codePreviewEl) {
+            codePreviewEl.innerHTML = CodeSyntaxHighlighter.highlight(newVal || "// Clique no c\xF3digo para editar express\xE3o JS", "javascript");
+          }
           ctx.onNodeDataChanged();
           ctx.showToast("Express\xE3o JS salva!", "success");
         }
@@ -3252,6 +3681,109 @@ var FlowPropertiesRenderer = class {
       (val) => data.selectorType = val
     );
     InspectorInputHelpers.addNumberInput(form, "Tempo Limite de Espera (ms)", data.timeoutMs ?? 3e3, (val) => data.timeoutMs = val);
+  }
+  /**
+   * Abre um editor expandido exclusivo para o caminho selecionado, permitindo alternar de caminho dentro do editor
+   */
+  static openExpandedPathModal(data, initialPathIndex, ctx) {
+    if (!Array.isArray(data.cases) || data.cases.length === 0)
+      return;
+    let currentIdx = Math.max(0, Math.min(initialPathIndex, data.cases.length - 1));
+    const backdrop = document.createElement("div");
+    backdrop.className = "flow-modal-backdrop switch-path-modal-backdrop";
+    backdrop.style.cssText = `
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(8, 12, 20, 0.82);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100000;
+      padding: 16px;
+      animation: fadeIn 0.15s ease-out;
+    `;
+    const card = document.createElement("div");
+    card.className = "switch-path-modal-card";
+    card.style.cssText = `
+      background: #090d16;
+      border: 1px solid #6366f1;
+      border-radius: 14px;
+      width: 90%;
+      max-width: 920px;
+      height: 84vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.9), 0 0 40px rgba(99, 102, 241, 0.3);
+      overflow: hidden;
+      animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    `;
+    const renderModal = () => {
+      card.innerHTML = "";
+      const header = document.createElement("div");
+      header.style.cssText = "padding: 14px 20px; background: #0e1526; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-shrink: 0;";
+      const headerLeft = document.createElement("div");
+      headerLeft.style.cssText = "display: flex; align-items: center; gap: 12px; flex: 1;";
+      headerLeft.innerHTML = `
+        <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(99, 102, 241, 0.2); border: 1px solid #6366f1; display: flex; align-items: center; justify-content: center; color: #818cf8; flex-shrink: 0;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span style="font-size: 13px; font-weight: 700; color: #f8fafc;">Editor de Caminho:</span>
+          <select id="modalSwitchPathSelect" style="background: #1e293b; border: 1px solid #3b82f6; color: #93c5fd; font-weight: 700; font-size: 12px; padding: 4px 10px; border-radius: 6px; cursor: pointer; outline: none;">
+            ${data.cases.map((c, i) => `<option value="${i}" ${i === currentIdx ? "selected" : ""}>${c.label || `Caminho #${i + 1}`}</option>`).join("")}
+          </select>
+          <span style="font-size: 11px; color: #64748b; margin-left: 6px;">(Alterne entre caminhos diretamente por aqui)</span>
+        </div>
+      `;
+      const btnCloseX = document.createElement("button");
+      btnCloseX.type = "button";
+      btnCloseX.innerHTML = "&times;";
+      btnCloseX.title = "Fechar editor expandido";
+      btnCloseX.style.cssText = "background: transparent; border: none; color: #94a3b8; font-size: 22px; cursor: pointer; line-height: 1; padding: 2px 8px; border-radius: 4px;";
+      btnCloseX.addEventListener("click", closeModal);
+      header.appendChild(headerLeft);
+      header.appendChild(btnCloseX);
+      card.appendChild(header);
+      const body = document.createElement("div");
+      body.style.cssText = "flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px;";
+      const currentPath = data.cases[currentIdx];
+      if (currentPath) {
+        const modalCtx = {
+          ...ctx,
+          renderInspector: () => {
+            renderModal();
+            ctx.renderInspector();
+          },
+          onNodeDataChanged: () => {
+            ctx.onNodeDataChanged();
+          }
+        };
+        const builder = _FlowPropertiesRenderer.renderConditionGroupsBuilder(currentPath, modalCtx);
+        body.appendChild(builder);
+      }
+      card.appendChild(body);
+      const footer = document.createElement("div");
+      footer.style.cssText = "padding: 12px 20px; background: #0e1526; border-top: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;";
+      footer.innerHTML = `
+        <span style="font-size: 11px; color: #64748b;">Todas as altera\xE7\xF5es nas express\xF5es e grupos deste caminho s\xE3o salvas automaticamente.</span>
+        <button id="btnDoneSwitchPathModal" class="btn btn-primary" style="padding: 7px 20px; font-size: 12px; font-weight: 600;">Concluir e Fechar</button>
+      `;
+      footer.querySelector("#btnDoneSwitchPathModal")?.addEventListener("click", closeModal);
+      card.appendChild(footer);
+      card.querySelector("#modalSwitchPathSelect")?.addEventListener("change", (e) => {
+        currentIdx = Number(e.target.value);
+        renderModal();
+      });
+    };
+    const closeModal = () => {
+      backdrop.remove();
+      ctx.renderInspector();
+      ctx.onNodeDataChanged();
+    };
+    backdrop.appendChild(card);
+    document.body.appendChild(backdrop);
+    renderModal();
   }
 };
 
@@ -3594,15 +4126,27 @@ var StartPropertiesRenderer = class {
       btnDel.innerHTML = "&times;";
       btnDel.title = "Remover este gatilho";
       btnDel.style.cssText = "background: transparent; color: #ef4444; border: none; font-size: 16px; cursor: pointer; line-height: 1; padding: 2px 4px;";
-      btnDel.addEventListener("click", (e) => {
+      btnDel.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (data.triggers.length <= 1) {
-          alert("O fluxo deve ter pelo menos 1 forma de disparo!");
+          DialogMenu.alert({
+            title: "Gatilho Obrigat\xF3rio",
+            message: "O fluxo deve ter pelo menos 1 forma de disparo configurada.",
+            type: "warning"
+          });
           return;
         }
-        data.triggers.splice(index, 1);
-        ctx.renderInspector();
-        ctx.onNodeDataChanged?.();
+        const confirmed = await DialogMenu.confirm({
+          title: "Remover Gatilho",
+          message: "Deseja realmente remover este gatilho de disparo?",
+          confirmText: "Remover",
+          isDanger: true
+        });
+        if (confirmed) {
+          data.triggers.splice(index, 1);
+          ctx.renderInspector();
+          ctx.onNodeDataChanged?.();
+        }
       });
       accordionHeader.appendChild(headerLeft);
       accordionHeader.appendChild(btnDel);
@@ -4506,32 +5050,37 @@ var InspectorManager = class {
       this.pendingScrollSelector = scrollToSelector;
     }
     const sidebarRight = document.getElementById("sidebarInspector");
-    const resizerRight = document.getElementById("resizerRight");
+    const sidebarLeft = document.getElementById("sidebarLibrary");
+    const resizerLeft = document.getElementById("resizerLeft");
+    const btnActivityBlocks = document.getElementById("btnActivityBlocks");
+    const btnActivityInspector = document.getElementById("btnActivityInspector");
     const noSelect = document.getElementById("noSelectionMessage");
     const form = document.getElementById("nodePropertiesForm");
     const selectedId = this.callbacks.getSelectedNodeId();
     if (!selectedId) {
-      if (sidebarRight)
-        sidebarRight.classList.add("collapsed");
-      if (resizerRight)
-        resizerRight.style.display = "none";
       noSelect.classList.remove("hidden");
       form.classList.add("hidden");
+      if (resizerLeft)
+        resizerLeft.style.display = "block";
       return;
     }
     const graph = this.callbacks.getGraph();
     const node = graph.nodes.find((n) => n.id === selectedId);
     if (!node) {
-      if (sidebarRight)
-        sidebarRight.classList.add("collapsed");
-      if (resizerRight)
-        resizerRight.style.display = "none";
+      noSelect.classList.remove("hidden");
+      form.classList.add("hidden");
+      if (resizerLeft)
+        resizerLeft.style.display = "block";
       return;
     }
     if (sidebarRight)
       sidebarRight.classList.remove("collapsed");
-    if (resizerRight)
-      resizerRight.style.display = "block";
+    if (sidebarLeft)
+      sidebarLeft.classList.add("collapsed");
+    btnActivityBlocks?.classList.remove("active");
+    btnActivityInspector?.classList.add("active");
+    if (resizerLeft)
+      resizerLeft.style.display = "block";
     noSelect.classList.add("hidden");
     form.classList.remove("hidden");
     this.populatePropertiesForm(form, node);
@@ -4943,85 +5492,17 @@ var InspectorManager = class {
     group.querySelector("textarea")?.addEventListener("input", (e) => onChange(e.target.value));
     container.appendChild(group);
   }
-  addCodeEditorInput(container, labelText, language, value, onChange, _height = "200px") {
-    const isExpandedModal = Boolean(container.closest("#expandedNodeModalForm"));
-    if (isExpandedModal) {
-      const group2 = document.createElement("div");
-      group2.className = "form-group code-editor-form-group";
-      const label = document.createElement("label");
-      label.textContent = labelText;
-      group2.appendChild(label);
-      const editor = new CodeEditorComponent({
-        language,
-        value: value || "",
-        onChange,
-        title: labelText,
-        height: "240px"
-      });
-      group2.appendChild(editor.getElement());
-      container.appendChild(group2);
-      return;
-    }
-    const group = document.createElement("div");
-    group.className = "form-group code-preview-group";
-    const langBadgeColor = {
-      javascript: "#f59e0b",
-      html: "#ec4899",
-      css: "#06b6d4"
-    }[language];
-    const langTitle = {
-      javascript: "JS",
-      html: "HTML",
-      css: "CSS"
-    }[language];
-    const linesCount = (value || "").split("\n").length;
-    const previewSnippet = (value || "").trim().split("\n").slice(0, 3).join("\n") || "// (sem c\xF3digo)";
-    group.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-        <label style="margin-bottom: 0;">${labelText}</label>
-        <span style="font-size: 10px; font-weight: 700; color: ${langBadgeColor}; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px;">${langTitle}</span>
-      </div>
-      <div class="code-field-trigger-card" title="Clique para abrir o editor de c\xF3digo completo sobre o canvas">
-        <div class="code-field-trigger-header">
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${langBadgeColor}" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-            <span style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Editar ${langTitle}</span>
-          </div>
-          <span class="code-field-line-count" style="font-size: 10px; color: #64748b;">${linesCount} linha${linesCount === 1 ? "" : "s"}</span>
-        </div>
-        <pre class="code-field-preview-code"><code>${this.escapeSnippet(previewSnippet)}</code></pre>
-        <div class="code-field-trigger-footer">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          <span>Abrir Editor sobre o Canvas</span>
-        </div>
-      </div>
-    `;
-    const openEditor = () => {
-      CodeEditorComponent.openCodeModal({
-        title: labelText,
-        language,
-        value: value || "",
-        onSave: (newVal) => {
-          onChange(newVal);
-          const newLines = (newVal || "").split("\n").length;
-          const countEl = group.querySelector(".code-field-line-count");
-          if (countEl)
-            countEl.textContent = `${newLines} linha${newLines === 1 ? "" : "s"}`;
-          const codeEl = group.querySelector(".code-field-preview-code code");
-          if (codeEl) {
-            const snip = (newVal || "").trim().split("\n").slice(0, 3).join("\n") || "// (sem c\xF3digo)";
-            codeEl.innerHTML = this.escapeSnippet(snip);
-          }
-          this.callbacks.onNodeDataChanged();
-          this.callbacks.showToast("C\xF3digo salvo com sucesso!", "success");
-        }
-      });
-    };
-    group.querySelector(".code-field-trigger-card")?.addEventListener("click", openEditor);
-    container.appendChild(group);
-  }
-  escapeSnippet(str) {
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  addCodeEditorInput(container, labelText, language, value, onChange, height = "200px") {
+    InspectorInputHelpers.addCodeEditorInput(
+      container,
+      labelText,
+      language,
+      value,
+      onChange,
+      this.callbacks.onNodeDataChanged,
+      this.callbacks.showToast,
+      height
+    );
   }
   /**
    * Garante que o elemento recém expandido na barra lateral direita fique visível rolando a barra
@@ -5650,7 +6131,7 @@ var CanvasManager = class {
       let codeBadgeHtml = "";
       const hasJsRule = (rules) => Array.isArray(rules) && rules.some((r) => r.evaluationMode === "js_eval");
       const hasJsInGroups = (groups) => Array.isArray(groups) && groups.some((g) => hasJsRule(g.rules));
-      const isCodeNode = ["inject_javascript", "inject_html", "inject_css", "web_component"].includes(node.type) || node.type === "for_loop" && node.data.loopType === "js_generator" || node.type === "set_variable" && node.data.evaluationType === "js_eval" || node.type === "while_loop" && (hasJsRule(node.data.rules) || hasJsInGroups(node.data.conditionGroups)) || node.type === "switch" && Array.isArray(node.data.cases) && node.data.cases.some((c) => hasJsRule(c.rules) || hasJsInGroups(c.conditionGroups));
+      const isCodeNode = ["inject_javascript", "inject_html", "inject_css", "web_component"].includes(node.type) || node.type === "for_loop" && node.data.loopType === "js_generator" || node.type === "set_variable" && node.data.evaluationType === "js_eval" || node.type === "while_loop" && (hasJsRule(node.data.rules) || hasJsInGroups(node.data.conditionGroups));
       if (isCodeNode) {
         const langMap = {
           inject_javascript: { label: "Editar JS", color: "#f59e0b" },
@@ -5659,8 +6140,7 @@ var CanvasManager = class {
           web_component: { label: "Editar Componente", color: "#8b5cf6" },
           for_loop: { label: "Editar JS", color: "#f59e0b" },
           set_variable: { label: "Editar Express\xE3o JS", color: "#f59e0b" },
-          while_loop: { label: "Editar Condi\xE7\xE3o JS", color: "#f59e0b" },
-          switch: { label: "Editar Condi\xE7\xE3o JS", color: "#f59e0b" }
+          while_loop: { label: "Editar Condi\xE7\xE3o JS", color: "#f59e0b" }
         };
         const meta = langMap[node.type] || { label: "Editar C\xF3digo", color: "#6366f1" };
         codeBadgeHtml = `
@@ -5878,7 +6358,7 @@ var CanvasManager = class {
               this.callbacks.showToast("Express\xE3o JS salva!", "success");
             }
           });
-        } else if (node.type === "while_loop" || node.type === "switch" || node.type === "web_component") {
+        } else if (node.type === "while_loop" || node.type === "web_component") {
           this.callbacks.onOpenNodeModal?.(node.id);
         }
       });
@@ -6135,15 +6615,18 @@ var CanvasManager = class {
       },
       { passive: false }
     );
-    document.getElementById("btnZoomIn")?.addEventListener("click", () => {
+    document.getElementById("btnZoomIn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
       const rect = canvas.getBoundingClientRect();
       this.setZoom(this.zoom * 1.2, rect.width / 2, rect.height / 2);
     });
-    document.getElementById("btnZoomOut")?.addEventListener("click", () => {
+    document.getElementById("btnZoomOut")?.addEventListener("click", (e) => {
+      e.stopPropagation();
       const rect = canvas.getBoundingClientRect();
       this.setZoom(this.zoom / 1.2, rect.width / 2, rect.height / 2);
     });
-    document.getElementById("btnZoomReset")?.addEventListener("click", () => {
+    document.getElementById("btnZoomReset")?.addEventListener("click", (e) => {
+      e.stopPropagation();
       this.resetTransform();
     });
   }
@@ -6158,6 +6641,11 @@ var WorkflowTabManager = class {
   savedAutomations = [];
   openTabs = [];
   activeTabId = "dashboard";
+  isSettingsTabOpen = false;
+  isDashboardTabOpen = true;
+  cleanFlowName(name) {
+    return (name || "Sem T\xEDtulo").replace(/\.(webautomation\.json|json)$/i, "").trim() || "Sem T\xEDtulo";
+  }
   getSavedAutomations() {
     return this.savedAutomations;
   }
@@ -6174,7 +6662,48 @@ var WorkflowTabManager = class {
     this.activeTabId = id;
     this.renderTabs();
   }
+  openDashboardTab() {
+    this.isDashboardTabOpen = true;
+    this.activeTabId = "dashboard";
+    this.callbacks.onViewChange("dashboard");
+    this.renderTabs();
+  }
+  closeDashboardTab() {
+    this.isDashboardTabOpen = false;
+    if (this.activeTabId === "dashboard") {
+      if (this.openTabs.length > 0) {
+        const next = this.openTabs[this.openTabs.length - 1];
+        this.callbacks.onOpenFlow(next);
+      } else if (this.isSettingsTabOpen) {
+        this.openSettingsTab();
+      }
+    }
+    this.renderTabs();
+  }
+  openSettingsTab() {
+    this.isSettingsTabOpen = true;
+    this.activeTabId = "settings";
+    this.callbacks.onViewChange("settings");
+    this.renderTabs();
+  }
+  closeSettingsTab() {
+    this.isSettingsTabOpen = false;
+    if (this.activeTabId === "settings") {
+      if (this.openTabs.length > 0) {
+        const next = this.openTabs[this.openTabs.length - 1];
+        this.callbacks.onOpenFlow(next);
+      } else if (this.isDashboardTabOpen) {
+        this.openDashboardTab();
+      } else {
+        this.openDashboardTab();
+      }
+    }
+    this.renderTabs();
+  }
   registerOpenTab(graph) {
+    if (graph.metadata?.name) {
+      graph.metadata.name = this.cleanFlowName(graph.metadata.name);
+    }
     const existing = this.openTabs.find((t) => t.metadata?.id === graph.metadata?.id);
     if (!existing) {
       this.openTabs.push(graph);
@@ -6186,6 +6715,9 @@ var WorkflowTabManager = class {
     this.renderTabs();
   }
   updateFlowInTabsAndSaved(graph) {
+    if (graph.metadata?.name) {
+      graph.metadata.name = this.cleanFlowName(graph.metadata.name);
+    }
     const sIdx = this.savedAutomations.findIndex((a) => a.metadata.id === graph.metadata.id);
     if (sIdx >= 0) {
       this.savedAutomations[sIdx] = JSON.parse(JSON.stringify(graph));
@@ -6201,16 +6733,31 @@ var WorkflowTabManager = class {
   async loadFromStorage(checkUrlParam = true) {
     if (chrome.storage?.local) {
       const data = await chrome.storage.local.get("web_automations");
-      this.savedAutomations = data.web_automations || [];
+      this.savedAutomations = (data.web_automations || []).map((a) => {
+        if (a.metadata?.name)
+          a.metadata.name = this.cleanFlowName(a.metadata.name);
+        return a;
+      });
       if (this.savedAutomations.length === 0) {
-        this.savedAutomations = [JSON.parse(JSON.stringify(DEFAULT_AUTOMATION))];
+        const def = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
+        def.metadata.name = this.cleanFlowName(def.metadata.name);
+        this.savedAutomations = [def];
         await chrome.storage.local.set({ web_automations: this.savedAutomations });
       }
     } else {
-      this.savedAutomations = [JSON.parse(JSON.stringify(DEFAULT_AUTOMATION))];
+      const def = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
+      def.metadata.name = this.cleanFlowName(def.metadata.name);
+      this.savedAutomations = [def];
     }
+    this.renderDashboard();
+    this.renderTabs();
     if (checkUrlParam) {
       const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get("tab");
+      if (tabParam === "settings") {
+        this.openSettingsTab();
+        return;
+      }
       const flowId = urlParams.get("flowId");
       if (flowId) {
         const matched = this.savedAutomations.find((a) => a.metadata?.id === flowId);
@@ -6222,25 +6769,43 @@ var WorkflowTabManager = class {
         }
       }
     }
-    this.renderDashboard();
-    this.renderTabs();
   }
   renderTabs() {
-    const tabHome = document.getElementById("tabHomeBtn");
-    if (tabHome) {
-      tabHome.classList.toggle("active", this.activeTabId === "dashboard");
-    }
     const container = document.getElementById("workflowTabsContainer");
     if (!container)
       return;
     container.innerHTML = "";
+    if (this.isDashboardTabOpen) {
+      const homeTab = document.createElement("div");
+      const isHomeActive = this.activeTabId === "dashboard";
+      homeTab.className = `app-tab-item tab-home ${isHomeActive ? "active" : ""}`;
+      homeTab.title = "In\xEDcio (Gerenciador de Fluxos)";
+      homeTab.innerHTML = `
+        <span class="tab-home-icon" style="display:inline-flex;align-items:center;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </span>
+        <span class="tab-label">In\xEDcio</span>
+        <span class="app-tab-close" data-id="dashboard" title="Fechar aba In\xEDcio">\u2715</span>
+      `;
+      homeTab.addEventListener("click", (e) => {
+        if (e.target.classList.contains("app-tab-close"))
+          return;
+        this.openDashboardTab();
+      });
+      homeTab.querySelector(".app-tab-close")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.closeDashboardTab();
+      });
+      container.appendChild(homeTab);
+    }
     this.openTabs.forEach((flow) => {
       const tabEl = document.createElement("div");
       const isActive = this.activeTabId === flow.metadata?.id;
       tabEl.className = `app-tab-item ${isActive ? "active" : ""}`;
-      tabEl.title = flow.metadata?.name || "Fluxo";
+      const titleClean = this.cleanFlowName(flow.metadata?.name);
+      tabEl.title = titleClean;
       tabEl.innerHTML = `
-        <span class="tab-label">${flow.metadata?.name || "Sem T\xEDtulo"}</span>
+        <span class="tab-label">${titleClean}</span>
         <span class="app-tab-close" data-id="${flow.metadata?.id}" title="Fechar aba">\u2715</span>
       `;
       tabEl.addEventListener("click", (e) => {
@@ -6254,6 +6819,26 @@ var WorkflowTabManager = class {
       });
       container.appendChild(tabEl);
     });
+    if (this.isSettingsTabOpen) {
+      const settingsTab = document.createElement("div");
+      const isSettingsActive = this.activeTabId === "settings";
+      settingsTab.className = `app-tab-item ${isSettingsActive ? "active" : ""}`;
+      settingsTab.title = "Configura\xE7\xF5es do Visual Flow Studio";
+      settingsTab.innerHTML = `
+        <span class="tab-label">\u2699\uFE0F Configura\xE7\xF5es</span>
+        <span class="app-tab-close" data-id="settings" title="Fechar aba">\u2715</span>
+      `;
+      settingsTab.addEventListener("click", (e) => {
+        if (e.target.classList.contains("app-tab-close"))
+          return;
+        this.openSettingsTab();
+      });
+      settingsTab.querySelector(".app-tab-close")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.closeSettingsTab();
+      });
+      container.appendChild(settingsTab);
+    }
   }
   closeTab(flowId) {
     const idx = this.openTabs.findIndex((t) => t.metadata?.id === flowId);
@@ -6264,9 +6849,12 @@ var WorkflowTabManager = class {
       if (this.openTabs.length > 0) {
         const nextFlow = this.openTabs[Math.max(0, idx - 1)];
         this.callbacks.onOpenFlow(nextFlow);
+      } else if (this.isDashboardTabOpen) {
+        this.openDashboardTab();
+      } else if (this.isSettingsTabOpen) {
+        this.openSettingsTab();
       } else {
-        this.activeTabId = "dashboard";
-        this.callbacks.onViewChange("dashboard");
+        this.openDashboardTab();
       }
     }
     this.renderTabs();
@@ -6311,7 +6899,7 @@ var WorkflowTabManager = class {
       card.innerHTML = `
         <div>
           <div class="flow-card-header">
-            <h3 class="flow-card-title">${auto.metadata?.name || "Sem T\xEDtulo"}</h3>
+            <h3 class="flow-card-title">${this.cleanFlowName(auto.metadata?.name)}</h3>
             <span class="flow-tag">${triggerLabel}</span>
           </div>
           <p class="flow-card-desc">${auto.metadata?.description || "Fluxo de automa\xE7\xE3o visual."}</p>
@@ -6352,7 +6940,13 @@ var WorkflowTabManager = class {
       });
       card.querySelector(".delete-flow-btn")?.addEventListener("click", async (e) => {
         e.stopPropagation();
-        if (confirm(`Deseja realmente excluir a automa\xE7\xE3o "${auto.metadata?.name}"?`)) {
+        const confirmed = await DialogMenu.confirm({
+          title: "Excluir Automa\xE7\xE3o",
+          message: `Deseja realmente excluir a automa\xE7\xE3o "${auto.metadata?.name}"? Esta a\xE7\xE3o remover\xE1 o fluxo do storage local.`,
+          confirmText: "Excluir",
+          isDanger: true
+        });
+        if (confirmed) {
           this.savedAutomations = this.savedAutomations.filter((a) => a.metadata.id !== auto.metadata.id);
           this.closeTab(auto.metadata.id);
           if (chrome.storage?.local) {
@@ -6366,12 +6960,6 @@ var WorkflowTabManager = class {
     });
   }
   initTabsUI() {
-    const tabHome = document.getElementById("tabHomeBtn");
-    tabHome?.addEventListener("click", () => {
-      this.activeTabId = "dashboard";
-      this.callbacks.onViewChange("dashboard");
-      this.renderTabs();
-    });
   }
 };
 
@@ -6460,264 +7048,6 @@ function sanitizeGraph(graph) {
   return clone;
 }
 
-// src/editor/modules/flowSettingsModal.ts
-var FlowSettingsModal = class {
-  static open(onSaveCallback) {
-    const existing = document.querySelector(".flow-settings-modal-backdrop");
-    existing?.remove();
-    chrome.storage.local.get("floating_buttons_layout_settings", (stored) => {
-      const currentConfig = stored.floating_buttons_layout_settings || {
-        stackDirection: "vertical",
-        maxColumns: 3,
-        maxRows: 5,
-        gap: 10
-      };
-      const backdrop = document.createElement("div");
-      backdrop.className = "flow-modal-backdrop flow-settings-modal-backdrop";
-      backdrop.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(8, 12, 20, 0.8);
-        backdrop-filter: blur(8px);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 100000;
-        padding: 16px;
-        font-family: var(--font-sans, system-ui, sans-serif);
-        animation: fadeIn 0.15s ease-out;
-      `;
-      let stackDirection = currentConfig.stackDirection || "vertical";
-      let maxColumns = currentConfig.maxColumns ?? 3;
-      let maxRows = currentConfig.maxRows ?? 5;
-      let gap = currentConfig.gap ?? 10;
-      const render = () => {
-        backdrop.innerHTML = `
-          <div class="flow-settings-card" style="
-            background: #0f172a;
-            border: 1px solid #3b82f6;
-            border-radius: 14px;
-            max-width: 540px;
-            width: 100%;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75), 0 0 25px rgba(59, 130, 246, 0.2);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-          ">
-            <!-- Header -->
-            <div style="padding: 16px 20px; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; background: #131d35;">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(59, 130, 246, 0.2); color: #60a5fa; display: flex; align-items: center; justify-content: center; font-size: 16px;">
-                  \u2699\uFE0F
-                </div>
-                <div>
-                  <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #f8fafc;">Configura\xE7\xF5es do Visual Flow</h3>
-                  <p style="margin: 2px 0 0; font-size: 12px; color: #94a3b8;">Comportamento e empilhamento dos bot\xF5es flutuantes</p>
-                </div>
-              </div>
-              <button id="btnSettingsCloseX" style="background: transparent; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 6px;">\u2715</button>
-            </div>
-
-            <!-- Body -->
-            <div style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
-              <!-- Se\xE7\xE3o Bot\xF5es Flutuantes Multi-Execu\xE7\xE3o -->
-              <div style="background: #090d16; border: 1px solid #1e293b; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px;">
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <span style="font-size: 14px;">\u{1F5C2}\uFE0F</span>
-                  <span style="font-size: 13px; font-weight: 700; color: #e2e8f0;">Container de Bot\xF5es Flutuantes (Triggers)</span>
-                </div>
-                <p style="font-size: 12px; color: #94a3b8; line-height: 1.4; margin: 0;">
-                  Quando m\xFAltiplas automa\xE7\xF5es forem injetadas na mesma p\xE1gina web, seus bot\xF5es flutuantes ser\xE3o agrupados neste container para evitar sobreposi\xE7\xF5es desagrad\xE1veis.
-                </p>
-
-                <!-- Dire\xE7\xE3o de Empilhamento -->
-                <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
-                  <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; text-transform: uppercase;">Dire\xE7\xE3o do Empilhamento</label>
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                    <button type="button" id="btnDirVertical" style="
-                      padding: 10px;
-                      background: ${stackDirection === "vertical" ? "#1e293b" : "#0b0f19"};
-                      border: 1px solid ${stackDirection === "vertical" ? "#3b82f6" : "#1e293b"};
-                      border-radius: 8px;
-                      color: ${stackDirection === "vertical" ? "#ffffff" : "#94a3b8"};
-                      cursor: pointer;
-                      display: flex;
-                      flex-direction: column;
-                      align-items: center;
-                      gap: 4px;
-                      transition: all 0.15s ease;
-                    ">
-                      <span style="font-size: 16px;">\u2B07\uFE0F</span>
-                      <span style="font-size: 12px; font-weight: 600;">Vertical (Coluna)</span>
-                      <span style="font-size: 10px; color: #64748b;">Empilha um abaixo do outro</span>
-                    </button>
-                    <button type="button" id="btnDirHorizontal" style="
-                      padding: 10px;
-                      background: ${stackDirection === "horizontal" ? "#1e293b" : "#0b0f19"};
-                      border: 1px solid ${stackDirection === "horizontal" ? "#3b82f6" : "#1e293b"};
-                      border-radius: 8px;
-                      color: ${stackDirection === "horizontal" ? "#ffffff" : "#94a3b8"};
-                      cursor: pointer;
-                      display: flex;
-                      flex-direction: column;
-                      align-items: center;
-                      gap: 4px;
-                      transition: all 0.15s ease;
-                    ">
-                      <span style="font-size: 16px;">\u27A1\uFE0F</span>
-                      <span style="font-size: 12px; font-weight: 600;">Horizontal (Linha)</span>
-                      <span style="font-size: 10px; color: #64748b;">Empilha lado a lado</span>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Limites de Linhas e Colunas -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px;">
-                  <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <label style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Limite de Colunas (Max):</label>
-                    <input type="number" id="inputMaxColumns" min="1" max="10" value="${maxColumns}" style="
-                      background: #172033;
-                      color: white;
-                      border: 1px solid #243049;
-                      border-radius: 6px;
-                      padding: 8px 10px;
-                      font-size: 12px;
-                    " />
-                    <span style="font-size: 10px; color: #64748b;">Quebra ap\xF3s atingir o limite</span>
-                  </div>
-
-                  <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <label style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Limite de Linhas (Max):</label>
-                    <input type="number" id="inputMaxRows" min="1" max="20" value="${maxRows}" style="
-                      background: #172033;
-                      color: white;
-                      border: 1px solid #243049;
-                      border-radius: 6px;
-                      padding: 8px 10px;
-                      font-size: 12px;
-                    " />
-                    <span style="font-size: 10px; color: #64748b;">Quebra verticalmente</span>
-                  </div>
-                </div>
-
-                <!-- Espa\xE7amento (Gap) -->
-                <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <label style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Espa\xE7amento Entre Bot\xF5es (Gap):</label>
-                    <span id="labelGapValue" style="font-size: 11px; font-weight: bold; color: #60a5fa;">${gap}px</span>
-                  </div>
-                  <input type="range" id="rangeGap" min="4" max="32" value="${gap}" style="accent-color: #3b82f6;" />
-                </div>
-
-                <!-- Pr\xE9via din\xE2mica da pilha -->
-                <div style="
-                  background: #020617;
-                  border: 1px dashed #334155;
-                  border-radius: 8px;
-                  padding: 12px;
-                  display: flex;
-                  flex-direction: column;
-                  gap: 8px;
-                  align-items: center;
-                  justify-content: center;
-                  min-height: 85px;
-                ">
-                  <span style="font-size: 10px; color: #64748b; font-family: monospace;">Pr\xE9-visualiza\xE7\xE3o do Container:</span>
-                  <div id="settingsPreviewContainer" style="
-                    display: flex;
-                    flex-direction: ${stackDirection === "vertical" ? "column" : "row"};
-                    flex-wrap: wrap;
-                    gap: ${gap}px;
-                    align-items: center;
-                    justify-content: center;
-                    max-width: ${stackDirection === "horizontal" ? `${maxColumns * 100}px` : "100%"};
-                  ">
-                    <div style="background: #4f46e5; color: white; padding: 4px 10px; border-radius: 9999px; font-size: 10px; font-weight: 600;">\u26A1 Fluxo A</div>
-                    <div style="background: #059669; color: white; padding: 4px 10px; border-radius: 9999px; font-size: 10px; font-weight: 600;">\u{1F680} Fluxo B</div>
-                    <div style="background: #d97706; color: white; padding: 4px 10px; border-radius: 9999px; font-size: 10px; font-weight: 600;">\u2699\uFE0F Fluxo C</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Footer -->
-            <div style="padding: 14px 20px; border-top: 1px solid #1e293b; background: #131d35; display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
-              <button type="button" id="btnSettingsCancel" class="btn btn-secondary" style="padding: 7px 16px; font-size: 12px;">
-                Cancelar
-              </button>
-              <button type="button" id="btnSettingsSave" class="btn btn-primary" style="padding: 7px 20px; font-size: 12px; background: #3b82f6; border-color: #3b82f6;">
-                Salvar Configura\xE7\xF5es
-              </button>
-            </div>
-          </div>
-        `;
-        backdrop.querySelector("#btnDirVertical")?.addEventListener("click", () => {
-          stackDirection = "vertical";
-          render();
-        });
-        backdrop.querySelector("#btnDirHorizontal")?.addEventListener("click", () => {
-          stackDirection = "horizontal";
-          render();
-        });
-        const inputCols = backdrop.querySelector("#inputMaxColumns");
-        inputCols?.addEventListener("input", (e) => {
-          maxColumns = Math.max(1, Number(e.target.value) || 1);
-          updatePreview();
-        });
-        const inputRw = backdrop.querySelector("#inputMaxRows");
-        inputRw?.addEventListener("input", (e) => {
-          maxRows = Math.max(1, Number(e.target.value) || 1);
-          updatePreview();
-        });
-        const rangeG = backdrop.querySelector("#rangeGap");
-        const labelG = backdrop.querySelector("#labelGapValue");
-        rangeG?.addEventListener("input", (e) => {
-          gap = Number(e.target.value);
-          if (labelG)
-            labelG.textContent = `${gap}px`;
-          updatePreview();
-        });
-        const updatePreview = () => {
-          const preview = backdrop.querySelector("#settingsPreviewContainer");
-          if (preview) {
-            preview.style.flexDirection = stackDirection === "vertical" ? "column" : "row";
-            preview.style.gap = `${gap}px`;
-            preview.style.maxWidth = stackDirection === "horizontal" ? `${maxColumns * 100}px` : "100%";
-          }
-        };
-        const closeDialog = () => backdrop.remove();
-        backdrop.querySelector("#btnSettingsCloseX")?.addEventListener("click", closeDialog);
-        backdrop.querySelector("#btnSettingsCancel")?.addEventListener("click", closeDialog);
-        backdrop.querySelector("#btnSettingsSave")?.addEventListener("click", () => {
-          const newSettings = {
-            stackDirection,
-            maxColumns,
-            maxRows,
-            gap
-          };
-          chrome.storage.local.set({ floating_buttons_layout_settings: newSettings }, () => {
-            if (chrome.runtime?.sendMessage) {
-              chrome.runtime.sendMessage({ action: "SYNC_TRIGGERS" }).catch(() => {
-              });
-            }
-            onSaveCallback?.(newSettings);
-            closeDialog();
-          });
-        });
-      };
-      render();
-      backdrop.addEventListener("click", (e) => {
-        if (e.target === backdrop)
-          backdrop.remove();
-      });
-      document.body.appendChild(backdrop);
-    });
-  }
-};
-
 // src/editor/editorApp.ts
 var VisualEditorApp = class {
   currentView = "dashboard";
@@ -6729,6 +7059,7 @@ var VisualEditorApp = class {
   tabManager;
   constructor() {
     this.graph = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
+    this.graph.metadata.name = this.cleanFlowName(this.graph.metadata.name);
     this.colorPickerManager = new ColorPickerManager(
       () => this.graph,
       (msg, type) => showToast(msg, type),
@@ -6758,7 +7089,12 @@ var VisualEditorApp = class {
       },
       onNodeSelect: (nodeId) => {
         this.selectedNodeId = nodeId;
-        this.inspectorManager.renderInspector();
+        if (nodeId) {
+          this.openInspectorSidebar();
+        } else {
+          this.inspectorManager.renderInspector();
+          this.ensureSidebarOpen();
+        }
       },
       showToast: (msg, type) => showToast(msg, type),
       showModalDialog: (title, msg, icon) => showModalDialog(title, msg, icon),
@@ -6774,12 +7110,69 @@ var VisualEditorApp = class {
     });
     this.initBlockCatalogUI();
     this.initGlobalEvents();
+    this.initSettingsEvents();
     this.tabManager.loadFromStorage();
+  }
+  cleanFlowName(name) {
+    return (name || "Minha Automa\xE7\xE3o").replace(/\.(webautomation\.json|json)$/i, "").trim() || "Minha Automa\xE7\xE3o";
   }
   switchView(view) {
     this.currentView = view;
     document.getElementById("viewDashboard")?.classList.toggle("active", view === "dashboard");
-    document.getElementById("viewStudio")?.classList.toggle("active", view === "studio");
+    document.getElementById("viewStudio")?.classList.toggle("active", view === "studio" || view === "settings");
+    const mainWorkspace = document.getElementById("mainWorkspace");
+    const canvasContainer = document.getElementById("canvasContainer");
+    const viewSettings = document.getElementById("viewSettings");
+    const btnActivitySettings = document.getElementById("btnActivitySettings");
+    const activityBarLeft = document.getElementById("activityBarLeft");
+    const sidebarLeft = document.getElementById("sidebarLibrary");
+    const sidebarRight = document.getElementById("sidebarInspector");
+    const sidebarColors = document.getElementById("sidebarColors");
+    const resizerLeft = document.getElementById("resizerLeft");
+    if (view === "settings") {
+      mainWorkspace?.classList.add("settings-mode");
+      if (canvasContainer)
+        canvasContainer.style.display = "none";
+      if (viewSettings) {
+        viewSettings.style.display = "block";
+        viewSettings.classList.add("active");
+      }
+      if (activityBarLeft)
+        activityBarLeft.style.display = "none";
+      if (sidebarLeft)
+        sidebarLeft.style.display = "none";
+      if (sidebarRight)
+        sidebarRight.style.display = "none";
+      if (sidebarColors)
+        sidebarColors.style.display = "none";
+      if (resizerLeft)
+        resizerLeft.style.display = "none";
+      btnActivitySettings?.classList.add("active");
+      this.loadSettingsUI();
+      window.history.replaceState({}, "", `${window.location.pathname}?tab=settings`);
+    } else {
+      mainWorkspace?.classList.remove("settings-mode");
+      if (canvasContainer)
+        canvasContainer.style.display = "";
+      if (viewSettings) {
+        viewSettings.style.display = "none";
+        viewSettings.classList.remove("active");
+      }
+      if (activityBarLeft)
+        activityBarLeft.style.display = "";
+      if (sidebarLeft)
+        sidebarLeft.style.display = "";
+      if (sidebarRight)
+        sidebarRight.style.display = "";
+      if (sidebarColors)
+        sidebarColors.style.display = "";
+      if (resizerLeft)
+        resizerLeft.style.display = "";
+      btnActivitySettings?.classList.remove("active");
+      if (view === "studio") {
+        this.ensureSidebarOpen();
+      }
+    }
     if (view === "dashboard") {
       this.tabManager.setActiveTabId("dashboard");
       if (window.location.search) {
@@ -6791,11 +7184,14 @@ var VisualEditorApp = class {
   }
   openStudio(graph) {
     this.graph = JSON.parse(JSON.stringify(graph));
+    if (this.graph.metadata?.name) {
+      this.graph.metadata.name = this.cleanFlowName(this.graph.metadata.name);
+    }
     this.selectedNodeId = void 0;
     this.tabManager.registerOpenTab(this.graph);
     const titleInput = document.getElementById("flowTitleInput");
     if (titleInput)
-      titleInput.value = this.graph.metadata?.name || "Minha Automa\xE7\xE3o";
+      titleInput.value = this.cleanFlowName(this.graph.metadata?.name);
     if (this.graph.metadata?.id) {
       const newUrl = `${window.location.pathname}?flowId=${encodeURIComponent(this.graph.metadata.id)}`;
       window.history.replaceState({}, "", newUrl);
@@ -6842,7 +7238,8 @@ var VisualEditorApp = class {
   async saveCurrentFlow() {
     const titleInput = document.getElementById("flowTitleInput");
     if (titleInput && titleInput.value.trim()) {
-      this.graph.metadata.name = titleInput.value.trim();
+      this.graph.metadata.name = this.cleanFlowName(titleInput.value.trim());
+      titleInput.value = this.graph.metadata.name;
     }
     this.graph.metadata.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     const cleanGraph = sanitizeGraph(this.graph);
@@ -6914,10 +7311,11 @@ var VisualEditorApp = class {
   }
   exportJson() {
     const cleanGraph = sanitizeGraph(this.graph);
+    const safeName = (this.cleanFlowName(cleanGraph.metadata?.name) || "automacao").replace(/\s+/g, "_");
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(cleanGraph, null, 2));
     const dlAnchor = document.createElement("a");
     dlAnchor.setAttribute("href", dataStr);
-    dlAnchor.setAttribute("download", `${(this.graph.metadata?.name || "automacao").replace(/\s+/g, "_")}.webautomation.json`);
+    dlAnchor.setAttribute("download", `${safeName}.webautomation.json`);
     dlAnchor.click();
   }
   highlightActiveNode(nodeId) {
@@ -6980,7 +7378,9 @@ var VisualEditorApp = class {
   }
   initGlobalEvents() {
     document.getElementById("btnCreateNewFlow")?.addEventListener("click", () => this.createNewFlow());
-    document.getElementById("btnTabNewFlow")?.addEventListener("click", () => this.createNewFlow());
+    document.getElementById("btnTabNewFlow")?.addEventListener("click", () => {
+      this.tabManager.openDashboardTab();
+    });
     document.getElementById("btnDashboardImport")?.addEventListener("click", () => {
       document.getElementById("jsonFileInput")?.click();
     });
@@ -7022,6 +7422,11 @@ var VisualEditorApp = class {
     });
     window.addEventListener("popstate", () => {
       const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get("tab");
+      if (tabParam === "settings") {
+        this.tabManager.openSettingsTab();
+        return;
+      }
       const flowId = urlParams.get("flowId");
       if (flowId) {
         const matched = this.tabManager.getSavedAutomations().find((a) => a.metadata?.id === flowId);
@@ -7032,8 +7437,14 @@ var VisualEditorApp = class {
         this.switchView("dashboard");
       }
     });
-    document.getElementById("btnClearCanvas")?.addEventListener("click", () => {
-      if (confirm("Deseja limpar todos os n\xF3s e liga\xE7\xF5es deste fluxo?")) {
+    document.getElementById("btnClearCanvas")?.addEventListener("click", async () => {
+      const confirmed = await DialogMenu.confirm({
+        title: "Limpar Canvas",
+        message: "Deseja realmente limpar todos os n\xF3s e liga\xE7\xF5es deste fluxo? Esta a\xE7\xE3o n\xE3o pode ser desfeita.",
+        confirmText: "Limpar Canvas",
+        isDanger: true
+      });
+      if (confirmed) {
         this.graph.nodes = [];
         this.graph.edges = [];
         this.selectedNodeId = void 0;
@@ -7050,9 +7461,7 @@ var VisualEditorApp = class {
       });
     });
     document.getElementById("btnOpenSettings")?.addEventListener("click", () => {
-      FlowSettingsModal.open(() => {
-        showToast("Configura\xE7\xF5es do Visual Flow salvas com sucesso!", "success");
-      });
+      this.tabManager.openSettingsTab();
     });
     document.getElementById("btnImportJson")?.addEventListener("click", () => {
       document.getElementById("jsonFileInput")?.click();
@@ -7070,69 +7479,91 @@ var VisualEditorApp = class {
             this.saveCurrentFlow();
             showToast("Fluxo importado com sucesso!", "success");
           } else {
-            alert("Formato de arquivo inv\xE1lido. Certifique-se de que \xE9 um .webautomation.json v\xE1lido.");
+            DialogMenu.alert({
+              title: "Arquivo Inv\xE1lido",
+              message: "Formato de arquivo inv\xE1lido. Certifique-se de que \xE9 um .webautomation.json v\xE1lido.",
+              type: "error"
+            });
           }
         } catch (err) {
-          alert("Erro ao carregar JSON: " + err.message);
+          DialogMenu.alert({
+            title: "Erro ao Carregar",
+            message: "Erro ao carregar JSON: " + err.message,
+            type: "error"
+          });
         }
       };
       reader.readAsText(file);
     });
     const sidebarLeft = document.getElementById("sidebarLibrary");
     const sidebarRight = document.getElementById("sidebarInspector");
+    const sidebarColors = document.getElementById("sidebarColors");
     const resizerLeft = document.getElementById("resizerLeft");
-    const resizerRight = document.getElementById("resizerRight");
     const btnToggleLeft = document.getElementById("btnToggleSidebarLeft");
     const btnToggleRight = document.getElementById("btnToggleSidebarRight");
+    const btnToggleColors = document.getElementById("btnToggleSidebarColors");
     const btnActivityBlocks = document.getElementById("btnActivityBlocks");
+    const btnActivityInspector = document.getElementById("btnActivityInspector");
+    const btnActivityColors = document.getElementById("btnActivityColors");
     const btnActivityAnalyzer = document.getElementById("btnActivityAnalyzer");
+    const btnActivitySettings = document.getElementById("btnActivitySettings");
+    const btnDashboardSettings = document.getElementById("btnDashboardSettings");
     HtmlElementAnalyzer.initMessageListener();
     btnActivityAnalyzer?.addEventListener("click", () => {
       HtmlElementAnalyzer.open();
+      HtmlElementAnalyzer.startLivePicker();
     });
-    const toggleSidebarLeft = (collapse) => {
-      if (!sidebarLeft)
-        return;
-      const shouldCollapse = collapse !== void 0 ? collapse : !sidebarLeft.classList.contains("collapsed");
-      sidebarLeft.classList.toggle("collapsed", shouldCollapse);
-      btnActivityBlocks?.classList.toggle("active", !shouldCollapse);
-      if (resizerLeft)
-        resizerLeft.style.display = shouldCollapse ? "none" : "block";
-    };
-    btnActivityBlocks?.addEventListener("click", () => toggleSidebarLeft());
-    btnToggleLeft?.addEventListener("click", () => toggleSidebarLeft(true));
+    btnActivitySettings?.addEventListener("click", () => {
+      this.tabManager.openSettingsTab();
+    });
+    btnDashboardSettings?.addEventListener("click", () => {
+      this.tabManager.openSettingsTab();
+    });
+    btnActivityBlocks?.addEventListener("click", () => this.openBlocksSidebar());
+    btnActivityInspector?.addEventListener("click", () => this.openInspectorSidebar());
+    btnActivityColors?.addEventListener("click", () => this.openColorsSidebar());
+    btnToggleLeft?.addEventListener("click", () => this.openBlocksSidebar());
+    btnToggleColors?.addEventListener("click", () => this.openBlocksSidebar());
     btnToggleRight?.addEventListener("click", () => {
       this.selectedNodeId = void 0;
       document.querySelectorAll(".graph-node").forEach((el) => el.classList.remove("selected"));
-      this.inspectorManager.renderInspector();
+      this.openBlocksSidebar();
     });
     document.getElementById("btnExpandInspectorModal")?.addEventListener("click", () => {
       if (this.selectedNodeId) {
         this.inspectorManager.openExpandedModal(this.selectedNodeId);
       }
     });
-    if (resizerLeft && sidebarLeft) {
-      let isResizingLeft = false;
+    if (resizerLeft) {
+      let isResizing = false;
       resizerLeft.addEventListener("mousedown", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        isResizingLeft = true;
+        isResizing = true;
         resizerLeft.classList.add("resizing");
         document.body.classList.add("is-resizing-active");
+        const activePanel = sidebarColors && !sidebarColors.classList.contains("collapsed") ? sidebarColors : sidebarRight && !sidebarRight.classList.contains("collapsed") ? sidebarRight : sidebarLeft;
         const onMouseMove = (moveEvent) => {
-          if (!isResizingLeft)
+          if (!isResizing)
             return;
           moveEvent.preventDefault();
           moveEvent.stopPropagation();
-          const newWidth = Math.max(200, Math.min(520, moveEvent.clientX));
-          sidebarLeft.style.width = `${newWidth}px`;
+          const activityBarWidth = 48;
+          const newWidth = Math.max(240, Math.min(600, moveEvent.clientX - activityBarWidth));
+          const wStr = `${newWidth}px`;
+          if (sidebarLeft)
+            sidebarLeft.style.width = wStr;
+          if (sidebarRight)
+            sidebarRight.style.width = wStr;
+          if (sidebarColors)
+            sidebarColors.style.width = wStr;
         };
         const onMouseUp = (upEvent) => {
-          if (!isResizingLeft)
+          if (!isResizing)
             return;
           upEvent.preventDefault();
           upEvent.stopPropagation();
-          isResizingLeft = false;
+          isResizing = false;
           resizerLeft.classList.remove("resizing");
           document.body.classList.remove("is-resizing-active");
           window.removeEventListener("mousemove", onMouseMove, true);
@@ -7142,39 +7573,10 @@ var VisualEditorApp = class {
         window.addEventListener("mouseup", onMouseUp, true);
       });
     }
-    if (resizerRight && sidebarRight) {
-      let isResizingRight = false;
-      resizerRight.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        isResizingRight = true;
-        resizerRight.classList.add("resizing");
-        document.body.classList.add("is-resizing-active");
-        const onMouseMove = (moveEvent) => {
-          if (!isResizingRight)
-            return;
-          moveEvent.preventDefault();
-          moveEvent.stopPropagation();
-          const newWidth = Math.max(240, Math.min(650, window.innerWidth - moveEvent.clientX));
-          sidebarRight.style.width = `${newWidth}px`;
-        };
-        const onMouseUp = (upEvent) => {
-          if (!isResizingRight)
-            return;
-          upEvent.preventDefault();
-          upEvent.stopPropagation();
-          isResizingRight = false;
-          resizerRight.classList.remove("resizing");
-          document.body.classList.remove("is-resizing-active");
-          window.removeEventListener("mousemove", onMouseMove, true);
-          window.removeEventListener("mouseup", onMouseUp, true);
-        };
-        window.addEventListener("mousemove", onMouseMove, true);
-        window.addEventListener("mouseup", onMouseUp, true);
-      });
-    }
     chrome.runtime?.onMessage?.addListener((msg) => {
-      if (msg.type === "NODE_START") {
+      if (msg.type === "OPEN_SETTINGS_TAB" || msg.action === "OPEN_SETTINGS_TAB") {
+        this.tabManager.openSettingsTab();
+      } else if (msg.type === "NODE_START") {
         this.highlightActiveNode(msg.nodeId);
       } else if (msg.type === "NODE_COMPLETE") {
         this.unhighlightActiveNode(msg.nodeId);
@@ -7183,6 +7585,239 @@ var VisualEditorApp = class {
       } else if (msg.type === "STATUS_CHANGE") {
         this.appendLog({ timestamp: Date.now(), level: "info", message: `Status alterado para: ${msg.status}` });
       }
+    });
+  }
+  openBlocksSidebar() {
+    if (this.currentView === "settings")
+      return;
+    const sidebarLeft = document.getElementById("sidebarLibrary");
+    const sidebarRight = document.getElementById("sidebarInspector");
+    const sidebarColors = document.getElementById("sidebarColors");
+    const resizerLeft = document.getElementById("resizerLeft");
+    const btnActivityBlocks = document.getElementById("btnActivityBlocks");
+    const btnActivityInspector = document.getElementById("btnActivityInspector");
+    const btnActivityColors = document.getElementById("btnActivityColors");
+    sidebarLeft?.classList.remove("collapsed");
+    btnActivityBlocks?.classList.add("active");
+    sidebarRight?.classList.add("collapsed");
+    btnActivityInspector?.classList.remove("active");
+    sidebarColors?.classList.add("collapsed");
+    btnActivityColors?.classList.remove("active");
+    if (resizerLeft)
+      resizerLeft.style.display = "block";
+  }
+  openInspectorSidebar() {
+    if (this.currentView === "settings")
+      return;
+    const sidebarLeft = document.getElementById("sidebarLibrary");
+    const sidebarRight = document.getElementById("sidebarInspector");
+    const sidebarColors = document.getElementById("sidebarColors");
+    const resizerLeft = document.getElementById("resizerLeft");
+    const btnActivityBlocks = document.getElementById("btnActivityBlocks");
+    const btnActivityInspector = document.getElementById("btnActivityInspector");
+    const btnActivityColors = document.getElementById("btnActivityColors");
+    sidebarRight?.classList.remove("collapsed");
+    btnActivityInspector?.classList.add("active");
+    sidebarLeft?.classList.add("collapsed");
+    btnActivityBlocks?.classList.remove("active");
+    sidebarColors?.classList.add("collapsed");
+    btnActivityColors?.classList.remove("active");
+    this.inspectorManager.renderInspector();
+    if (resizerLeft)
+      resizerLeft.style.display = "block";
+  }
+  openColorsSidebar() {
+    if (this.currentView === "settings")
+      return;
+    const sidebarLeft = document.getElementById("sidebarLibrary");
+    const sidebarRight = document.getElementById("sidebarInspector");
+    const sidebarColors = document.getElementById("sidebarColors");
+    const resizerLeft = document.getElementById("resizerLeft");
+    const btnActivityBlocks = document.getElementById("btnActivityBlocks");
+    const btnActivityInspector = document.getElementById("btnActivityInspector");
+    const btnActivityColors = document.getElementById("btnActivityColors");
+    sidebarColors?.classList.remove("collapsed");
+    btnActivityColors?.classList.add("active");
+    sidebarLeft?.classList.add("collapsed");
+    btnActivityBlocks?.classList.remove("active");
+    sidebarRight?.classList.add("collapsed");
+    btnActivityInspector?.classList.remove("active");
+    this.colorPickerManager.renderColorsSidebar();
+    if (resizerLeft)
+      resizerLeft.style.display = "block";
+  }
+  ensureSidebarOpen() {
+    if (this.currentView === "settings")
+      return;
+    const sidebarLeft = document.getElementById("sidebarLibrary");
+    const sidebarRight = document.getElementById("sidebarInspector");
+    const sidebarColors = document.getElementById("sidebarColors");
+    const isLeftOpen = sidebarLeft && !sidebarLeft.classList.contains("collapsed");
+    const isRightOpen = sidebarRight && !sidebarRight.classList.contains("collapsed");
+    const isColorsOpen = sidebarColors && !sidebarColors.classList.contains("collapsed");
+    if (!isLeftOpen && !isRightOpen && !isColorsOpen) {
+      this.openBlocksSidebar();
+    }
+  }
+  loadSettingsUI() {
+    if (!chrome.storage?.local)
+      return;
+    chrome.storage.local.get([
+      "floating_buttons_layout_settings",
+      "studio_preferences",
+      "mcp_settings",
+      "web_automations"
+    ], (stored) => {
+      const layout = stored.floating_buttons_layout_settings || {
+        stackDirection: "vertical",
+        gap: 10,
+        maxColumns: 3,
+        maxRows: 5
+      };
+      const studio = stored.studio_preferences || {
+        autoSave: "always",
+        edgeType: "bezier",
+        showMinimap: true,
+        snapToGrid: true
+      };
+      const mcp = stored.mcp_settings || {
+        enabled: false,
+        port: 3001
+      };
+      const setSelect = (id, val) => {
+        const el = document.getElementById(id);
+        if (el && val !== void 0)
+          el.value = String(val);
+      };
+      const setInput = (id, val) => {
+        const el = document.getElementById(id);
+        if (el && val !== void 0)
+          el.value = String(val);
+      };
+      const setCheck = (id, val) => {
+        const el = document.getElementById(id);
+        if (el && val !== void 0)
+          el.checked = Boolean(val);
+      };
+      setSelect("settingsStackDirection", layout.stackDirection);
+      setInput("settingsGapInput", layout.gap);
+      setInput("settingsMaxColumnsInput", layout.maxColumns);
+      setInput("settingsMaxRowsInput", layout.maxRows);
+      setSelect("settingsAutoSaveInterval", studio.autoSave);
+      setSelect("settingsDefaultEdgeType", studio.edgeType);
+      setCheck("settingsShowMinimapDefault", studio.showMinimap);
+      setCheck("settingsSnapToGridDefault", studio.snapToGrid);
+      setCheck("settingsMcpEnabled", mcp.enabled);
+      setInput("settingsMcpPortInput", mcp.port);
+      const statsEl = document.getElementById("settingsStorageSummaryText");
+      if (statsEl) {
+        const flows = stored.web_automations || [];
+        const jsonStr = JSON.stringify(stored);
+        const kb = (new TextEncoder().encode(jsonStr).length / 1024).toFixed(1);
+        statsEl.textContent = `${flows.length} fluxo(s) salvos (~${kb} KB utilizados)`;
+      }
+    });
+  }
+  initSettingsEvents() {
+    const btnSave = document.getElementById("btnSaveVisualSettings");
+    btnSave?.addEventListener("click", () => {
+      const getVal = (id) => document.getElementById(id)?.value;
+      const getCheck = (id) => document.getElementById(id)?.checked;
+      const layout = {
+        stackDirection: getVal("settingsStackDirection") || "vertical",
+        gap: parseInt(getVal("settingsGapInput") || "10", 10),
+        maxColumns: parseInt(getVal("settingsMaxColumnsInput") || "3", 10),
+        maxRows: parseInt(getVal("settingsMaxRowsInput") || "5", 10)
+      };
+      const studio = {
+        autoSave: getVal("settingsAutoSaveInterval") || "always",
+        edgeType: getVal("settingsDefaultEdgeType") || "bezier",
+        showMinimap: getCheck("settingsShowMinimapDefault"),
+        snapToGrid: getCheck("settingsSnapToGridDefault")
+      };
+      const mcp = {
+        enabled: getCheck("settingsMcpEnabled"),
+        port: parseInt(getVal("settingsMcpPortInput") || "3001", 10)
+      };
+      if (chrome.storage?.local) {
+        chrome.storage.local.set({
+          floating_buttons_layout_settings: layout,
+          studio_preferences: studio,
+          mcp_settings: mcp
+        }, () => {
+          showToast("Configura\xE7\xF5es salvas com sucesso!", "success");
+          try {
+            chrome.tabs?.query({}, (tabs) => {
+              tabs.forEach((t) => {
+                if (t.id) {
+                  chrome.tabs.sendMessage(t.id, {
+                    type: "UPDATE_FLOATING_BUTTONS_LAYOUT",
+                    settings: layout
+                  }).catch(() => {
+                  });
+                }
+              });
+            });
+          } catch (_) {
+          }
+        });
+      }
+    });
+    document.getElementById("btnSettingsResetPositions")?.addEventListener("click", () => {
+      DialogMenu.confirm({
+        title: "Restaurar Posi\xE7\xF5es?",
+        message: "Deseja restaurar as posi\xE7\xF5es padr\xE3o de todos os bot\xF5es flutuantes arrastados?",
+        confirmText: "Restaurar",
+        isDanger: true
+      }).then((confirmed) => {
+        if (confirmed) {
+          chrome.storage?.local?.remove("floating_buttons_positions", () => {
+            showToast("Posi\xE7\xF5es padr\xE3o restauradas!", "success");
+          });
+        }
+      });
+    });
+    document.getElementById("btnSettingsExportAllData")?.addEventListener("click", async () => {
+      if (!chrome.storage?.local)
+        return;
+      const all = await chrome.storage.local.get(null);
+      const blob = new Blob([JSON.stringify(all, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `webautomations_backup_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Backup exportado com sucesso!", "success");
+    });
+    const fileInput = document.getElementById("settingsBackupFileInput");
+    document.getElementById("btnSettingsImportAllData")?.addEventListener("click", () => {
+      fileInput?.click();
+    });
+    fileInput?.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      if (!file)
+        return;
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        try {
+          const content = JSON.parse(ev.target?.result);
+          if (content && typeof content === "object") {
+            await chrome.storage.local.set(content);
+            showToast("Backup restaurado com sucesso!", "success");
+            this.loadSettingsUI();
+            this.tabManager.loadFromStorage(false);
+          }
+        } catch (err) {
+          DialogMenu.alert({
+            title: "Erro na Restaura\xE7\xE3o",
+            message: "O arquivo selecionado n\xE3o cont\xE9m um JSON v\xE1lido: " + err.message,
+            type: "error"
+          });
+        }
+      };
+      reader.readAsText(file);
+      fileInput.value = "";
     });
   }
 };

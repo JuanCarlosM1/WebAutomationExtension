@@ -3,138 +3,181 @@
  */
 import { WebAutomationGraph } from '../../../../BibliotecaDeDev/src/types/schema';
 
+export interface FlowNamedColor {
+  name: string;
+  hex: string;
+}
+
 export class ColorPickerManager {
+  public static activeFlowColors: FlowNamedColor[] = [];
+
   constructor(
     private getGraph: () => WebAutomationGraph,
     private showToast: (msg: string, type: 'info' | 'success' | 'error' | 'warning') => void,
     private onPaletteChanged?: () => void
   ) {}
 
-  public getFlowColorPalette(): string[] {
+  public getFlowNamedColors(): FlowNamedColor[] {
     const graph = this.getGraph();
     if (!Array.isArray(graph.colorPalette)) {
       graph.colorPalette = [
-        '#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'
+        { name: 'primaria', hex: '#6366f1' },
+        { name: 'secundaria', hex: '#3b82f6' },
+        { name: 'sucesso', hex: '#10b981' },
+        { name: 'alerta', hex: '#f59e0b' },
+        { name: 'erro', hex: '#ef4444' },
+        { name: 'destaque', hex: '#8b5cf6' },
+        { name: 'info', hex: '#06b6d4' },
+        { name: 'rosa', hex: '#ec4899' },
       ];
+    } else {
+      // Normaliza itens legados que eram apenas strings hex
+      graph.colorPalette = graph.colorPalette.map((item: any, idx: number) => {
+        if (typeof item === 'string') {
+          return { name: `cor_${idx + 1}`, hex: item };
+        }
+        return { name: item.name || `cor_${idx + 1}`, hex: item.hex || '#6366f1' };
+      });
     }
+    ColorPickerManager.activeFlowColors = graph.colorPalette;
     return graph.colorPalette;
   }
 
-  public openFlowPaletteModal(onCloseOrChange?: () => void): void {
-    const existing = document.querySelector('.flow-palette-modal-backdrop');
-    existing?.remove();
+  public getFlowColorPalette(): string[] {
+    return this.getFlowNamedColors().map((c) => c.hex);
+  }
 
-    const palette = this.getFlowColorPalette();
-    const backdrop = document.createElement('div');
-    backdrop.className = 'flow-modal-backdrop flow-palette-modal-backdrop';
+  public renderColorsSidebar(): void {
+    const container = document.getElementById('colorsSidebarContent');
+    if (!container) return;
+    container.innerHTML = '';
+    const colors = this.getFlowNamedColors();
 
-    const triggerChange = () => {
-      this.onPaletteChanged?.();
-      onCloseOrChange?.();
-      // Notifica todos os popovers abertos para atualizarem a seção Cores do Fluxo
-      window.dispatchEvent(new CustomEvent('flow-palette-updated'));
+    const desc = document.createElement('p');
+    desc.style.cssText = 'font-size: 11px; color: var(--text-muted); line-height: 1.4; margin-bottom: 4px;';
+    desc.textContent = 'Defina cores com nomes personalizados. Chame-as no editor de código digitando flowColors.<nome> ou colors.<nome>.';
+    container.appendChild(desc);
+
+    const listContainer = document.createElement('div');
+    listContainer.style.cssText = 'display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 300px); overflow-y: auto; padding-right: 2px;';
+
+    colors.forEach((col, idx) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display: flex; align-items: center; gap: 8px; background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 6px 10px; height: 42px; min-height: 42px; box-sizing: border-box;';
+
+      const swatchWrap = document.createElement('div');
+      swatchWrap.style.cssText = 'position: relative; width: 28px; height: 28px; flex-shrink: 0;';
+      const swatch = document.createElement('div');
+      swatch.style.cssText = `width: 100%; height: 100%; border-radius: 4px; background: ${col.hex}; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;`;
+      const nativeInp = document.createElement('input');
+      nativeInp.type = 'color';
+      nativeInp.value = col.hex;
+      nativeInp.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; padding: 0;';
+
+      swatchWrap.appendChild(swatch);
+      swatchWrap.appendChild(nativeInp);
+
+      const nameInp = document.createElement('input');
+      nameInp.type = 'text';
+      nameInp.value = col.name;
+      nameInp.placeholder = 'Nome da cor';
+      nameInp.title = 'Nome da cor chamado no editor de código';
+      nameInp.style.cssText = 'flex: 1; min-width: 60px; height: 28px; box-sizing: border-box; font-size: 11px; padding: 4px 6px; background: #172033; color: #38bdf8; font-weight: 600; border: 1px solid #243049; border-radius: 4px;';
+
+      const hexInp = document.createElement('input');
+      hexInp.type = 'text';
+      hexInp.value = col.hex;
+      hexInp.style.cssText = 'width: 70px; height: 28px; box-sizing: border-box; font-family: monospace; font-size: 11px; padding: 4px 6px; background: #172033; color: #f1f5f9; border: 1px solid #243049; border-radius: 4px;';
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.innerHTML = '&times;';
+      delBtn.title = 'Remover cor';
+      delBtn.style.cssText = 'background: transparent; border: none; color: #ef4444; font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; height: 28px; display: flex; align-items: center; justify-content: center;';
+
+      nativeInp.addEventListener('input', (e: any) => {
+        col.hex = e.target.value;
+        swatch.style.background = col.hex;
+        hexInp.value = col.hex;
+        this.saveAndTrigger();
+      });
+
+      hexInp.addEventListener('change', (e: any) => {
+        let val = e.target.value.trim();
+        if (val && !val.startsWith('#')) val = `#${val}`;
+        col.hex = val;
+        swatch.style.background = col.hex;
+        nativeInp.value = col.hex;
+        this.saveAndTrigger();
+      });
+
+      nameInp.addEventListener('input', (e: any) => {
+        col.name = e.target.value.trim().replace(/[^a-zA-Z0-9_$]/g, '_');
+        this.saveAndTrigger();
+      });
+
+      delBtn.addEventListener('click', () => {
+        colors.splice(idx, 1);
+        this.saveAndTrigger();
+        this.renderColorsSidebar();
+      });
+
+      row.appendChild(swatchWrap);
+      row.appendChild(nameInp);
+      row.appendChild(hexInp);
+      row.appendChild(delBtn);
+      listContainer.appendChild(row);
+    });
+
+    container.appendChild(listContainer);
+
+    const addCard = document.createElement('div');
+    addCard.style.cssText = 'margin-top: 10px; padding-top: 10px; border-top: 1px solid #1e293b; display: flex; flex-direction: column; gap: 6px;';
+    addCard.innerHTML = `
+      <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Adicionar Nova Cor</label>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <input type="color" id="newSidebarColorPicker" value="#10b981" style="width: 32px; height: 30px; border: 1px solid #334155; border-radius: 4px; background: transparent; cursor: pointer; padding: 0;" />
+        <input type="text" id="newSidebarColorName" placeholder="Nome (ex: destaque)" style="flex: 1; padding: 4px 6px; font-size: 11px; background: #172033; color: #f1f5f9; border: 1px solid #243049; border-radius: 4px;" />
+        <button type="button" id="btnAddNewSidebarColor" class="btn btn-secondary" style="padding: 5px 10px; font-size: 11px; white-space: nowrap;">+ Adicionar</button>
+      </div>
+    `;
+
+    const picker = addCard.querySelector('#newSidebarColorPicker') as HTMLInputElement;
+    const nameField = addCard.querySelector('#newSidebarColorName') as HTMLInputElement;
+    const addBtn = addCard.querySelector('#btnAddNewSidebarColor');
+
+    const handleAdd = () => {
+      const hex = picker.value || '#10b981';
+      const name = (nameField.value.trim() || `cor_${colors.length + 1}`).replace(/[^a-zA-Z0-9_$]/g, '_');
+      colors.push({ name, hex });
+      this.saveAndTrigger();
+      this.renderColorsSidebar();
+      this.showToast(`Cor "${name}" adicionada!`, 'success');
     };
 
-    const renderPaletteModalContent = () => {
-      backdrop.innerHTML = `
-        <div class="flow-modal-card" style="max-width: 480px; width: 100%; border: 1px solid #8b5cf6;">
-          <div class="flow-modal-header">
-            <div class="flow-modal-icon" style="background: rgba(139, 92, 246, 0.15); color: #a855f7;">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
-            </div>
-            <div class="flow-modal-title" style="color: #f8fafc; font-weight: 700;">Cores do Fluxo</div>
-          </div>
-          <div class="flow-modal-body" style="display: flex; flex-direction: column; gap: 12px;">
-            <p style="font-size: 12px; color: #94a3b8; line-height: 1.4;">
-              Defina as cores personalizadas deste fluxo. Todas as cores adicionadas aqui ficam acessíveis instantaneamente em qualquer seletor de cor no editor.
-            </p>
-            <div class="custom-palette-list" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-height: 220px; overflow-y: auto;">
-              ${palette.map((color, idx) => `
-                <div style="background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 4px; align-items: center; position: relative;">
-                  <button type="button" class="del-palette-color-btn" data-idx="${idx}" title="Remover" style="position: absolute; top: 2px; right: 4px; background: transparent; border: none; color: #ef4444; font-size: 14px; font-weight: bold; cursor: pointer; line-height: 1; padding: 2px 4px;">&times;</button>
-                  <div style="width: 100%; height: 26px; background: ${color}; border-radius: 4px; border: 1px solid rgba(0,0,0,0.3); box-shadow: inset 0 0 2px rgba(255,255,255,0.2);"></div>
-                  <span style="font-size: 10px; font-family: monospace; color: #cbd5e1; user-select: all;">${color}</span>
-                </div>
-              `).join('')}
-            </div>
-
-            <div style="display: flex; gap: 8px; align-items: center; padding-top: 10px; border-top: 1px solid #1e293b;">
-              <input type="color" id="newPaletteColorPicker" value="#10b981" style="width: 36px; height: 32px; border: 1px solid #334155; border-radius: 6px; background: transparent; cursor: pointer; padding: 0;" />
-              <input type="text" id="newPaletteColorInput" value="#10b981" placeholder="#10b981" style="flex: 1; padding: 6px 10px; font-size: 12px; font-family: monospace; background: #172033; color: white; border: 1px solid #243049; border-radius: 6px;" />
-              <button type="button" id="btnAddColorToFlowPalette" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">+ Adicionar Cor</button>
-            </div>
-          </div>
-          <div class="flow-modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid #1e293b; padding-top: 12px;">
-            <button type="button" class="btn btn-primary flow-palette-close-btn" style="background: #8b5cf6; border-color: #8b5cf6; padding: 6px 16px;">Salvar & Concluir</button>
-          </div>
-        </div>
-      `;
-
-      const pickerEl = backdrop.querySelector('#newPaletteColorPicker') as HTMLInputElement;
-      const inputEl = backdrop.querySelector('#newPaletteColorInput') as HTMLInputElement;
-      const addBtn = backdrop.querySelector('#btnAddColorToFlowPalette');
-
-      pickerEl?.addEventListener('input', (e: any) => {
-        inputEl.value = e.target.value;
-      });
-      inputEl?.addEventListener('input', (e: any) => {
-        const val = e.target.value.trim();
-        if (val.startsWith('#') && (val.length === 4 || val.length === 7)) {
-          pickerEl.value = val.length === 4 
-            ? `#${val[1]}${val[1]}${val[2]}${val[2]}${val[3]}${val[3]}` 
-            : val;
-        }
-      });
-
-      const handleAddColor = () => {
-        let val = inputEl.value.trim();
-        if (val) {
-          if (!val.startsWith('#')) val = `#${val}`;
-          if (!palette.some((c) => c.toLowerCase() === val.toLowerCase())) {
-            palette.push(val);
-            this.getGraph().colorPalette = palette;
-            renderPaletteModalContent();
-            triggerChange();
-          } else {
-            this.showToast('Esta cor já existe na paleta do fluxo.', 'info');
-          }
-        }
-      };
-
-      addBtn?.addEventListener('click', handleAddColor);
-      inputEl?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          handleAddColor();
-        }
-      });
-
-      backdrop.querySelectorAll('.del-palette-color-btn').forEach((btn: any) => {
-        btn.addEventListener('click', () => {
-          const idx = Number(btn.dataset.idx);
-          palette.splice(idx, 1);
-          this.getGraph().colorPalette = palette;
-          renderPaletteModalContent();
-          triggerChange();
-        });
-      });
-
-      const closeModal = () => {
-        backdrop.remove();
-        onCloseOrChange?.();
-      };
-
-      backdrop.querySelector('.flow-palette-close-btn')?.addEventListener('click', closeModal);
-    };
-
-    renderPaletteModalContent();
-    backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) {
-        backdrop.remove();
-        onCloseOrChange?.();
+    addBtn?.addEventListener('click', handleAdd);
+    nameField?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleAdd();
       }
     });
-    document.body.appendChild(backdrop);
+
+    container.appendChild(addCard);
+  }
+
+  private saveAndTrigger(): void {
+    const graph = this.getGraph();
+    ColorPickerManager.activeFlowColors = graph.colorPalette;
+    this.onPaletteChanged?.();
+    window.dispatchEvent(new CustomEvent('flow-palette-updated'));
+  }
+
+  public openFlowPaletteModal(_onCloseOrChange?: () => void): void {
+    // Agora o gerenciamento de cores abre na barra lateral esquerda
+    this.renderColorsSidebar();
+    const btnActivity = document.getElementById('btnActivityColors');
+    btnActivity?.click();
   }
 
   public createPaintColorPicker(

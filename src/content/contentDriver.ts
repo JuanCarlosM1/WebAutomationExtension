@@ -26,12 +26,28 @@ async function handleDomAction(message: DomActionMessage): Promise<DomActionResu
 
   switch (action) {
     case 'START_ELEMENT_PICKER': {
+      showCompactAnalyzerOnPage();
       startElementPickerMode();
       return { success: true };
     }
 
+    case 'OPEN_HTML_ANALYZER': {
+      showCompactAnalyzerOnPage();
+      if (payload?.startPicker) {
+        startElementPickerMode();
+      }
+      return { success: true };
+    }
+
     case 'STOP_ELEMENT_PICKER': {
-      stopElementPickerMode();
+      stopElementPickerCrosshair();
+      return { success: true };
+    }
+
+    case 'FORWARD_PICKER_KEY': {
+      if (typeof (window as any).__webautomations_picker_handle_key === 'function') {
+        (window as any).__webautomations_picker_handle_key(payload?.key || payload);
+      }
       return { success: true };
     }
 
@@ -842,9 +858,281 @@ let pickerOverlayEl: HTMLElement | null = null;
 let pickerHighlightEl: HTMLElement | null = null;
 let pickerInfoBannerEl: HTMLElement | null = null;
 let hoveredTargetEl: Element | null = null;
+let compactAnalyzerEl: HTMLElement | null = null;
+let compactSelectedHighlightEl: HTMLElement | null = null;
+
+function copyTextToClipboard(text: string): boolean {
+  try {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function highlightSelectedElement(target: Element): void {
+  let hl = document.getElementById('webautomations-selected-highlight') as HTMLElement | null;
+  if (!hl) {
+    hl = document.createElement('div');
+    hl.id = 'webautomations-selected-highlight';
+    hl.style.cssText = `
+      position: fixed;
+      border: 2px solid #818cf8;
+      background: rgba(99, 102, 241, 0.18);
+      border-radius: 4px;
+      z-index: 2147483645;
+      pointer-events: none;
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.55);
+      transition: all 0.1s ease-out;
+    `;
+    document.body.appendChild(hl);
+  }
+  compactSelectedHighlightEl = hl;
+  const rect = target.getBoundingClientRect();
+  hl.style.display = 'block';
+  hl.style.left = `${rect.left}px`;
+  hl.style.top = `${rect.top}px`;
+  hl.style.width = `${rect.width}px`;
+  hl.style.height = `${rect.height}px`;
+}
+
+function closeCompactAnalyzerOnPage(): void {
+  stopElementPickerCrosshair();
+  compactAnalyzerEl?.remove();
+  compactAnalyzerEl = null;
+  compactSelectedHighlightEl?.remove();
+  compactSelectedHighlightEl = null;
+  const oldHl = document.getElementById('webautomations-selected-highlight');
+  oldHl?.remove();
+  const oldWin = document.getElementById('webautomations-compact-analyzer');
+  oldWin?.remove();
+
+  try {
+    chrome.runtime.sendMessage({ action: 'PICKER_STATUS_CHANGED', payload: { active: false } });
+  } catch {}
+}
+
+function showCompactAnalyzerOnPage(analysis?: any, targetEl?: Element): void {
+  let win = document.getElementById('webautomations-compact-analyzer') as HTMLElement | null;
+  if (!win) {
+    win = document.createElement('div');
+    win.id = 'webautomations-compact-analyzer';
+    win.style.cssText = `
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      width: 360px;
+      max-height: 84vh;
+      background: #0f172a;
+      border: 1px solid #4f46e5;
+      border-radius: 10px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 20px rgba(99, 102, 241, 0.35);
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 12px;
+      z-index: 2147483647;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+      box-sizing: border-box;
+    `;
+    document.body.appendChild(win);
+  }
+  compactAnalyzerEl = win;
+
+  const renderCard = (title: string, node: any, isTarget = false, isChild = false) => {
+    const tagColor = isTarget ? '#38bdf8' : (isChild ? '#34d399' : '#a78bfa');
+    const bg = isTarget ? 'rgba(99, 102, 241, 0.12)' : 'rgba(30, 41, 59, 0.6)';
+    const border = isTarget ? '#6366f1' : '#334155';
+    const tagStr = `&lt;${node.tagName.toLowerCase()}${node.id ? ` id="${node.id}"` : ''}${node.classes && node.classes.length ? ` class="${node.classes.slice(0, 2).join(' ')}"` : ''}&gt;`;
+    const textStr = node.textSnippet ? `<div style="font-size:10px; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px;">"${node.textSnippet}"</div>` : '';
+
+    return `
+      <div style="background:${bg}; border:1px solid ${border}; border-radius:6px; padding:6px 8px; display:flex; flex-direction:column; gap:4px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:4px;">
+          <span style="font-size:10px; font-weight:700; color:${tagColor}; text-transform:uppercase;">${title}</span>
+          <code style="font-size:10px; color:#f1f5f9; background:#090d16; padding:1px 4px; border-radius:3px;">${tagStr}</code>
+        </div>
+        ${textStr}
+        <div style="display:flex; align-items:center; gap:4px; margin-top:2px;">
+          <input type="text" readonly value="${node.selector || ''}" title="Seletor CSS" style="flex:1; background:#090d16; border:1px solid #1e293b; border-radius:3px; color:#38bdf8; font-family:monospace; font-size:10px; padding:2px 6px;" />
+          <button type="button" class="btn-copy-val" data-val="${(node.selector || '').replace(/"/g, '&quot;')}" style="background:#1e293b; border:1px solid #334155; color:#f8fafc; border-radius:3px; font-size:10px; padding:2px 6px; cursor:pointer;">Copiar</button>
+        </div>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <input type="text" readonly value="${node.xpath || ''}" title="XPath" style="flex:1; background:#090d16; border:1px solid #1e293b; border-radius:3px; color:#fbbf24; font-family:monospace; font-size:10px; padding:2px 6px;" />
+          <button type="button" class="btn-copy-val" data-val="${(node.xpath || '').replace(/"/g, '&quot;')}" style="background:#1e293b; border:1px solid #334155; color:#f8fafc; border-radius:3px; font-size:10px; padding:2px 6px; cursor:pointer;">Copiar</button>
+        </div>
+      </div>
+    `;
+  };
+
+  let bodyHtml = '';
+  if (analysis && analysis.target) {
+    let parentHtml = '';
+    if (analysis.parent) {
+      parentHtml = renderCard('Elemento Pai (Container)', analysis.parent);
+    }
+
+    let childrenHtml = '';
+    if (analysis.children && analysis.children.length > 0) {
+      const childCards = analysis.children.slice(0, 4).map((c: any, i: number) => renderCard(`Filho #${i + 1}`, c, false, true)).join('');
+      childrenHtml = `
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <span style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase;">Elementos Filhos (${analysis.children.length}):</span>
+          ${childCards}
+        </div>
+      `;
+    }
+
+    bodyHtml = `
+      <div id="compactAnalysisBody" style="padding:10px 12px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px;">
+        ${renderCard('Elemento Selecionado (Alvo)', analysis.target, true)}
+        ${parentHtml}
+        ${childrenHtml}
+      </div>
+    `;
+  } else {
+    bodyHtml = `
+      <div id="compactAnalysisBody" style="padding:16px 12px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px; text-align:center;">
+        <div style="color:#94a3b8; font-size:11px; line-height:1.5;">
+          🎯 Clique no botão <b>Nova Mira</b> para selecionar qualquer elemento na página ou digite um seletor abaixo para testar.
+        </div>
+      </div>
+    `;
+  }
+
+  win.innerHTML = `
+    <div id="compactAnalyzerHeader" style="background:#172033; padding:8px 12px; border-bottom:1px solid #1e293b; display:flex; align-items:center; justify-content:space-between; cursor:grab; user-select:none;">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="opacity:0.6; font-size:12px;">⋮⋮</span>
+        <span style="font-weight:700; color:#818cf8; font-size:12px;">🔍 Analisador HTML</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <button type="button" id="btnCompactPickNew" title="Selecionar elemento com a mira" style="background:#6366f1; border:none; color:white; border-radius:4px; padding:3px 8px; font-size:11px; font-weight:600; cursor:pointer;">🎯 Nova Mira</button>
+        <button type="button" id="btnCompactClose" title="Fechar analisador" style="background:transparent; border:none; color:#94a3b8; font-size:14px; cursor:pointer; padding:2px 4px;">✕</button>
+      </div>
+    </div>
+    <div style="padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; gap:6px; background:#0b1120;">
+      <input type="text" id="compactManualSelector" placeholder="Testar Seletor CSS (ex: button.btn)" style="flex:1; background:#090d16; border:1px solid #334155; border-radius:4px; color:#f8fafc; font-size:11px; padding:4px 8px; outline:none;" />
+      <button type="button" id="btnCompactTestSelector" style="background:#1e293b; border:1px solid #334155; color:#38bdf8; border-radius:4px; padding:4px 8px; font-size:11px; font-weight:600; cursor:pointer;">Testar</button>
+    </div>
+    ${bodyHtml}
+  `;
+
+  // Copiar seletores
+  win.querySelectorAll('.btn-copy-val').forEach((btn: any) => {
+    btn.addEventListener('click', (e: MouseEvent) => {
+      e.stopPropagation();
+      const val = btn.getAttribute('data-val');
+      if (val) {
+        copyTextToClipboard(val);
+        const oldText = btn.textContent;
+        btn.textContent = '✓ Copiado';
+        btn.style.borderColor = '#10b981';
+        btn.style.color = '#10b981';
+        setTimeout(() => {
+          btn.textContent = oldText;
+          btn.style.borderColor = '#334155';
+          btn.style.color = '#f8fafc';
+        }, 1200);
+      }
+    });
+  });
+
+  // Botões de Ação do Topo
+  win.querySelector('#btnCompactPickNew')?.addEventListener('click', () => {
+    startElementPickerMode();
+  });
+
+  win.querySelector('#btnCompactClose')?.addEventListener('click', () => {
+    closeCompactAnalyzerOnPage();
+  });
+
+  // Teste de Seletor Manual
+  const testBtn = win.querySelector('#btnCompactTestSelector');
+  const testInput = win.querySelector('#compactManualSelector') as HTMLInputElement;
+
+  const runTest = () => {
+    const q = testInput?.value.trim();
+    if (!q) return;
+    try {
+      const matched = document.querySelectorAll(q);
+      if (matched.length === 0) {
+        alert('Nenhum elemento encontrado na página para o seletor: ' + q);
+        return;
+      }
+      const first = matched[0];
+      first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      highlightSelectedElement(first);
+      const newAnalysis = analyzeElementNodeHierarchical(first);
+      showCompactAnalyzerOnPage(newAnalysis, first);
+    } catch (err: any) {
+      alert('Seletor inválido: ' + err.message);
+    }
+  };
+
+  testBtn?.addEventListener('click', runTest);
+  testInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') runTest();
+  });
+
+  // Arrastar a janela do analisador HTML pela barra superior
+  const dragHandle = win.querySelector('#compactAnalyzerHeader') as HTMLElement;
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+  let initLeft = 0;
+  let initTop = 0;
+
+  dragHandle.addEventListener('mousedown', (e: any) => {
+    if (e.target.tagName === 'BUTTON' || e.target.closest('button') || e.target.tagName === 'INPUT') return;
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    const rect = win.getBoundingClientRect();
+    initLeft = rect.left;
+    initTop = rect.top;
+    win.style.right = 'auto';
+    win.style.left = `${initLeft}px`;
+    win.style.top = `${initTop}px`;
+    dragHandle.style.cursor = 'grabbing';
+    e.stopPropagation();
+  });
+
+  const onDrag = (e: MouseEvent) => {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    win.style.left = `${Math.max(8, Math.min(window.innerWidth - win.offsetWidth - 8, initLeft + dx))}px`;
+    win.style.top = `${Math.max(8, Math.min(window.innerHeight - win.offsetHeight - 8, initTop + dy))}px`;
+  };
+
+  const onDragStop = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    dragHandle.style.cursor = 'grab';
+  };
+
+  window.addEventListener('mousemove', onDrag, true);
+  window.addEventListener('mouseup', onDragStop, true);
+}
 
 function startElementPickerMode(): void {
-  stopElementPickerMode();
+  stopElementPickerCrosshair();
 
   // Overlay invisível que captura eventos
   const overlay = document.createElement('div');
@@ -872,7 +1160,7 @@ function startElementPickerMode(): void {
     box-shadow: 0 0 12px rgba(99, 102, 241, 0.5);
   `;
 
-  // Banner informativo fixo no topo com instrução e cancelamento
+  // Banner informativo flutuante no topo com instrução e cancelamento
   const banner = document.createElement('div');
   banner.id = 'webautomations-picker-banner';
   banner.style.cssText = `
@@ -884,21 +1172,23 @@ function startElementPickerMode(): void {
     color: #f8fafc;
     border: 1px solid #6366f1;
     border-radius: 8px;
-    padding: 8px 16px;
+    padding: 8px 14px;
     font-size: 13px;
     font-weight: 600;
     font-family: system-ui, sans-serif;
     display: flex;
     align-items: center;
-    gap: 12px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+    gap: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.7);
     z-index: 2147483647;
     user-select: none;
   `;
   banner.innerHTML = `
-    <span style="color: #818cf8;">🎯 Clique no elemento desejado</span>
-    <span id="pickerTagPreview" style="font-size: 11px; background: #1e293b; padding: 2px 6px; border-radius: 4px; font-family: monospace; color: #38bdf8;">nenhum</span>
-    <button type="button" id="btnCancelPicker" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; border-radius: 4px; padding: 3px 8px; font-size: 11px; cursor: pointer;">Cancelar (Esc)</button>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span style="color: #818cf8; font-weight:700;">🎯 Clique no elemento desejado</span>
+    </div>
+    <span id="pickerTagPreview" style="font-size: 11px; background: #1e293b; padding: 2px 8px; border-radius: 4px; font-family: monospace; color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.2);">nenhum</span>
+    <button type="button" id="btnCancelPicker" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: 600; cursor: pointer;">Cancelar (Esc)</button>
   `;
 
   document.body.appendChild(overlay);
@@ -909,18 +1199,17 @@ function startElementPickerMode(): void {
   pickerHighlightEl = highlight;
   pickerInfoBannerEl = banner;
 
-  const onMouseMove = (e: MouseEvent) => {
-    // Esconde momentaneamente a caixa de highlight para obter o elemento real abaixo do mouse
-    highlight.style.display = 'none';
-    const target = document.elementFromPoint(e.clientX, e.clientY);
-    highlight.style.display = 'block';
-
+  const updateTargetHighlight = (target: Element) => {
     if (!target || target === overlay || target === highlight || target === banner || banner.contains(target)) {
       return;
     }
-
+    const compactWin = document.getElementById('webautomations-compact-analyzer');
+    if (compactWin && (target === compactWin || compactWin.contains(target))) {
+      return;
+    }
     hoveredTargetEl = target;
     const rect = target.getBoundingClientRect();
+    highlight.style.display = 'block';
     highlight.style.left = `${rect.left}px`;
     highlight.style.top = `${rect.top}px`;
     highlight.style.width = `${rect.width}px`;
@@ -934,15 +1223,23 @@ function startElementPickerMode(): void {
     }
   };
 
-  const onClick = (e: MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const onMouseMove = (e: MouseEvent) => {
+    highlight.style.display = 'none';
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    highlight.style.display = 'block';
 
+    if (target) {
+      updateTargetHighlight(target);
+    }
+  };
+
+  const confirmPick = () => {
     if (hoveredTargetEl) {
-      const analysis = analyzeElementNodeHierarchical(hoveredTargetEl);
+      const targetEl = hoveredTargetEl;
+      const analysis = analyzeElementNodeHierarchical(targetEl);
       const chosenSelector = analysis.target.selector;
 
-      // Envia os dados analisados de volta para a extensão/editor
+      // Envia os dados analisados de volta para o editor
       chrome.runtime.sendMessage({
         action: 'ELEMENT_PICKED_EVENT',
         payload: {
@@ -951,17 +1248,54 @@ function startElementPickerMode(): void {
         },
       });
 
-      stopElementPickerMode();
+      // Encerra a mira contínua mas MANTÉM a janela compacta do analisador aberta exibindo a análise na página ativa!
+      stopElementPickerCrosshair();
+      highlightSelectedElement(targetEl);
+      showCompactAnalyzerOnPage(analysis, targetEl);
     }
   };
+
+  const onClick = (e: MouseEvent) => {
+    const compactWin = document.getElementById('webautomations-compact-analyzer');
+    if (compactWin && (e.target as Element) && compactWin.contains(e.target as Element)) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    confirmPick();
+  };
+
+  const handlePickerKey = (key: string) => {
+    if (key === 'Escape') {
+      stopElementPickerCrosshair();
+    } else if (key === 'Enter' || key === ' ') {
+      confirmPick();
+    } else if (key === 'ArrowUp') {
+      if (hoveredTargetEl?.parentElement && hoveredTargetEl.parentElement !== document.documentElement) {
+        updateTargetHighlight(hoveredTargetEl.parentElement);
+      }
+    } else if (key === 'ArrowDown') {
+      if (hoveredTargetEl?.firstElementChild) {
+        updateTargetHighlight(hoveredTargetEl.firstElementChild);
+      }
+    } else if (key === 'ArrowRight') {
+      if (hoveredTargetEl?.nextElementSibling) {
+        updateTargetHighlight(hoveredTargetEl.nextElementSibling);
+      }
+    } else if (key === 'ArrowLeft') {
+      if (hoveredTargetEl?.previousElementSibling) {
+        updateTargetHighlight(hoveredTargetEl.previousElementSibling);
+      }
+    }
+  };
+
+  (window as any).__webautomations_picker_handle_key = handlePickerKey;
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      stopElementPickerMode();
-    }
+    handlePickerKey(e.key);
   };
 
-  banner.querySelector('#btnCancelPicker')?.addEventListener('click', stopElementPickerMode);
+  banner.querySelector('#btnCancelPicker')?.addEventListener('click', stopElementPickerCrosshair);
   window.addEventListener('mousemove', onMouseMove, true);
   window.addEventListener('click', onClick, true);
   window.addEventListener('keydown', onKeyDown, true);
@@ -970,10 +1304,15 @@ function startElementPickerMode(): void {
     window.removeEventListener('mousemove', onMouseMove, true);
     window.removeEventListener('click', onClick, true);
     window.removeEventListener('keydown', onKeyDown, true);
+    delete (window as any).__webautomations_picker_handle_key;
   };
+
+  try {
+    chrome.runtime.sendMessage({ action: 'PICKER_STATUS_CHANGED', payload: { active: true } });
+  } catch {}
 }
 
-function stopElementPickerMode(): void {
+function stopElementPickerCrosshair(): void {
   if (typeof (window as any).__webautomations_picker_cleanup === 'function') {
     (window as any).__webautomations_picker_cleanup();
     delete (window as any).__webautomations_picker_cleanup;
@@ -985,6 +1324,15 @@ function stopElementPickerMode(): void {
   pickerHighlightEl = null;
   pickerInfoBannerEl = null;
   hoveredTargetEl = null;
+
+  try {
+    chrome.runtime.sendMessage({ action: 'PICKER_STATUS_CHANGED', payload: { active: false } });
+  } catch {}
+}
+
+function stopElementPickerMode(): void {
+  stopElementPickerCrosshair();
+  closeCompactAnalyzerOnPage();
 }
 
 /**

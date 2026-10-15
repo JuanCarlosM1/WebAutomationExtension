@@ -34,29 +34,35 @@ export class InspectorManager {
     }
 
     const sidebarRight = document.getElementById('sidebarInspector');
-    const resizerRight = document.getElementById('resizerRight');
+    const sidebarLeft = document.getElementById('sidebarLibrary');
+    const resizerLeft = document.getElementById('resizerLeft');
+    const btnActivityBlocks = document.getElementById('btnActivityBlocks');
+    const btnActivityInspector = document.getElementById('btnActivityInspector');
     const noSelect = document.getElementById('noSelectionMessage')!;
     const form = document.getElementById('nodePropertiesForm') as HTMLFormElement;
 
     const selectedId = this.callbacks.getSelectedNodeId();
     if (!selectedId) {
-      if (sidebarRight) sidebarRight.classList.add('collapsed');
-      if (resizerRight) resizerRight.style.display = 'none';
       noSelect.classList.remove('hidden');
       form.classList.add('hidden');
+      if (resizerLeft) resizerLeft.style.display = 'block';
       return;
     }
 
     const graph = this.callbacks.getGraph();
     const node = graph.nodes.find((n) => n.id === selectedId);
     if (!node) {
-      if (sidebarRight) sidebarRight.classList.add('collapsed');
-      if (resizerRight) resizerRight.style.display = 'none';
+      noSelect.classList.remove('hidden');
+      form.classList.add('hidden');
+      if (resizerLeft) resizerLeft.style.display = 'block';
       return;
     }
 
     if (sidebarRight) sidebarRight.classList.remove('collapsed');
-    if (resizerRight) resizerRight.style.display = 'block';
+    if (sidebarLeft) sidebarLeft.classList.add('collapsed');
+    btnActivityBlocks?.classList.remove('active');
+    btnActivityInspector?.classList.add('active');
+    if (resizerLeft) resizerLeft.style.display = 'block';
 
     noSelect.classList.add('hidden');
     form.classList.remove('hidden');
@@ -508,101 +514,18 @@ export class InspectorManager {
     language: CodeLanguage,
     value: string,
     onChange: (val: string) => void,
-    _height = '200px'
+    height = '200px'
   ): void {
-    const isExpandedModal = Boolean(container.closest('#expandedNodeModalForm'));
-
-    // No modal expandido geral do bloco, renderizamos o editor completo embutido
-    if (isExpandedModal) {
-      const group = document.createElement('div');
-      group.className = 'form-group code-editor-form-group';
-      const label = document.createElement('label');
-      label.textContent = labelText;
-      group.appendChild(label);
-
-      const editor = new CodeEditorComponent({
-        language,
-        value: value || '',
-        onChange,
-        title: labelText,
-        height: '240px',
-      });
-      group.appendChild(editor.getElement());
-      container.appendChild(group);
-      return;
-    }
-
-    // Na barra lateral direita, renderizamos uma prévia clicável que abre o editor sobre o canvas
-    const group = document.createElement('div');
-    group.className = 'form-group code-preview-group';
-
-    const langBadgeColor = {
-      javascript: '#f59e0b',
-      html: '#ec4899',
-      css: '#06b6d4',
-    }[language];
-
-    const langTitle = {
-      javascript: 'JS',
-      html: 'HTML',
-      css: 'CSS',
-    }[language];
-
-    const linesCount = (value || '').split('\n').length;
-    const previewSnippet = (value || '').trim().split('\n').slice(0, 3).join('\n') || '// (sem código)';
-
-    group.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-        <label style="margin-bottom: 0;">${labelText}</label>
-        <span style="font-size: 10px; font-weight: 700; color: ${langBadgeColor}; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px;">${langTitle}</span>
-      </div>
-      <div class="code-field-trigger-card" title="Clique para abrir o editor de código completo sobre o canvas">
-        <div class="code-field-trigger-header">
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${langBadgeColor}" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-            <span style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Editar ${langTitle}</span>
-          </div>
-          <span class="code-field-line-count" style="font-size: 10px; color: #64748b;">${linesCount} linha${linesCount === 1 ? '' : 's'}</span>
-        </div>
-        <pre class="code-field-preview-code"><code>${this.escapeSnippet(previewSnippet)}</code></pre>
-        <div class="code-field-trigger-footer">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          <span>Abrir Editor sobre o Canvas</span>
-        </div>
-      </div>
-    `;
-
-    const openEditor = () => {
-      CodeEditorComponent.openCodeModal({
-        title: labelText,
-        language,
-        value: value || '',
-        onSave: (newVal) => {
-          onChange(newVal);
-          // Atualiza prévia na barra lateral
-          const newLines = (newVal || '').split('\n').length;
-          const countEl = group.querySelector('.code-field-line-count');
-          if (countEl) countEl.textContent = `${newLines} linha${newLines === 1 ? '' : 's'}`;
-          const codeEl = group.querySelector('.code-field-preview-code code');
-          if (codeEl) {
-            const snip = (newVal || '').trim().split('\n').slice(0, 3).join('\n') || '// (sem código)';
-            codeEl.innerHTML = this.escapeSnippet(snip);
-          }
-          this.callbacks.onNodeDataChanged();
-          this.callbacks.showToast('Código salvo com sucesso!', 'success');
-        },
-      });
-    };
-
-    group.querySelector('.code-field-trigger-card')?.addEventListener('click', openEditor);
-    container.appendChild(group);
-  }
-
-  private escapeSnippet(str: string): string {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+    InspectorInputHelpers.addCodeEditorInput(
+      container,
+      labelText,
+      language,
+      value,
+      onChange,
+      this.callbacks.onNodeDataChanged,
+      this.callbacks.showToast,
+      height
+    );
   }
 
   /**

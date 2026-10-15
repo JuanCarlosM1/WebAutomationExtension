@@ -8,6 +8,8 @@
  */
 import { InspectorInputHelpers } from '../inspectorInputHelpers';
 import { CodeEditorComponent } from '../codeEditorComponent';
+import { DialogMenu } from '../dialogUtils';
+import { CodeSyntaxHighlighter } from '../codeSyntaxHighlighter';
 
 export interface FlowPropertiesContext {
   renderInspector: (scrollToSelector?: string) => void;
@@ -74,11 +76,23 @@ export class FlowPropertiesRenderer {
     data.cases.forEach((c: any, index: number) => {
       this.ensureConditionGroups(c);
 
+      // Separador visual de caminhos alternativos entre cada item
+      if (index > 0) {
+        const pathDivider = document.createElement('div');
+        pathDivider.style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px; margin: 4px 0;';
+        pathDivider.innerHTML = `
+          <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #334155, #334155);"></div>
+          <span style="font-size: 8px; font-weight: 800; color: #64748b; letter-spacing: 0.8px; text-transform: uppercase; background: #0b1120; padding: 2px 8px; border-radius: 4px; border: 1px solid #1e293b;">CAMINHO ALTERNATIVO</span>
+          <div style="flex: 1; height: 1px; background: linear-gradient(90deg, #334155, #334155, transparent);"></div>
+        `;
+        casesContainer.appendChild(pathDivider);
+      }
+
       const isExpanded = ctx.expandedCaseIndices.has(index);
       const caseCard = document.createElement('div');
       caseCard.className = 'switch-case-card-item';
       caseCard.setAttribute('data-case-index', String(index));
-      caseCard.style.cssText = `background: #0f172a; border: 1px solid ${isExpanded ? '#3b82f6' : '#1e293b'}; border-radius: 6px; overflow: hidden; transition: border-color 0.15s;`;
+      caseCard.style.cssText = `background: #0f172a; border: 1px solid ${isExpanded ? '#3b82f6' : '#1e293b'}; border-left: 4px solid ${isExpanded ? '#3b82f6' : '#6366f1'}; border-radius: 6px; overflow: hidden; transition: border-color 0.15s;`;
 
       const accordionHeader = document.createElement('div');
       accordionHeader.style.cssText = `padding: 8px 10px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; background: ${isExpanded ? '#1e293b70' : '#0f172a'}; user-select: none; gap: 8px;`;
@@ -91,25 +105,95 @@ export class FlowPropertiesRenderer {
 
       const titleSpan = document.createElement('span');
       titleSpan.style.cssText = `font-size: 12px; font-weight: ${isExpanded ? '600' : '500'}; color: ${isExpanded ? '#60a5fa' : '#cbd5e1'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;`;
-      titleSpan.textContent = c.label || `Caso #${index + 1}`;
+      titleSpan.textContent = c.label || `Caminho #${index + 1}`;
 
       headerLeft.appendChild(iconSpan);
       headerLeft.appendChild(titleSpan);
+
+      const headerActions = document.createElement('div');
+      headerActions.style.cssText = 'display: flex; align-items: center; gap: 4px;';
+
+      // Botão para abrir o editor expandido deste caminho
+      const btnExpandPath = document.createElement('button');
+      btnExpandPath.type = 'button';
+      btnExpandPath.title = 'Abrir editor expandido deste caminho (com seletor de caminhos)';
+      btnExpandPath.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      `;
+      btnExpandPath.style.cssText =
+        'background: transparent; color: #818cf8; border: none; font-size: 12px; cursor: pointer; line-height: 1; padding: 4px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; transition: color 0.15s;';
+      btnExpandPath.addEventListener('mouseenter', () => (btnExpandPath.style.color = '#c7d2fe'));
+      btnExpandPath.addEventListener('mouseleave', () => (btnExpandPath.style.color = '#818cf8'));
+      btnExpandPath.addEventListener('click', (e) => {
+        e.stopPropagation();
+        FlowPropertiesRenderer.openExpandedPathModal(data, index, ctx);
+      });
+
+      const btnRename = document.createElement('button');
+      btnRename.type = 'button';
+      btnRename.title = 'Renomear este caminho';
+      btnRename.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      `;
+      btnRename.style.cssText =
+        'background: transparent; color: #94a3b8; border: none; font-size: 12px; cursor: pointer; line-height: 1; padding: 4px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; transition: color 0.15s;';
+      btnRename.addEventListener('mouseenter', () => (btnRename.style.color = '#38bdf8'));
+      btnRename.addEventListener('mouseleave', () => (btnRename.style.color = '#94a3b8'));
+      btnRename.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const currentName = c.label || `Caminho #${index + 1}`;
+        const newName = await DialogMenu.prompt({
+          title: 'Renomear Caminho Condicional',
+          message: 'Digite o novo nome para este caminho:',
+          defaultValue: currentName,
+          placeholder: 'Ex: Sucesso, Status 200...',
+          confirmText: 'Salvar Nome',
+        });
+        if (newName !== null && newName.trim()) {
+          c.label = newName.trim();
+          titleSpan.textContent = c.label;
+          ctx.onNodeDataChanged();
+          ctx.renderInspector();
+        }
+      });
 
       const btnDel = document.createElement('button');
       btnDel.type = 'button';
       btnDel.innerHTML = '&times;';
       btnDel.title = 'Remover este caminho';
       btnDel.style.cssText =
-        'background: transparent; color: #ef4444; border: none; font-size: 16px; cursor: pointer; line-height: 1; padding: 2px 4px;';
-      btnDel.addEventListener('click', (e) => {
+        'background: transparent; color: #ef4444; border: none; font-size: 16px; cursor: pointer; line-height: 1; padding: 2px 4px; transition: opacity 0.15s;';
+      btnDel.addEventListener('click', async (e) => {
         e.stopPropagation();
-        data.cases.splice(index, 1);
-        ctx.renderInspector();
+        const caseName = c.label || `Caminho #${index + 1}`;
+        const confirmed = await DialogMenu.confirm({
+          title: 'Excluir Caminho do Switch',
+          message: `Deseja realmente excluir o caminho "${caseName}"? Esta ação removerá o caminho e todas as condições associadas a ele.`,
+          confirmText: 'Excluir Caminho',
+          isDanger: true,
+        });
+        if (confirmed) {
+          data.cases.splice(index, 1);
+          ctx.onNodeDataChanged();
+          ctx.renderInspector();
+          ctx.showToast('Caminho removido com sucesso.', 'info');
+        }
       });
 
+      headerActions.appendChild(btnExpandPath);
+      headerActions.appendChild(btnRename);
+      headerActions.appendChild(btnDel);
+
       accordionHeader.appendChild(headerLeft);
-      accordionHeader.appendChild(btnDel);
+      accordionHeader.appendChild(headerActions);
 
       accordionHeader.addEventListener('click', () => {
         if (ctx.expandedCaseIndices.has(index)) {
@@ -125,12 +209,6 @@ export class FlowPropertiesRenderer {
       if (isExpanded) {
         const body = document.createElement('div');
         body.style.cssText = 'padding: 10px; border-top: 1px solid #1e293b; display: flex; flex-direction: column; gap: 8px;';
-
-        InspectorInputHelpers.addTextInput(body, 'Título do Caminho', c.label || '', (val) => {
-          c.label = val;
-          titleSpan.textContent = val || `Caso #${index + 1}`;
-          ctx.onNodeDataChanged();
-        });
 
         // Construtor Visual de Condições Combinadas (Grupos E e OU)
         const groupsBuilder = this.renderConditionGroupsBuilder(c, ctx);
@@ -151,7 +229,7 @@ export class FlowPropertiesRenderer {
       const newIdx = data.cases.length;
       data.cases.push({
         id: `case_${Date.now()}`,
-        label: `Caso #${newIdx + 1}`,
+        label: `Caminho #${newIdx + 1}`,
         conditionGroups: [
           {
             id: `grp_${Date.now()}_0`,
@@ -345,25 +423,26 @@ export class FlowPropertiesRenderer {
       // Conector entre grupos (E / OU / Não E / Não OU)
       if (!isLastGroup) {
         const connectorDiv = document.createElement('div');
-        connectorDiv.style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px; margin: 4px 0;';
+        connectorDiv.className = 'group-separator';
+        connectorDiv.style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0;';
 
         const lineLeft = document.createElement('div');
-        lineLeft.style.cssText = 'flex: 1; height: 1px; background: #334155;';
+        lineLeft.style.cssText = 'flex: 1; height: 0; border-top: 2px dashed #6366f190;';
         const lineRight = document.createElement('div');
-        lineRight.style.cssText = 'flex: 1; height: 1px; background: #334155;';
+        lineRight.style.cssText = 'flex: 1; height: 0; border-top: 2px dashed #6366f190;';
 
         const groupConnectorBtn = document.createElement('button');
         groupConnectorBtn.type = 'button';
-        groupConnectorBtn.title = 'Clique para alternar: E / OU / Não E / Não OU';
+        groupConnectorBtn.title = 'Clique para alternar operador entre grupos: E / OU / Não E / Não OU';
 
         const order = ['and', 'or', 'and_not', 'or_not'];
-        const labels: Record<string, string> = { and: 'E', or: 'OU', and_not: 'Não E', or_not: 'Não OU' };
-        const colors: Record<string, string> = { and: '#38bdf8', or: '#f59e0b', and_not: '#ef4444', or_not: '#ec4899' };
+        const labels: Record<string, string> = { and: 'E', or: 'OU', and_not: 'NÃO E', or_not: 'NÃO OU' };
+        const colors: Record<string, string> = { and: '#818cf8', or: '#f59e0b', and_not: '#ef4444', or_not: '#ec4899' };
 
         const refreshGroupBtn = () => {
           const cur = order.includes(group.nextOperator) ? group.nextOperator : 'or';
-          groupConnectorBtn.textContent = labels[cur];
-          groupConnectorBtn.style.cssText = `padding: 2px 14px; font-size: 10px; font-weight: 700; background: #1e293b; color: ${colors[cur]}; border: 1px solid ${colors[cur]}; border-radius: 12px; cursor: pointer; text-transform: uppercase; min-width: 60px;`;
+          groupConnectorBtn.textContent = `GRUPO: ${labels[cur]}`;
+          groupConnectorBtn.style.cssText = `padding: 4px 14px; font-size: 10px; font-weight: 800; background: #1e1b4b; color: ${colors[cur]}; border: 1.5px solid ${colors[cur]}; border-radius: 16px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);`;
         };
         refreshGroupBtn();
 
@@ -419,15 +498,16 @@ export class FlowPropertiesRenderer {
    */
   private static createConnectorButton(rule: any, ctx: FlowPropertiesContext): HTMLElement {
     const order = ['and', 'or', 'and_not', 'or_not'];
-    const labels: Record<string, string> = { and: 'E', or: 'OU', and_not: 'Não E', or_not: 'Não OU' };
+    const labels: Record<string, string> = { and: 'E', or: 'OU', and_not: 'NÃO E', or_not: 'NÃO OU' };
     const colors: Record<string, string> = { and: '#38bdf8', or: '#f59e0b', and_not: '#ef4444', or_not: '#ec4899' };
 
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px;';
+    wrap.className = 'expression-separator';
+    wrap.style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px; margin: 3px 0;';
     const lineL = document.createElement('div');
-    lineL.style.cssText = 'flex: 1; height: 1px; background: #334155;';
+    lineL.style.cssText = 'flex: 1; height: 0; border-top: 1px dotted rgba(56, 189, 248, 0.45);';
     const lineR = document.createElement('div');
-    lineR.style.cssText = 'flex: 1; height: 1px; background: #334155;';
+    lineR.style.cssText = 'flex: 1; height: 0; border-top: 1px dotted rgba(56, 189, 248, 0.45);';
 
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -435,7 +515,7 @@ export class FlowPropertiesRenderer {
     const refresh = () => {
       const c = order.includes(rule.connector) ? rule.connector : 'and';
       btn.textContent = labels[c];
-      btn.style.cssText = `padding: 2px 14px; font-size: 10px; font-weight: 700; background: #1e293b; color: ${colors[c]}; border: 1px solid ${colors[c]}; border-radius: 12px; cursor: pointer; text-transform: uppercase; min-width: 60px;`;
+      btn.style.cssText = `padding: 2px 10px; font-size: 9px; font-weight: 700; background: #082f49; color: ${colors[c]}; border: 1px solid ${colors[c]}; border-radius: 8px; cursor: pointer; text-transform: uppercase;`;
     };
     refresh();
     btn.addEventListener('click', () => {
@@ -513,53 +593,31 @@ export class FlowPropertiesRenderer {
     const jsFields = document.createElement('div');
     jsFields.style.cssText = `display: ${mode === 'js_eval' ? 'flex' : 'none'}; flex-direction: column; gap: 4px;`;
     jsFields.innerHTML = `
-      <div style="display: flex; gap: 4px; align-items: flex-start;">
-        <textarea class="rule-js-code" rows="4" placeholder="Expressão JS (ex: status === 200)" style="flex: 1; min-height: 84px; line-height: 1.5; padding: 6px 8px; font-size: 11px; font-family: monospace; background: #172033; color: #38bdf8; border: 1px solid #243049; border-radius: 4px; resize: vertical;">${InspectorInputHelpers.escapeSnippet(rule.jsExpression || '')}</textarea>
-        <button type="button" class="btn-open-rule-editor" title="Abrir no editor JS completo sobre o canvas" style="padding: 6px 8px; background: rgba(99, 102, 241, 0.2); border: 1px solid #6366f1; color: #818cf8; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-        </button>
+      <div class="rule-code-preview" style="background: #090d16; border: 1px solid #243049; border-radius: 6px; padding: 8px 10px; font-family: var(--font-mono, monospace); font-size: 11px; line-height: 1.5; color: #f1f5f9; cursor: pointer; resize: none !important; max-height: 100px; overflow-y: auto; overflow-x: hidden; white-space: pre-wrap; word-break: break-all; transition: border-color 0.2s, box-shadow 0.2s;" title="Clique no código para editar a expressão JS">
+        ${CodeSyntaxHighlighter.highlight(rule.jsExpression || '// Clique no código para editar expressão JS', 'javascript')}
       </div>
     `;
 
-    modeSelect.addEventListener('change', (e: any) => {
-      rule.evaluationMode = e.target.value;
-      if (rule.evaluationMode === 'js_eval') {
-        compFields.style.display = 'none';
-        jsFields.style.display = 'flex';
-      } else {
-        compFields.style.display = 'flex';
-        jsFields.style.display = 'none';
-      }
-      ctx.onNodeDataChanged();
+    const codePreviewEl = jsFields.querySelector('.rule-code-preview') as HTMLElement;
+    codePreviewEl?.addEventListener('mouseenter', () => {
+      codePreviewEl.style.borderColor = '#6366f1';
+      codePreviewEl.style.boxShadow = '0 0 10px rgba(99, 102, 241, 0.25)';
+    });
+    codePreviewEl?.addEventListener('mouseleave', () => {
+      codePreviewEl.style.borderColor = '#243049';
+      codePreviewEl.style.boxShadow = 'none';
     });
 
-    compFields.querySelector('.rule-left')?.addEventListener('input', (e: any) => {
-      rule.leftOperand = e.target.value;
-      ctx.onNodeDataChanged();
-    });
-    compFields.querySelector('.rule-op')?.addEventListener('change', (e: any) => {
-      rule.operator = e.target.value;
-      ctx.onNodeDataChanged();
-    });
-    compFields.querySelector('.rule-right')?.addEventListener('input', (e: any) => {
-      rule.rightOperand = e.target.value;
-      ctx.onNodeDataChanged();
-    });
-
-    const jsInput = jsFields.querySelector('.rule-js-code') as HTMLTextAreaElement;
-    jsInput?.addEventListener('input', (e: any) => {
-      rule.jsExpression = e.target.value;
-      ctx.onNodeDataChanged();
-    });
-
-    jsFields.querySelector('.btn-open-rule-editor')?.addEventListener('click', () => {
+    codePreviewEl?.addEventListener('click', () => {
       CodeEditorComponent.openCodeModal({
-        title: `Expressão JavaScript (Regra #${ruleIdx + 1})`,
+        title: `Expressão JavaScript (Expressão #${ruleIdx + 1})`,
         language: 'javascript',
         value: rule.jsExpression || '',
         onSave: (newVal) => {
           rule.jsExpression = newVal;
-          if (jsInput) jsInput.value = newVal;
+          if (codePreviewEl) {
+            codePreviewEl.innerHTML = CodeSyntaxHighlighter.highlight(newVal || '// Clique no código para editar expressão JS', 'javascript');
+          }
           ctx.onNodeDataChanged();
           ctx.showToast('Expressão JS salva!', 'success');
         },
@@ -656,5 +714,127 @@ export class FlowPropertiesRenderer {
       (val) => (data.selectorType = val)
     );
     InspectorInputHelpers.addNumberInput(form, 'Tempo Limite de Espera (ms)', data.timeoutMs ?? 3000, (val) => (data.timeoutMs = val));
+  }
+
+  /**
+   * Abre um editor expandido exclusivo para o caminho selecionado, permitindo alternar de caminho dentro do editor
+   */
+  public static openExpandedPathModal(data: any, initialPathIndex: number, ctx: FlowPropertiesContext): void {
+    if (!Array.isArray(data.cases) || data.cases.length === 0) return;
+    let currentIdx = Math.max(0, Math.min(initialPathIndex, data.cases.length - 1));
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'flow-modal-backdrop switch-path-modal-backdrop';
+    backdrop.style.cssText = `
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(8, 12, 20, 0.82);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100000;
+      padding: 16px;
+      animation: fadeIn 0.15s ease-out;
+    `;
+
+    const card = document.createElement('div');
+    card.className = 'switch-path-modal-card';
+    card.style.cssText = `
+      background: #090d16;
+      border: 1px solid #6366f1;
+      border-radius: 14px;
+      width: 90%;
+      max-width: 920px;
+      height: 84vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.9), 0 0 40px rgba(99, 102, 241, 0.3);
+      overflow: hidden;
+      animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    `;
+
+    const renderModal = () => {
+      card.innerHTML = '';
+
+      // Header
+      const header = document.createElement('div');
+      header.style.cssText = 'padding: 14px 20px; background: #0e1526; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-shrink: 0;';
+
+      const headerLeft = document.createElement('div');
+      headerLeft.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1;';
+      headerLeft.innerHTML = `
+        <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(99, 102, 241, 0.2); border: 1px solid #6366f1; display: flex; align-items: center; justify-content: center; color: #818cf8; flex-shrink: 0;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span style="font-size: 13px; font-weight: 700; color: #f8fafc;">Editor de Caminho:</span>
+          <select id="modalSwitchPathSelect" style="background: #1e293b; border: 1px solid #3b82f6; color: #93c5fd; font-weight: 700; font-size: 12px; padding: 4px 10px; border-radius: 6px; cursor: pointer; outline: none;">
+            ${data.cases.map((c: any, i: number) => `<option value="${i}" ${i === currentIdx ? 'selected' : ''}>${c.label || `Caminho #${i + 1}`}</option>`).join('')}
+          </select>
+          <span style="font-size: 11px; color: #64748b; margin-left: 6px;">(Alterne entre caminhos diretamente por aqui)</span>
+        </div>
+      `;
+
+      const btnCloseX = document.createElement('button');
+      btnCloseX.type = 'button';
+      btnCloseX.innerHTML = '&times;';
+      btnCloseX.title = 'Fechar editor expandido';
+      btnCloseX.style.cssText = 'background: transparent; border: none; color: #94a3b8; font-size: 22px; cursor: pointer; line-height: 1; padding: 2px 8px; border-radius: 4px;';
+      btnCloseX.addEventListener('click', closeModal);
+
+      header.appendChild(headerLeft);
+      header.appendChild(btnCloseX);
+      card.appendChild(header);
+
+      // Body
+      const body = document.createElement('div');
+      body.style.cssText = 'flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px;';
+
+      const currentPath = data.cases[currentIdx];
+      if (currentPath) {
+        const modalCtx: FlowPropertiesContext = {
+          ...ctx,
+          renderInspector: () => {
+            renderModal();
+            ctx.renderInspector();
+          },
+          onNodeDataChanged: () => {
+            ctx.onNodeDataChanged();
+          },
+        };
+        const builder = FlowPropertiesRenderer.renderConditionGroupsBuilder(currentPath, modalCtx);
+        body.appendChild(builder);
+      }
+
+      card.appendChild(body);
+
+      // Footer
+      const footer = document.createElement('div');
+      footer.style.cssText = 'padding: 12px 20px; background: #0e1526; border-top: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;';
+      footer.innerHTML = `
+        <span style="font-size: 11px; color: #64748b;">Todas as alterações nas expressões e grupos deste caminho são salvas automaticamente.</span>
+        <button id="btnDoneSwitchPathModal" class="btn btn-primary" style="padding: 7px 20px; font-size: 12px; font-weight: 600;">Concluir e Fechar</button>
+      `;
+      footer.querySelector('#btnDoneSwitchPathModal')?.addEventListener('click', closeModal);
+
+      card.appendChild(footer);
+
+      // Listener do select de caminhos
+      card.querySelector('#modalSwitchPathSelect')?.addEventListener('change', (e: any) => {
+        currentIdx = Number(e.target.value);
+        renderModal();
+      });
+    };
+
+    const closeModal = () => {
+      backdrop.remove();
+      ctx.renderInspector();
+      ctx.onNodeDataChanged();
+    };
+
+    backdrop.appendChild(card);
+    document.body.appendChild(backdrop);
+    renderModal();
   }
 }

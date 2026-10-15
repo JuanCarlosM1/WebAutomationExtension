@@ -178,22 +178,6 @@ var StateManager = class {
   evaluateRulesGroup(rules, logicalOperator = "and") {
     if (!rules || rules.length === 0)
       return true;
-    if (rules.some((r) => !!r.connector)) {
-      let result = this.evaluateConditionRule(rules[0]);
-      for (let i = 1; i < rules.length; i++) {
-        const conn = rules[i].connector || logicalOperator;
-        let value = this.evaluateConditionRule(rules[i]);
-        if (conn === "and_not" || conn === "or_not" || conn === "not_and" || conn === "not_or") {
-          value = !value;
-        }
-        if (conn === "or" || conn === "or_not" || conn === "not_or") {
-          result = result || value;
-        } else {
-          result = result && value;
-        }
-      }
-      return result;
-    }
     if (logicalOperator === "or") {
       return rules.some((r) => this.evaluateConditionRule(r));
     }
@@ -213,14 +197,11 @@ var StateManager = class {
       const currentGroup = groups[i];
       const nextGroup = groups[i + 1];
       const connector = currentGroup.nextOperator || "or";
-      let nextGroupResult = this.evaluateRulesGroup(nextGroup.rules, nextGroup.logicalOperator || "and");
-      if (connector === "and_not" || connector === "or_not" || connector === "not_and" || connector === "not_or") {
-        nextGroupResult = !nextGroupResult;
-      }
-      if (connector === "or" || connector === "or_not" || connector === "not_or") {
-        runningResult = runningResult || nextGroupResult;
-      } else {
+      const nextGroupResult = this.evaluateRulesGroup(nextGroup.rules, nextGroup.logicalOperator || "and");
+      if (connector === "and") {
         runningResult = runningResult && nextGroupResult;
+      } else {
+        runningResult = runningResult || nextGroupResult;
       }
     }
     return runningResult;
@@ -1714,6 +1695,13 @@ var ExtensionController = class {
           connected: isConnected,
           port: this.mcpPort
         };
+      }
+      case "RELAY_PICKER_KEY": {
+        const { tabId, key, code } = payload || {};
+        if (tabId && chrome.tabs?.sendMessage) {
+          chrome.tabs.sendMessage(tabId, { action: "FORWARD_PICKER_KEY", payload: { key, code } }, () => void chrome.runtime.lastError);
+        }
+        return { success: true };
       }
       default:
         return { success: false, error: `A\xE7\xE3o n\xE3o reconhecida: ${action}` };

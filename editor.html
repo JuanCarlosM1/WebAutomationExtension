@@ -16,17 +16,10 @@
     <!-- WORKFLOW TABS BAR (NAVEGAÇÃO POR ABAS)    -->
     <!-- ========================================== -->
     <nav class="app-tabs-bar" id="appTabsBar">
-      <!-- Aba Início: tamanho menor, sempre visível e fixada à esquerda -->
-      <button class="app-tab-item tab-home active" id="tabHomeBtn" title="Tela Inicial (Gerenciador de Fluxos)">
-        <span class="tab-home-icon" style="display:inline-flex;align-items:center;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        </span>
-        <span class="tab-label">Início</span>
-      </button>
-      <!-- Container das abas de workflows abertos -->
+      <!-- Container das abas de workflows abertos e aba Início dinâmica -->
       <div class="workflow-tabs-scroll" id="workflowTabsContainer"></div>
-      <!-- Botão para criar novo fluxo direto pela barra de abas -->
-      <button class="app-tab-add" id="btnTabNewFlow" title="Criar Novo Fluxo">+</button>
+      <!-- Botão para abrir aba de Início direto pela barra de abas -->
+      <button class="app-tab-add" id="btnTabNewFlow" title="Abrir Aba de Início">+</button>
     </nav>
 
     <!-- ========================================== -->
@@ -45,6 +38,10 @@
         </div>
 
         <div class="header-actions">
+          <button id="btnDashboardSettings" class="btn btn-secondary" title="Configurações (Abre Aba no Visual Flow)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            Configurações
+          </button>
           <button id="btnDashboardImport" class="btn btn-secondary">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Importar .json
@@ -83,7 +80,7 @@
         <div class="brand-section">
           <div>
             <input type="text" id="flowTitleInput" class="flow-title-edit" value="Minha Automação" />
-            <span class="flow-badge" id="flowStatusBadge">.webautomation.json</span>
+            <span class="flow-badge" id="flowStatusBadge" style="display: none;"></span>
           </div>
         </div>
 
@@ -92,14 +89,7 @@
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             <span>Limpar Canvas</span>
           </button>
-          <button id="btnOpenFlowPalette" class="btn btn-secondary" title="Gerenciar grupo de cores personalizadas do fluxo">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
-            <span>Cores do Fluxo</span>
-          </button>
-          <button id="btnOpenSettings" class="btn btn-secondary" title="Configurações do Visual Flow & Botões Flutuantes">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-            <span>Configurações</span>
-          </button>
+
           <button id="btnSaveFlow" class="btn btn-secondary" title="Salvar Alterações (Ctrl+S)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             <span id="saveButtonLabel">Salvar</span>
@@ -119,7 +109,7 @@
       <main class="workspace" id="mainWorkspace">
         <!-- Barra de Atividades Vertical Esquerda (Sempre visível para alternar menus) -->
         <div class="activity-bar-left" id="activityBarLeft">
-          <button id="btnActivityBlocks" class="activity-btn active" title="Exibir / Ocultar Biblioteca de Blocos">
+          <button id="btnActivityBlocks" class="activity-btn active" title="Biblioteca de Blocos">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="7" height="7"></rect>
               <rect x="14" y="3" width="7" height="7"></rect>
@@ -128,7 +118,20 @@
             </svg>
             <span class="activity-tooltip">Blocos</span>
           </button>
-          <button id="btnActivityAnalyzer" class="activity-btn" title="Analisador de Elementos HTML">
+          <button id="btnActivityInspector" class="activity-btn" title="Propriedades do Bloco">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"></path>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+            </svg>
+            <span class="activity-tooltip">Propriedades</span>
+          </button>
+          <button id="btnActivityColors" class="activity-btn" title="Cores do Fluxo">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+            </svg>
+            <span class="activity-tooltip">Cores do Fluxo</span>
+          </button>
+          <button id="btnActivityAnalyzer" class="activity-btn" title="Analisador de Elementos HTML (Menu Compacto na Página)">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"></circle>
               <line x1="22" y1="12" x2="18" y2="12"></line>
@@ -138,6 +141,13 @@
               <circle cx="12" cy="12" r="3"></circle>
             </svg>
             <span class="activity-tooltip">Analisador HTML</span>
+          </button>
+          <button id="btnActivitySettings" class="activity-btn" title="Configurações (Abre Aba no Visual Flow)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            <span class="activity-tooltip">Configurações</span>
           </button>
         </div>
 
@@ -149,9 +159,6 @@
                 <h3>Biblioteca de Blocos</h3>
                 <p>Clique ou arraste para adicionar ao fluxo</p>
               </div>
-              <button id="btnToggleSidebarLeft" class="sidebar-toggle-btn" title="Recolher Biblioteca">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-              </button>
             </div>
           </div>
 
@@ -164,48 +171,28 @@
           </div>
         </aside>
 
-        <!-- Divisor redimensionável esquerdo -->
-        <div class="sidebar-resizer" id="resizerLeft" title="Arraste para redimensionar a Biblioteca de Blocos"></div>
-
-        <!-- Center: Graph Canvas -->
-        <section class="canvas-container" id="canvasContainer">
-          <!-- Viewport transformável para Pan e Zoom suaves -->
-          <div class="canvas-viewport" id="canvasViewport">
-            <svg class="edges-svg-layer" id="edgesLayer"></svg>
-            <div class="canvas-nodes-layer" id="nodesLayer"></div>
-            <svg class="edges-controls-svg-layer" id="edgesControlsLayer"></svg>
-          </div>
-
-          <div class="canvas-overlay-watermark">WebAutomations Canvas</div>
-
-          <!-- Minimapa da Automação -->
-          <div class="canvas-minimap" id="canvasMinimap" title="Minimapa da Automação (Clique ou arraste para navegar)">
-            <div class="minimap-header">
-              <span>MINIMAPA</span>
-            </div>
-            <div class="minimap-body" id="minimapBody">
-              <svg class="minimap-svg" id="minimapSvg"></svg>
-              <div class="minimap-viewport-indicator" id="minimapIndicator"></div>
-            </div>
-          </div>
-
-          <!-- Floating Controls -->
-          <div class="canvas-floating-controls">
-            <button id="btnZoomIn" title="Aumentar Zoom">+</button>
-            <button id="btnZoomReset" title="Resetar Zoom e Posição">100%</button>
-            <button id="btnZoomOut" title="Diminuir Zoom">-</button>
-          </div>
-        </section>
-
-        <!-- Divisor redimensionável direito -->
-        <div class="sidebar-resizer" id="resizerRight" title="Arraste para redimensionar o painel de Propriedades"></div>
-
-        <!-- Right Sidebar: Properties Inspector (Aparece apenas quando um bloco for selecionado) -->
-        <aside class="sidebar-inspector collapsed" id="sidebarInspector">
-          <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border-subtle);">
+        <!-- Left Sidebar: Flow Colors (Cores do Fluxo) -->
+        <aside class="sidebar-colors collapsed" id="sidebarColors">
+          <div class="sidebar-header">
             <div>
-              <h3 style="font-size: 13px; font-weight: 700; color: var(--text-main);">Propriedades</h3>
-              <p style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">Configurações do bloco selecionado</p>
+              <h3>Cores do Fluxo</h3>
+              <p>Cores personalizadas e nomeadas do fluxo</p>
+            </div>
+            <button id="btnToggleSidebarColors" class="sidebar-toggle-btn" title="Fechar Cores do Fluxo">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <div class="colors-sidebar-content" id="colorsSidebarContent" style="padding: 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 12px;">
+            <!-- Painel de cores gerenciado pelo ColorPickerManager -->
+          </div>
+        </aside>
+
+        <!-- Left Sidebar: Properties Inspector (Movido para o lado esquerdo junto das outras opções) -->
+        <aside class="sidebar-inspector collapsed" id="sidebarInspector">
+          <div class="sidebar-header">
+            <div>
+              <h3>Propriedades</h3>
+              <p>Configurações do bloco selecionado</p>
             </div>
             <div style="display: flex; align-items: center; gap: 6px;">
               <button id="btnExpandInspectorModal" class="sidebar-toggle-btn" title="Expandir em tela cheia centralizada">
@@ -226,8 +213,174 @@
             </form>
           </div>
         </aside>
-      </main>
-    </div>
+
+        <!-- Divisor redimensionável esquerdo -->
+        <div class="sidebar-resizer" id="resizerLeft" title="Arraste para redimensionar o painel"></div>
+
+        <!-- Center: Graph Canvas -->
+        <section class="canvas-container" id="canvasContainer">
+          <!-- Viewport transformável para Pan e Zoom suaves -->
+          <div class="canvas-viewport" id="canvasViewport">
+            <svg class="edges-svg-layer" id="edgesLayer"></svg>
+            <div class="canvas-nodes-layer" id="nodesLayer"></div>
+            <svg class="edges-controls-svg-layer" id="edgesControlsLayer"></svg>
+          </div>
+
+          <div class="canvas-overlay-watermark">WebAutomations Canvas</div>
+
+          <!-- Minimapa da Automação com Controles de Zoom Unificados -->
+          <div class="canvas-minimap" id="canvasMinimap" title="Minimapa da Automação (Clique ou arraste para navegar)">
+            <div class="minimap-header">
+              <span class="minimap-title">MINIMAPA</span>
+              <div class="minimap-zoom-controls" id="minimapZoomControls">
+                <button id="btnZoomOut" type="button" title="Diminuir Zoom">−</button>
+                <button id="btnZoomReset" type="button" title="Resetar Zoom (100%)">100%</button>
+                <button id="btnZoomIn" type="button" title="Aumentar Zoom">+</button>
+              </div>
+            </div>
+            <div class="minimap-body" id="minimapBody">
+              <svg class="minimap-svg" id="minimapSvg"></svg>
+              <div class="minimap-viewport-indicator" id="minimapIndicator"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Seção interna de Configurações do Visual Flow (Aba Ativa) -->
+        <section id="viewSettings" class="settings-workspace-view" style="display: none; flex: 1; height: 100%; overflow-y: auto; background: #0b0f19;">
+          <div class="settings-container" style="max-width: 860px; margin: 0 auto; padding: 32px 24px 80px;">
+        <header class="settings-header" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 20px; margin-bottom: 24px;">
+          <div class="settings-brand" style="display: flex; align-items: center; gap: 14px;">
+            <div class="settings-icon-badge" style="width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(59, 130, 246, 0.25)); border: 1px solid rgba(99, 102, 241, 0.4); display: flex; align-items: center; justify-content: center; color: #818cf8;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </div>
+            <div>
+              <h1 class="settings-title" style="font-size: 20px; font-weight: 800; margin: 0; color: #f8fafc;">Configurações</h1>
+              <p class="settings-desc" style="font-size: 12px; color: #94a3b8; margin: 4px 0 0;">Preferências do estúdio, botões flutuantes em páginas e integrações.</p>
+            </div>
+          </div>
+        </header>
+
+        <!-- 1. Botões Flutuantes e Disparos na Página -->
+        <section class="settings-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+          <div class="settings-card-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px; border-bottom: 1px solid #1e293b; padding-bottom: 10px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+            <h2 class="settings-card-title" style="font-size: 14px; font-weight: 700; color: #f1f5f9; margin: 0;">Botões Flutuantes em Páginas Web</h2>
+          </div>
+          <div class="settings-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div class="form-group">
+              <label for="settingsStackDirection" style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Direção de Empilhamento</label>
+              <select id="settingsStackDirection" class="form-control" style="background: #090d16; border: 1px solid #243049; border-radius: 8px; padding: 8px 12px; color: #f8fafc; font-size: 12px;">
+                <option value="vertical">Vertical (Coluna de botões)</option>
+                <option value="horizontal">Horizontal (Linha de botões)</option>
+              </select>
+              <span class="desc" style="font-size: 11px; color: #64748b;">Define como múltiplos botões flutuantes se organizam.</span>
+            </div>
+            <div class="form-group">
+              <label for="settingsGapInput" style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Espaçamento entre Botões (px)</label>
+              <input type="number" id="settingsGapInput" class="form-control" min="0" max="60" value="10" style="background: #090d16; border: 1px solid #243049; border-radius: 8px; padding: 8px 12px; color: #f8fafc; font-size: 12px;" />
+              <span class="desc" style="font-size: 11px; color: #64748b;">Distância em pixels entre cada botão flutuante.</span>
+            </div>
+            <div class="form-group">
+              <label for="settingsMaxColumnsInput" style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Limite de Colunas (Horizontal)</label>
+              <input type="number" id="settingsMaxColumnsInput" class="form-control" min="1" max="10" value="3" style="background: #090d16; border: 1px solid #243049; border-radius: 8px; padding: 8px 12px; color: #f8fafc; font-size: 12px;" />
+              <span class="desc" style="font-size: 11px; color: #64748b;">Máximo de botões antes de quebrar para a próxima linha.</span>
+            </div>
+            <div class="form-group">
+              <label for="settingsMaxRowsInput" style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Limite de Linhas (Vertical)</label>
+              <input type="number" id="settingsMaxRowsInput" class="form-control" min="1" max="20" value="5" style="background: #090d16; border: 1px solid #243049; border-radius: 8px; padding: 8px 12px; color: #f8fafc; font-size: 12px;" />
+              <span class="desc" style="font-size: 11px; color: #64748b;">Máximo de botões antes de quebrar para a próxima coluna.</span>
+            </div>
+          </div>
+          <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #1e293b; display: flex; justify-content: flex-end;">
+            <button type="button" id="btnSettingsResetPositions" class="btn btn-secondary" style="font-size: 11px;">Restaurar Posições Arrastadas</button>
+          </div>
+        </section>
+
+        <!-- 2. Preferências do Editor Visual Flow -->
+        <section class="settings-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+          <div class="settings-card-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px; border-bottom: 1px solid #1e293b; padding-bottom: 10px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            <h2 class="settings-card-title" style="font-size: 14px; font-weight: 700; color: #f1f5f9; margin: 0;">Preferências do Visual Flow Studio</h2>
+          </div>
+          <div class="settings-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div class="form-group">
+              <label for="settingsAutoSaveInterval" style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Salvamento Automático</label>
+              <select id="settingsAutoSaveInterval" class="form-control" style="background: #090d16; border: 1px solid #243049; border-radius: 8px; padding: 8px 12px; color: #f8fafc; font-size: 12px;">
+                <option value="always">Imediato a cada alteração (Padrão)</option>
+                <option value="interval_30s">A cada 30 segundos</option>
+                <option value="manual">Apenas manual (Ctrl + S)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="settingsDefaultEdgeType" style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Estilo Padrão das Ligações</label>
+              <select id="settingsDefaultEdgeType" class="form-control" style="background: #090d16; border: 1px solid #243049; border-radius: 8px; padding: 8px 12px; color: #f8fafc; font-size: 12px;">
+                <option value="bezier">Curva Suave (Bezier Inteligente)</option>
+                <option value="straight">Reta Direta</option>
+                <option value="step">Ortogonal (Ângulos Retos)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-check" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 8px;">
+                <input type="checkbox" id="settingsShowMinimapDefault" checked style="accent-color: #6366f1;" />
+                <span style="font-size: 12px; color: #cbd5e1;">Exibir Minimapa ao Abrir o Estúdio</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="form-check" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 8px;">
+                <input type="checkbox" id="settingsSnapToGridDefault" checked style="accent-color: #6366f1;" />
+                <span style="font-size: 12px; color: #cbd5e1;">Alinhar Blocos à Grade (Grid Snap)</span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. Integração com MCP / LLM -->
+        <section class="settings-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+          <div class="settings-card-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px; border-bottom: 1px solid #1e293b; padding-bottom: 10px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8" y2="16"></line><line x1="16" y1="16" x2="16" y2="16"></line></svg>
+            <h2 class="settings-card-title" style="font-size: 14px; font-weight: 700; color: #f1f5f9; margin: 0;">Ponte MCP (Model Context Protocol / LLMs)</h2>
+          </div>
+          <div class="settings-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div class="form-group">
+              <label class="form-check" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="settingsMcpEnabled" style="accent-color: #6366f1;" />
+                <span style="font-size: 12px; color: #cbd5e1;">Ativar Servidor da Ponte MCP</span>
+              </label>
+              <span class="desc" style="font-size: 11px; color: #64748b; margin-top: 4px;">Permite que modelos de linguagem controlem o navegador.</span>
+            </div>
+            <div class="form-group">
+              <label for="settingsMcpPortInput" style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Porta do Servidor MCP</label>
+              <input type="number" id="settingsMcpPortInput" class="form-control" value="3001" min="1024" max="65535" style="background: #090d16; border: 1px solid #243049; border-radius: 8px; padding: 8px 12px; color: #f8fafc; font-size: 12px;" />
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. Armazenamento e Backups -->
+        <section class="settings-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+          <div class="settings-card-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px; border-bottom: 1px solid #1e293b; padding-bottom: 10px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <h2 class="settings-card-title" style="font-size: 14px; font-weight: 700; color: #f1f5f9; margin: 0;">Armazenamento Local & Backups</h2>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+            <div>
+              <div style="font-weight: 600; font-size: 12px; color: #f8fafc;" id="settingsStorageSummaryText">Carregando estatísticas...</div>
+              <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Todos os fluxos e configurações são armazenados no storage local.</div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" id="btnSettingsExportAllData" class="btn btn-secondary" style="font-size: 11px; padding: 6px 12px;">Exportar Backup</button>
+              <button type="button" id="btnSettingsImportAllData" class="btn btn-secondary" style="font-size: 11px; padding: 6px 12px;">Restaurar Backup</button>
+              <input type="file" id="settingsBackupFileInput" accept=".json" style="display: none;" />
+            </div>
+          </div>
+        </section>
+
+        <!-- Barra de Salvamento -->
+        <div style="display: flex; justify-content: flex-end; padding-top: 10px;">
+          <button id="btnSaveVisualSettings" class="btn btn-primary" style="padding: 10px 24px; font-weight: 600;">Salvar Alterações</button>
+        </div>
+      </section>
+    </main>
+  </div>
 
   </div>
 

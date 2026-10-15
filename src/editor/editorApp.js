@@ -183,7 +183,7 @@ class VisualEditorApp {
           this.render();
           this.renderInspector();
         } catch (err: any) {
-          alert('Erro ao carregar JSON: ' + err.message);
+          console.error('Erro ao carregar JSON: ' + err.message);
         }
       };
       reader.readAsText(file);

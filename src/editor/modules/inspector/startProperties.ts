@@ -7,6 +7,7 @@
  */
 import { InspectorInputHelpers } from '../inspectorInputHelpers';
 import { ColorPickerManager } from '../colorPickerManager';
+import { DialogMenu } from '../dialogUtils';
 
 export interface StartPropertiesContext {
   renderInspector: (scrollToSelector?: string) => void;
@@ -86,15 +87,27 @@ export class StartPropertiesRenderer {
       btnDel.innerHTML = '&times;';
       btnDel.title = 'Remover este gatilho';
       btnDel.style.cssText = 'background: transparent; color: #ef4444; border: none; font-size: 16px; cursor: pointer; line-height: 1; padding: 2px 4px;';
-      btnDel.addEventListener('click', (e) => {
+      btnDel.addEventListener('click', async (e) => {
         e.stopPropagation();
         if (data.triggers.length <= 1) {
-          alert('O fluxo deve ter pelo menos 1 forma de disparo!');
+          DialogMenu.alert({
+            title: 'Gatilho Obrigatório',
+            message: 'O fluxo deve ter pelo menos 1 forma de disparo configurada.',
+            type: 'warning',
+          });
           return;
         }
-        data.triggers.splice(index, 1);
-        ctx.renderInspector();
-        ctx.onNodeDataChanged?.();
+        const confirmed = await DialogMenu.confirm({
+          title: 'Remover Gatilho',
+          message: 'Deseja realmente remover este gatilho de disparo?',
+          confirmText: 'Remover',
+          isDanger: true,
+        });
+        if (confirmed) {
+          data.triggers.splice(index, 1);
+          ctx.renderInspector();
+          ctx.onNodeDataChanged?.();
+        }
       });
 
       accordionHeader.appendChild(headerLeft);

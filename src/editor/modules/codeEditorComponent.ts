@@ -20,6 +20,7 @@ import {
 import { CodeSyntaxValidator } from './codeSyntaxValidator';
 import { CodeFormatter } from './codeFormatter';
 import { CodeSyntaxHighlighter } from './codeSyntaxHighlighter';
+import { ColorPickerManager } from './colorPickerManager';
 
 export type { CodeLanguage, AutocompleteItem };
 export { JS_BUILTIN_SUGGESTIONS, CSS_SUGGESTIONS, HTML_SUGGESTIONS };
@@ -240,9 +241,6 @@ export class CodeEditorComponent {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             <span>Copiar</span>
           </button>
-          <button type="button" class="ce-btn btn-fullscreen-code" title="Expandir editor em tela cheia">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-          </button>
         </div>
       </div>
 
@@ -367,11 +365,6 @@ export class CodeEditorComponent {
       this.textarea.focus();
       this.textarea.setSelectionRange(0, this.textarea.value.length);
       this.updateCursorStatus();
-    });
-
-    const fullscreenBtn = this.container.querySelector('.btn-fullscreen-code');
-    fullscreenBtn?.addEventListener('click', () => {
-      this.toggleFullscreen();
     });
   }
 
@@ -709,6 +702,39 @@ export class CodeEditorComponent {
       const seen = new Set<string>();
       const combined: AutocompleteItem[] = [];
 
+      // Sugestões das Cores Nomeadas do Fluxo
+      const flowColors = ColorPickerManager.activeFlowColors || [];
+      flowColors.forEach((fc) => {
+        if (fc.name) {
+          combined.push({
+            label: `flowColors.${fc.name}`,
+            type: 'variable',
+            insertText: `flowColors.${fc.name}`,
+            detail: `Cor do Fluxo (${fc.hex})`,
+          });
+          combined.push({
+            label: `colors.${fc.name}`,
+            type: 'variable',
+            insertText: `colors.${fc.name}`,
+            detail: `Cor do Fluxo (${fc.hex})`,
+          });
+        }
+      });
+      if (flowColors.length > 0) {
+        combined.push({
+          label: 'flowColors',
+          type: 'variable',
+          insertText: 'flowColors',
+          detail: 'Objeto de Cores do Fluxo',
+        });
+        combined.push({
+          label: 'colors',
+          type: 'variable',
+          insertText: 'colors',
+          detail: 'Objeto de Cores do Fluxo',
+        });
+      }
+
       declared.forEach((item) => {
         if (!seen.has(item.label)) {
           seen.add(item.label);
@@ -725,7 +751,25 @@ export class CodeEditorComponent {
 
       return combined;
     } else if (lang === 'css') {
-      return CSS_SUGGESTIONS;
+      const cssCombined = [...CSS_SUGGESTIONS];
+      const flowColors = ColorPickerManager.activeFlowColors || [];
+      flowColors.forEach((fc) => {
+        if (fc.name) {
+          cssCombined.push({
+            label: `var(--color-${fc.name})`,
+            type: 'property',
+            insertText: `var(--color-${fc.name})`,
+            detail: `Cor do Fluxo (${fc.hex})`,
+          });
+          cssCombined.push({
+            label: `${fc.hex} /* ${fc.name} */`,
+            type: 'property',
+            insertText: fc.hex,
+            detail: `Cor do Fluxo: ${fc.name}`,
+          });
+        }
+      });
+      return cssCombined;
     } else if (lang === 'html') {
       return HTML_SUGGESTIONS;
     }
