@@ -43,5 +43,11 @@
       },
       "description": "Disparar automação configurada"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["dist/pageScriptBridge.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

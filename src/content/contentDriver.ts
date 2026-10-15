@@ -23,6 +23,110 @@ chrome.runtime.onMessage.addListener((message: DomActionMessage, sender, sendRes
   return true; // Manter o canal assíncrono aberto
 });
 
+// Gerenciador de Injeção de Scripts no contexto da página web (DOM / MAIN world)
+let scriptDomCounter = 0;
+
+function getNextScriptId(): string {
+  const num = String(scriptDomCounter++).padStart(3, '0');
+  return `script${num}`;
+}
+
+async function executeScriptInPageContext(code: string, args: any[] = []): Promise<DomActionResult> {
+  return new Promise<DomActionResult>((resolve) => {
+    const scriptId = getNextScriptId();
+    const eventId = '__wa_res_' + scriptId + '_' + Date.now();
+    let finished = false;
+
+    const cleanup = () => {
+      if (!finished) {
+        finished = true;
+        window.removeEventListener(eventId, onResult);
+      }
+    };
+
+    const onResult = (e: any) => {
+      cleanup();
+      const detail = e.detail || {};
+      if (detail.success) {
+        resolve({ success: true, data: detail.result });
+      } else {
+        resolve({ success: false, error: detail.error });
+      }
+    };
+
+    window.addEventListener(eventId, onResult);
+
+    try {
+      if (!isExtensionContextValid()) {
+        const vars: Record<string, any> = { args };
+        (args || []).forEach((a: any, i: number) => { vars[`arg${i}`] = a; });
+        const res = SafeJsEvaluator.evaluate(code, vars);
+        resolve({ success: true, data: res });
+        return;
+      }
+
+      // Cria a tag <script> com o ID sequencial (script000, script001, script002...)
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.setAttribute('data-script-id', scriptId);
+      script.setAttribute('data-script-index', String(scriptDomCounter - 1));
+      script.setAttribute('name', 'script' + (scriptDomCounter - 1));
+      script.setAttribute('data-event-id', eventId);
+      script.classList.add(scriptId, 'script' + (scriptDomCounter - 1));
+      script.src = chrome.runtime.getURL('dist/pageScriptBridge.js') + `?id=${scriptId}`;
+
+      const dispatchExecution = () => {
+        if (finished) return;
+        window.dispatchEvent(
+          new CustomEvent('__WA_EXECUTE_PAGE_SCRIPT__', {
+            detail: { scriptId, eventId, code, args },
+          })
+        );
+      };
+
+      script.onload = dispatchExecution;
+      script.onerror = () => {
+        if (!finished) {
+          cleanup();
+          const vars: Record<string, any> = { args };
+          (args || []).forEach((a: any, i: number) => { vars[`arg${i}`] = a; });
+          const res = SafeJsEvaluator.evaluate(code, vars);
+          resolve({ success: true, data: res });
+        }
+      };
+
+      // Insere o script no DOM da página
+      (document.head || document.documentElement).appendChild(script);
+
+      // Despacha também caso a ponte já esteja carregada e ouvindo
+      dispatchExecution();
+    } catch {
+      if (!finished) {
+        cleanup();
+        const vars: Record<string, any> = { args };
+        (args || []).forEach((a: any, i: number) => { vars[`arg${i}`] = a; });
+        const res = SafeJsEvaluator.evaluate(code, vars);
+        resolve({ success: true, data: res });
+      }
+    }
+
+    // Fallback seguro caso a injeção na página não responda
+    setTimeout(() => {
+      if (!finished) {
+        cleanup();
+        try {
+          const vars: Record<string, any> = { args };
+          (args || []).forEach((a: any, i: number) => { vars[`arg${i}`] = a; });
+          const res = SafeJsEvaluator.evaluate(code, vars);
+          resolve({ success: true, data: res });
+        } catch (err: any) {
+          resolve({ success: false, error: err.message });
+        }
+      }
+    }, 1500);
+  });
+}
+
 async function handleDomAction(message: DomActionMessage): Promise<DomActionResult> {
   const { action, payload } = message;
 
@@ -302,14 +406,7 @@ async function handleDomAction(message: DomActionMessage): Promise<DomActionResu
 
     case 'INJECT_SCRIPT': {
       const { code, args = [] } = payload;
-      try {
-        const vars: Record<string, any> = { args };
-        (args || []).forEach((a: any, i: number) => { vars[`arg${i}`] = a; });
-        const res = SafeJsEvaluator.evaluate(code, vars);
-        return { success: true, data: res };
-      } catch (err: any) {
-        return { success: false, error: err.message };
-      }
+      return await executeScriptInPageContext(code, args);
     }
 
     default:

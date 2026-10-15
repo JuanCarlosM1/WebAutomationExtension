@@ -21018,6 +21018,101 @@ ${es5Code}
     handleDomAction(message).then((result) => sendResponse(result)).catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
   });
+  var scriptDomCounter = 0;
+  function getNextScriptId() {
+    const num = String(scriptDomCounter++).padStart(3, "0");
+    return `script${num}`;
+  }
+  async function executeScriptInPageContext(code, args = []) {
+    return new Promise((resolve) => {
+      const scriptId = getNextScriptId();
+      const eventId = "__wa_res_" + scriptId + "_" + Date.now();
+      let finished = false;
+      const cleanup = () => {
+        if (!finished) {
+          finished = true;
+          window.removeEventListener(eventId, onResult);
+        }
+      };
+      const onResult = (e) => {
+        cleanup();
+        const detail = e.detail || {};
+        if (detail.success) {
+          resolve({ success: true, data: detail.result });
+        } else {
+          resolve({ success: false, error: detail.error });
+        }
+      };
+      window.addEventListener(eventId, onResult);
+      try {
+        if (!isExtensionContextValid()) {
+          const vars = { args };
+          (args || []).forEach((a, i) => {
+            vars[`arg${i}`] = a;
+          });
+          const res2 = SafeJsEvaluator.evaluate(code, vars);
+          resolve({ success: true, data: res2 });
+          return;
+        }
+        const script = document.createElement("script");
+        script.id = scriptId;
+        script.setAttribute("data-script-id", scriptId);
+        script.setAttribute("data-script-index", String(scriptDomCounter - 1));
+        script.setAttribute("name", "script" + (scriptDomCounter - 1));
+        script.setAttribute("data-event-id", eventId);
+        script.classList.add(scriptId, "script" + (scriptDomCounter - 1));
+        script.src = chrome.runtime.getURL("dist/pageScriptBridge.js") + `?id=${scriptId}`;
+        const dispatchExecution = () => {
+          if (finished)
+            return;
+          window.dispatchEvent(
+            new CustomEvent("__WA_EXECUTE_PAGE_SCRIPT__", {
+              detail: { scriptId, eventId, code, args }
+            })
+          );
+        };
+        script.onload = dispatchExecution;
+        script.onerror = () => {
+          if (!finished) {
+            cleanup();
+            const vars = { args };
+            (args || []).forEach((a, i) => {
+              vars[`arg${i}`] = a;
+            });
+            const res2 = SafeJsEvaluator.evaluate(code, vars);
+            resolve({ success: true, data: res2 });
+          }
+        };
+        (document.head || document.documentElement).appendChild(script);
+        dispatchExecution();
+      } catch {
+        if (!finished) {
+          cleanup();
+          const vars = { args };
+          (args || []).forEach((a, i) => {
+            vars[`arg${i}`] = a;
+          });
+          const res2 = SafeJsEvaluator.evaluate(code, vars);
+          resolve({ success: true, data: res2 });
+        }
+      }
+      setTimeout(() => {
+        if (!finished) {
+          cleanup();
+          try {
+            const vars = { args };
+            (args || []).forEach((a, i) => {
+              vars[`arg${i}`] = a;
+            });
+            const res2 = SafeJsEvaluator.evaluate(code, vars);
+            resolve({ success: true, data: res2 });
+          } catch (err) {
+            resolve({ success: false, error: err.message });
+          }
+        }
+      }, 1500);
+    });
+  }
   async function handleDomAction(message) {
     const { action, payload } = message;
     switch (action) {
@@ -21269,16 +21364,7 @@ ${es5Code}
       }
       case "INJECT_SCRIPT": {
         const { code, args = [] } = payload;
-        try {
-          const vars = { args };
-          (args || []).forEach((a, i) => {
-            vars[`arg${i}`] = a;
-          });
-          const res2 = SafeJsEvaluator.evaluate(code, vars);
-          return { success: true, data: res2 };
-        } catch (err) {
-          return { success: false, error: err.message };
-        }
+        return await executeScriptInPageContext(code, args);
       }
       default:
         throw new Error(`A\xE7\xE3o de DOM desconhecida: ${action}`);

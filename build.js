@@ -76,6 +76,17 @@ async function build() {
   });
   console.log('✓ dist/analyzerApp.js gerado');
 
+  // 7. Page Script Bridge (Injetado via <script> na página web)
+  await esbuild.build({
+    entryPoints: ['src/content/pageScriptBridge.ts'],
+    outfile: 'dist/pageScriptBridge.js',
+    bundle: true,
+    format: 'iife',
+    target: 'chrome110',
+    sourcemap: true,
+  });
+  console.log('✓ dist/pageScriptBridge.js gerado');
+
   console.log('🎉 Compilação da extensão concluída com sucesso!');
 }
 
