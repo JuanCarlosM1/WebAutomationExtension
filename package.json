@@ -9,5 +9,9 @@
   "devDependencies": {
     "esbuild": "^0.20.1",
     "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "buble": "^0.20.0",
+    "eval5": "^1.4.8"
   }
 }

@@ -3,6 +3,7 @@
  */
 
 import { IBrowserDriver } from '../../../BibliotecaDeDev/src/engine/ExecutionContext';
+import { SafeJsEvaluator } from '../utils/safeJsEvaluator';
 
 export class ChromeBrowserDriver implements IBrowserDriver {
   private activeTabId?: number;
@@ -262,21 +263,25 @@ export class ChromeBrowserDriver implements IBrowserDriver {
   }
 
   public async injectScript(code: string, context: 'content_script' | 'background', args: any[] = []): Promise<any> {
+    const vars = args.reduce((acc, arg, i) => {
+      acc[`arg${i}`] = arg;
+      return acc;
+    }, {} as Record<string, any>);
+    vars['args'] = args;
+
     if (context === 'background') {
-      const fn = new Function(...args.map((_, i) => `arg${i}`), code);
-      return fn(...args);
+      return SafeJsEvaluator.evaluate(code, vars);
     }
 
     const tabId = await this.getTargetTabId();
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: (scriptContent: string, scriptArgs: any[]) => {
-        const fn = new Function('args', scriptContent);
-        return fn(scriptArgs);
-      },
-      args: [code, args],
-    });
-    return result?.result;
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    const isExtensionPage = !tab?.url || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('chrome://');
+
+    if (isExtensionPage) {
+      return SafeJsEvaluator.evaluate(code, vars);
+    }
+
+    return await this.sendToContentScript('INJECT_SCRIPT', { code, args });
   }
 
   public async injectHtml(html: string, targetSelector: string, position: string, selectorType?: 'css' | 'xpath'): Promise<void> {

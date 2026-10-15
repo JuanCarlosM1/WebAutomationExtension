@@ -4,7 +4,9 @@
  */
 
 import { WebAutomationGraph } from '../../../BibliotecaDeDev/src/types/schema';
+import { StateManager } from '../../../BibliotecaDeDev/src/engine/StateManager';
 import { DEFAULT_AUTOMATION } from '../defaultAutomation';
+import { SafeJsEvaluator } from '../utils/safeJsEvaluator';
 import { BLOCK_CATALOG } from './modules/blockCatalog';
 import { ColorPickerManager } from './modules/colorPickerManager';
 import { InspectorManager } from './modules/inspectorManager';
@@ -13,6 +15,9 @@ import { WorkflowTabManager } from './modules/tabManager';
 import { showToast, showModalDialog, sanitizeGraph, DialogMenu } from './modules/editorUtils';
 import { FlowSettingsModal } from './modules/flowSettingsModal';
 import { HtmlElementAnalyzer } from './modules/htmlElementAnalyzer';
+
+// Registrar avaliador JS em conformidade com a CSP do Manifest V3 (sem 'unsafe-eval')
+StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars);
 
 class VisualEditorApp {
   private currentView: 'dashboard' | 'studio' | 'settings' = 'dashboard';

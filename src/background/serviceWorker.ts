@@ -8,7 +8,12 @@ import { registerAllDefaultHandlers } from '../../../BibliotecaDeDev/src/engine/
 import { WebAutomationGraph, getActiveTriggers, getTriggerUrlPatterns } from '../../../BibliotecaDeDev/src/types/schema';
 import { ChromeBrowserDriver } from '../driver/ChromeBrowserDriver';
 import { ExecutionContext } from '../../../BibliotecaDeDev/src/engine/ExecutionContext';
+import { StateManager } from '../../../BibliotecaDeDev/src/engine/StateManager';
 import { DEFAULT_AUTOMATION } from '../defaultAutomation';
+import { SafeJsEvaluator } from '../utils/safeJsEvaluator';
+
+// Registrar avaliador JS em conformidade com a CSP do Manifest V3 (sem 'unsafe-eval')
+StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars);
 
 class ExtensionController {
   private engine: ExecutionEngine;

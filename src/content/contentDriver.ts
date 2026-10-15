@@ -2,6 +2,8 @@
  * Content Script que é injetado nas abas para executar operações no DOM real
  */
 
+import { SafeJsEvaluator } from '../utils/safeJsEvaluator';
+
 export interface DomActionMessage {
   action: string;
   payload: any;
@@ -293,11 +295,21 @@ async function handleDomAction(message: DomActionMessage): Promise<DomActionResu
       root.appendChild(content);
 
       if (js) {
-        const script = document.createElement('script');
-        script.textContent = `(function(){ ${js} })();`;
-        document.body.appendChild(script);
+        SafeJsEvaluator.evaluate(js);
       }
       return { success: true };
+    }
+
+    case 'INJECT_SCRIPT': {
+      const { code, args = [] } = payload;
+      try {
+        const vars: Record<string, any> = { args };
+        (args || []).forEach((a: any, i: number) => { vars[`arg${i}`] = a; });
+        const res = SafeJsEvaluator.evaluate(code, vars);
+        return { success: true, data: res };
+      } catch (err: any) {
+        return { success: false, error: err.message };
+      }
     }
 
     default:
@@ -383,10 +395,20 @@ function injectFloatingTriggerButton(payload: {
   const oldBtns = document.querySelectorAll(`[id="${existingId}"], [data-webautomations-trigger="${automationId}"]`);
   oldBtns.forEach((btn) => btn.remove());
 
+  if (!isExtensionContextValid()) {
+    handleExtensionContextInvalidated();
+    return;
+  }
+
   // Carregar configurações de layout empilhável e posições salvas dos botões
-  chrome.storage.local.get(['floating_buttons_layout_settings', 'floating_buttons_dragged_positions'], (stored) => {
-    const layoutSettings = stored.floating_buttons_layout_settings || {};
-    const draggedPositions = stored.floating_buttons_dragged_positions || {};
+  try {
+    chrome.storage.local.get(['floating_buttons_layout_settings', 'floating_buttons_dragged_positions'], (stored) => {
+      if (!isExtensionContextValid() || chrome.runtime.lastError) {
+        handleExtensionContextInvalidated();
+        return;
+      }
+      const layoutSettings = (stored && stored.floating_buttons_layout_settings) || {};
+      const draggedPositions = (stored && stored.floating_buttons_dragged_positions) || {};
     const savedPos = draggedPositions[automationId];
 
     const stackDirection: 'vertical' | 'horizontal' = layoutSettings.stackDirection || 'vertical';
@@ -679,16 +701,23 @@ function injectFloatingTriggerButton(payload: {
           window.removeEventListener('mouseup', onMouseUp);
 
           if (hasMoved) {
+            if (!isExtensionContextValid()) {
+              handleExtensionContextInvalidated();
+              return;
+            }
             const finalRect = btn.getBoundingClientRect();
-            chrome.storage.local.get('floating_buttons_dragged_positions', (d) => {
-              const allPositions = d.floating_buttons_dragged_positions || {};
-              allPositions[automationId] = {
-                left: Math.round(finalRect.left),
-                top: Math.round(finalRect.top),
-                updatedAt: Date.now(),
-              };
-              chrome.storage.local.set({ floating_buttons_dragged_positions: allPositions });
-            });
+            try {
+              chrome.storage.local.get('floating_buttons_dragged_positions', (d) => {
+                if (!isExtensionContextValid() || chrome.runtime.lastError) return;
+                const allPositions = (d && d.floating_buttons_dragged_positions) || {};
+                allPositions[automationId] = {
+                  left: Math.round(finalRect.left),
+                  top: Math.round(finalRect.top),
+                  updatedAt: Date.now(),
+                };
+                chrome.storage.local.set({ floating_buttons_dragged_positions: allPositions });
+              });
+            } catch {}
           }
         };
 
@@ -713,22 +742,41 @@ function injectFloatingTriggerButton(payload: {
         return; // Não executa o fluxo se foi um arraste
       }
 
+      if (!isExtensionContextValid()) {
+        handleExtensionContextInvalidated();
+        alert('A extensão foi atualizada ou recarregada. Por favor, atualize esta página (F5) para restabelecer a conexão.');
+        return;
+      }
+
       btn.style.opacity = '0.7';
       btn.textContent = '⏳ Executando...';
 
-      chrome.storage.local.get('web_automations', (data) => {
-        const list = data.web_automations || [];
-        const auto = list.find((a: any) => a.metadata?.id === automationId);
-        if (auto) {
-          chrome.runtime.sendMessage({
-            action: 'EXECUTE_AUTOMATION',
-            payload: { graph: auto },
-          }, () => {
+      try {
+        chrome.storage.local.get('web_automations', (data) => {
+          if (!isExtensionContextValid() || chrome.runtime.lastError) {
             btn.style.opacity = `${baseOpacity}`;
             btn.innerHTML = `${iconHtml}<span>${text}</span>`;
-          });
-        }
-      });
+            return;
+          }
+          const list = (data && data.web_automations) || [];
+          const auto = list.find((a: any) => a.metadata?.id === automationId);
+          if (auto) {
+            chrome.runtime.sendMessage({
+              action: 'EXECUTE_AUTOMATION',
+              payload: { graph: auto },
+            }, () => {
+              btn.style.opacity = `${baseOpacity}`;
+              btn.innerHTML = `${iconHtml}<span>${text}</span>`;
+            });
+          } else {
+            btn.style.opacity = `${baseOpacity}`;
+            btn.innerHTML = `${iconHtml}<span>${text}</span>`;
+          }
+        });
+      } catch {
+        btn.style.opacity = `${baseOpacity}`;
+        btn.innerHTML = `${iconHtml}<span>${text}</span>`;
+      }
     });
 
     if (savedPos && savedPos.left !== undefined && savedPos.top !== undefined) {
@@ -737,6 +785,7 @@ function injectFloatingTriggerButton(payload: {
       container.appendChild(btn);
     }
   });
+  } catch {}
 }
 
 // Função auxiliar para testar se a URL atual corresponde a um padrão com wildcards (* ou regex)
@@ -758,11 +807,37 @@ function matchUrlPattern(pattern: string, url: string): boolean {
 // Iniciação e sincronização automática de botões flutuantes na página
 let floatingButtonsMutationObserver: MutationObserver | null = null;
 
+function isExtensionContextValid(): boolean {
+  try {
+    return Boolean(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
+  } catch {
+    return false;
+  }
+}
+
+function handleExtensionContextInvalidated(): void {
+  if (floatingButtonsMutationObserver) {
+    try {
+      floatingButtonsMutationObserver.disconnect();
+    } catch {}
+    floatingButtonsMutationObserver = null;
+  }
+}
+
 function checkAndInjectFloatingButtonsOnLoad(): void {
+  if (!isExtensionContextValid()) {
+    handleExtensionContextInvalidated();
+    return;
+  }
+
   try {
     if (!chrome.storage?.local) return;
     chrome.storage.local.get('web_automations', (data) => {
-      const list = data.web_automations || [];
+      if (!isExtensionContextValid() || chrome.runtime.lastError) {
+        handleExtensionContextInvalidated();
+        return;
+      }
+      const list = (data && data.web_automations) || [];
       const currentUrl = window.location.href;
       const matchedAutomationIds = new Set<string>();
 
@@ -809,7 +884,11 @@ function checkAndInjectFloatingButtonsOnLoad(): void {
         }
       });
     });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.message?.includes('Extension context invalidated')) {
+      handleExtensionContextInvalidated();
+      return;
+    }
     console.warn('[WebAutomations] Erro ao carregar botões flutuantes:', err);
   }
 }
@@ -817,39 +896,62 @@ function checkAndInjectFloatingButtonsOnLoad(): void {
 // Observa mudanças no DOM com debounce para detectar aparição dinâmica de elementos requeridos
 function setupFloatingButtonsDomObserver(): void {
   if (floatingButtonsMutationObserver) return;
+  if (!isExtensionContextValid()) return;
   let debounceTimeout: any = null;
 
-  floatingButtonsMutationObserver = new MutationObserver(() => {
-    if (debounceTimeout) clearTimeout(debounceTimeout);
-    debounceTimeout = setTimeout(() => {
-      checkAndInjectFloatingButtonsOnLoad();
-    }, 250);
-  });
+  try {
+    floatingButtonsMutationObserver = new MutationObserver(() => {
+      if (!isExtensionContextValid()) {
+        handleExtensionContextInvalidated();
+        return;
+      }
+      if (debounceTimeout) clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(() => {
+        if (!isExtensionContextValid()) {
+          handleExtensionContextInvalidated();
+          return;
+        }
+        checkAndInjectFloatingButtonsOnLoad();
+      }, 250);
+    });
 
-  floatingButtonsMutationObserver.observe(document.documentElement || document.body, {
-    childList: true,
-    subtree: true,
-  });
+    floatingButtonsMutationObserver.observe(document.documentElement || document.body, {
+      childList: true,
+      subtree: true,
+    });
+  } catch {
+    handleExtensionContextInvalidated();
+  }
 }
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    checkAndInjectFloatingButtonsOnLoad();
-    setupFloatingButtonsDomObserver();
+    if (isExtensionContextValid()) {
+      checkAndInjectFloatingButtonsOnLoad();
+      setupFloatingButtonsDomObserver();
+    }
   });
 } else {
-  checkAndInjectFloatingButtonsOnLoad();
-  setupFloatingButtonsDomObserver();
+  if (isExtensionContextValid()) {
+    checkAndInjectFloatingButtonsOnLoad();
+    setupFloatingButtonsDomObserver();
+  }
 }
 
 // Ouvir alterações no storage local para sincronizar imediatamente os botões se a aba estiver aberta
-if (chrome.storage?.onChanged) {
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && (changes.web_automations || changes.floating_buttons_layout_settings)) {
-      checkAndInjectFloatingButtonsOnLoad();
-    }
-  });
-}
+try {
+  if (isExtensionContextValid() && chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (!isExtensionContextValid()) {
+        handleExtensionContextInvalidated();
+        return;
+      }
+      if (area === 'local' && (changes.web_automations || changes.floating_buttons_layout_settings)) {
+        checkAndInjectFloatingButtonsOnLoad();
+      }
+    });
+  }
+} catch {}
 
 // -------------------------------------------------------------
 // ANALISADOR & CAPTURADOR VISUAL DE ELEMENTOS HTML
@@ -1240,13 +1342,17 @@ function startElementPickerMode(): void {
       const chosenSelector = analysis.target.selector;
 
       // Envia os dados analisados de volta para o editor
-      chrome.runtime.sendMessage({
-        action: 'ELEMENT_PICKED_EVENT',
-        payload: {
-          selector: chosenSelector,
-          analysis,
-        },
-      });
+      if (isExtensionContextValid()) {
+        try {
+          chrome.runtime.sendMessage({
+            action: 'ELEMENT_PICKED_EVENT',
+            payload: {
+              selector: chosenSelector,
+              analysis,
+            },
+          });
+        } catch {}
+      }
 
       // Encerra a mira contínua mas MANTÉM a janela compacta do analisador aberta exibindo a análise na página ativa!
       stopElementPickerCrosshair();

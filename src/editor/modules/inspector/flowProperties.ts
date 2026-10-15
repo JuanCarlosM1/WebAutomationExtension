@@ -208,7 +208,24 @@ export class FlowPropertiesRenderer {
 
       if (isExpanded) {
         const body = document.createElement('div');
-        body.style.cssText = 'padding: 10px; border-top: 1px solid #1e293b; display: flex; flex-direction: column; gap: 8px;';
+        body.style.cssText = 'padding: 12px; border-top: 1px solid #1e293b; display: flex; flex-direction: column; gap: 10px; background: rgba(15, 23, 42, 0.4);';
+
+        // Campo de texto maior para o Nome / Rótulo do Caminho
+        const pathNameGroup = document.createElement('div');
+        pathNameGroup.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+        pathNameGroup.innerHTML = `
+          <label style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Nome do Caminho</label>
+          <input type="text" class="switch-path-name-input" value="${c.label || ''}" placeholder="Ex: Caminho #${index + 1}, Sucesso, Status 200..." style="width: 100%; min-height: 38px; padding: 8px 12px; font-size: 13px; font-weight: 600; background: #172033; color: #f8fafc; border: 1px solid #243049; border-radius: 6px; outline: none; box-sizing: border-box; transition: border-color 0.2s;" />
+        `;
+        const pathInput = pathNameGroup.querySelector('.switch-path-name-input') as HTMLInputElement;
+        pathInput?.addEventListener('focus', () => { pathInput.style.borderColor = '#6366f1'; });
+        pathInput?.addEventListener('blur', () => { pathInput.style.borderColor = '#243049'; });
+        pathInput?.addEventListener('input', (e: any) => {
+          c.label = e.target.value;
+          titleSpan.textContent = c.label || `Caminho #${index + 1}`;
+          ctx.onNodeDataChanged();
+        });
+        body.appendChild(pathNameGroup);
 
         // Construtor Visual de Condições Combinadas (Grupos E e OU)
         const groupsBuilder = this.renderConditionGroupsBuilder(c, ctx);
@@ -312,7 +329,7 @@ export class FlowPropertiesRenderer {
     dataObj.conditionGroups.forEach((group: any, gIdx: number) => {
       const isLastGroup = gIdx === dataObj.conditionGroups.length - 1;
       const groupEl = document.createElement('div');
-      groupEl.style.cssText = 'background: #080d1a; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px;';
+      groupEl.style.cssText = 'background: #080d1a; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;';
 
       // Header do grupo: apenas o nome do grupo editável, sem instruções
       const groupHeader = document.createElement('div');
@@ -323,7 +340,7 @@ export class FlowPropertiesRenderer {
       nameInput.value = group.name || group.label || `Grupo ${gIdx + 1}`;
       nameInput.className = 'group-name-input';
       nameInput.placeholder = `Grupo ${gIdx + 1}`;
-      nameInput.style.cssText = 'background: #172033; border: 1px solid #243049; color: #f1f5f9; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; outline: none; flex: 1; max-width: 220px;';
+      nameInput.style.cssText = 'background: #172033; border: 1px solid #243049; color: #f1f5f9; font-size: 12px; font-weight: 700; padding: 6px 12px; min-height: 34px; border-radius: 6px; outline: none; flex: 1; max-width: 280px; box-sizing: border-box; transition: border-color 0.2s;';
       nameInput.addEventListener('focus', () => { nameInput.style.borderColor = '#6366f1'; });
       nameInput.addEventListener('blur', () => { nameInput.style.borderColor = '#243049'; });
       nameInput.addEventListener('input', (e: any) => {
@@ -540,14 +557,14 @@ export class FlowPropertiesRenderer {
   ): HTMLElement {
     const ruleEl = document.createElement('div');
     ruleEl.style.cssText =
-      'background: #0f172a; border: 1px solid #1e293b; border-radius: 5px; padding: 8px; display: flex; flex-direction: column; gap: 6px;';
+      'background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px;';
 
     const mode = rule.evaluationMode || (rule.jsExpression && !rule.operator ? 'js_eval' : 'comparison');
 
     const ruleHeader = document.createElement('div');
     ruleHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
     ruleHeader.innerHTML = `
-      <span style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Expressão #${ruleIdx + 1}</span>
+      <span style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Expressão #${ruleIdx + 1}</span>
     `;
 
     if (totalRules > 1) {
@@ -556,72 +573,147 @@ export class FlowPropertiesRenderer {
       delBtn.innerHTML = '&times;';
       delBtn.title = 'Remover esta expressão';
       delBtn.style.cssText =
-        'background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px;';
+        'background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px;';
       delBtn.addEventListener('click', onDelete);
       ruleHeader.appendChild(delBtn);
     }
     ruleEl.appendChild(ruleHeader);
 
+    // Seletor de Modo de Avaliação
+    const modeSelectWrap = document.createElement('div');
+    modeSelectWrap.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+    modeSelectWrap.innerHTML = `
+      <label style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase;">Tipo de Avaliação:</label>
+    `;
+
     const modeSelect = document.createElement('select');
+    modeSelect.className = 'rule-mode-select';
     modeSelect.style.cssText =
-      'width: 100%; padding: 4px 6px; font-size: 11px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px;';
+      'width: 100%; min-height: 36px; padding: 6px 12px; font-size: 12px; font-weight: 600; background: #172033; color: #f8fafc; border: 1px solid #243049; border-radius: 6px; outline: none; cursor: pointer; box-sizing: border-box;';
     modeSelect.innerHTML = `
       <option value="comparison" ${mode === 'comparison' ? 'selected' : ''}>Comparação de Valores</option>
       <option value="js_eval" ${mode === 'js_eval' ? 'selected' : ''}>Expressão / Código JS</option>
     `;
-    ruleEl.appendChild(modeSelect);
+    modeSelectWrap.appendChild(modeSelect);
+    ruleEl.appendChild(modeSelectWrap);
 
+    // Campos de Comparação
     const compFields = document.createElement('div');
-    compFields.style.cssText = `display: ${mode === 'comparison' ? 'flex' : 'none'}; flex-direction: column; gap: 4px;`;
+    compFields.className = 'rule-comparison-fields';
+    compFields.style.cssText = `display: ${mode === 'comparison' ? 'flex' : 'none'}; flex-direction: column; gap: 8px;`;
     compFields.innerHTML = `
-      <input type="text" placeholder="Operando Esquerdo (ex: {{status}})" value="${rule.leftOperand || ''}" class="rule-left" style="width: 100%; padding: 4px 6px; font-size: 11px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px;" />
-      <select class="rule-op" style="width: 100%; padding: 4px 6px; font-size: 11px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px;">
-        <option value="equals" ${rule.operator === 'equals' ? 'selected' : ''}>Igual</option>
-        <option value="not_equals" ${rule.operator === 'not_equals' ? 'selected' : ''}>Diferente</option>
-        <option value="contains" ${rule.operator === 'contains' ? 'selected' : ''}>Contém</option>
-        <option value="not_contains" ${rule.operator === 'not_contains' ? 'selected' : ''}>Não Contém</option>
-        <option value="greater_than" ${rule.operator === 'greater_than' ? 'selected' : ''}>Maior que</option>
-        <option value="less_than" ${rule.operator === 'less_than' ? 'selected' : ''}>Menor que</option>
-        <option value="greater_or_equal" ${rule.operator === 'greater_or_equal' ? 'selected' : ''}>Maior ou Igual</option>
-        <option value="less_or_equal" ${rule.operator === 'less_or_equal' ? 'selected' : ''}>Menor ou Igual</option>
-        <option value="is_empty" ${rule.operator === 'is_empty' ? 'selected' : ''}>Está Vazio</option>
-        <option value="is_not_empty" ${rule.operator === 'is_not_empty' ? 'selected' : ''}>Não Está Vazio</option>
-      </select>
-      <input type="text" placeholder="Operando Direito (ex: 200)" value="${rule.rightOperand || ''}" class="rule-right" style="width: 100%; padding: 4px 6px; font-size: 11px; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px;" />
-    `;
-
-    const jsFields = document.createElement('div');
-    jsFields.style.cssText = `display: ${mode === 'js_eval' ? 'flex' : 'none'}; flex-direction: column; gap: 4px;`;
-    jsFields.innerHTML = `
-      <div class="rule-code-preview" style="background: #090d16; border: 1px solid #243049; border-radius: 6px; padding: 8px 10px; font-family: var(--font-mono, monospace); font-size: 11px; line-height: 1.5; color: #f1f5f9; cursor: pointer; resize: none !important; max-height: 100px; overflow-y: auto; overflow-x: hidden; white-space: pre-wrap; word-break: break-all; transition: border-color 0.2s, box-shadow 0.2s;" title="Clique no código para editar a expressão JS">
-        ${CodeSyntaxHighlighter.highlight(rule.jsExpression || '// Clique no código para editar expressão JS', 'javascript')}
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <label style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Operando Esquerdo (variável ou valor)</label>
+        <input type="text" placeholder="ex: {{status}}, {{item.id}}, {{contador}}" value="${rule.leftOperand || ''}" class="rule-left" style="width: 100%; min-height: 38px; padding: 8px 12px; font-size: 12px; font-family: var(--font-mono, monospace); background: #172033; color: white; border: 1px solid #243049; border-radius: 6px; box-sizing: border-box; outline: none; transition: border-color 0.2s;" />
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <label style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Operador de Comparação</label>
+        <select class="rule-op" style="width: 100%; min-height: 38px; padding: 8px 12px; font-size: 12px; font-weight: 600; background: #172033; color: #93c5fd; border: 1px solid #243049; border-radius: 6px; box-sizing: border-box; cursor: pointer; outline: none;">
+          <option value="equals" ${rule.operator === 'equals' ? 'selected' : ''}>Igual (==)</option>
+          <option value="not_equals" ${rule.operator === 'not_equals' ? 'selected' : ''}>Diferente (!=)</option>
+          <option value="contains" ${rule.operator === 'contains' ? 'selected' : ''}>Contém</option>
+          <option value="not_contains" ${rule.operator === 'not_contains' ? 'selected' : ''}>Não Contém</option>
+          <option value="greater_than" ${rule.operator === 'greater_than' ? 'selected' : ''}>Maior que (&gt;)</option>
+          <option value="less_than" ${rule.operator === 'less_than' ? 'selected' : ''}>Menor que (&lt;)</option>
+          <option value="greater_or_equal" ${rule.operator === 'greater_or_equal' ? 'selected' : ''}>Maior ou Igual (&gt;=)</option>
+          <option value="less_or_equal" ${rule.operator === 'less_or_equal' ? 'selected' : ''}>Menor ou Igual (&lt;=)</option>
+          <option value="is_empty" ${rule.operator === 'is_empty' ? 'selected' : ''}>Está Vazio</option>
+          <option value="is_not_empty" ${rule.operator === 'is_not_empty' ? 'selected' : ''}>Não Está Vazio</option>
+        </select>
+      </div>
+      <div class="rule-right-wrapper" style="display: ${rule.operator === 'is_empty' || rule.operator === 'is_not_empty' ? 'none' : 'flex'}; flex-direction: column; gap: 4px;">
+        <label style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Operando Direito (valor de comparação)</label>
+        <input type="text" placeholder="ex: 200, 'sucesso', true" value="${rule.rightOperand || ''}" class="rule-right" style="width: 100%; min-height: 38px; padding: 8px 12px; font-size: 12px; font-family: var(--font-mono, monospace); background: #172033; color: white; border: 1px solid #243049; border-radius: 6px; box-sizing: border-box; outline: none; transition: border-color 0.2s;" />
       </div>
     `;
 
-    const codePreviewEl = jsFields.querySelector('.rule-code-preview') as HTMLElement;
-    codePreviewEl?.addEventListener('mouseenter', () => {
-      codePreviewEl.style.borderColor = '#6366f1';
-      codePreviewEl.style.boxShadow = '0 0 10px rgba(99, 102, 241, 0.25)';
+    const leftInput = compFields.querySelector('.rule-left') as HTMLInputElement;
+    leftInput?.addEventListener('input', (e: any) => {
+      rule.leftOperand = e.target.value;
+      ctx.onNodeDataChanged();
     });
-    codePreviewEl?.addEventListener('mouseleave', () => {
-      codePreviewEl.style.borderColor = '#243049';
-      codePreviewEl.style.boxShadow = 'none';
+    leftInput?.addEventListener('focus', () => { leftInput.style.borderColor = '#6366f1'; });
+    leftInput?.addEventListener('blur', () => { leftInput.style.borderColor = '#243049'; });
+
+    const rightWrapper = compFields.querySelector('.rule-right-wrapper') as HTMLElement;
+    const rightInput = compFields.querySelector('.rule-right') as HTMLInputElement;
+    rightInput?.addEventListener('input', (e: any) => {
+      rule.rightOperand = e.target.value;
+      ctx.onNodeDataChanged();
+    });
+    rightInput?.addEventListener('focus', () => { rightInput.style.borderColor = '#6366f1'; });
+    rightInput?.addEventListener('blur', () => { rightInput.style.borderColor = '#243049'; });
+
+    const opSelect = compFields.querySelector('.rule-op') as HTMLSelectElement;
+    opSelect?.addEventListener('change', (e: any) => {
+      rule.operator = e.target.value;
+      const isUnary = rule.operator === 'is_empty' || rule.operator === 'is_not_empty';
+      if (rightWrapper) rightWrapper.style.display = isUnary ? 'none' : 'flex';
+      ctx.onNodeDataChanged();
     });
 
-    codePreviewEl?.addEventListener('click', () => {
+    // Campos de Código JS
+    const jsFields = document.createElement('div');
+    jsFields.className = 'rule-js-fields';
+    jsFields.style.cssText = `display: ${mode === 'js_eval' ? 'flex' : 'none'}; flex-direction: column; gap: 8px;`;
+    jsFields.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <label style="font-size: 10px; font-weight: 700; color: #f59e0b; text-transform: uppercase;">Código / Expressão JavaScript</label>
+        <button type="button" class="btn-open-js-modal" style="display: inline-flex; align-items: center; gap: 5px; background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4); padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+          <span>Abrir no Editor Completo</span>
+        </button>
+      </div>
+      <textarea class="rule-js-textarea" rows="5" placeholder="// Digite a expressão ou código JS que retorna verdadeiro ou falso, ex:\nreturn context.status === 200;\n// ou uma expressão direta:\ncontext.count < 10" style="width: 100%; min-height: 110px; padding: 10px 12px; font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 12px; line-height: 1.5; background: #090d16; color: #38bdf8; border: 1px solid #243049; border-radius: 6px; box-sizing: border-box; resize: vertical; outline: none; transition: border-color 0.2s;">${rule.jsExpression || ''}</textarea>
+      <span style="font-size: 10px; color: #64748b;">A expressão é avaliada dinamicamente e deve retornar <code>true</code> ou <code>false</code>. Variáveis disponíveis: <code>context</code>, <code>vars</code>.</span>
+    `;
+
+    const jsTextarea = jsFields.querySelector('.rule-js-textarea') as HTMLTextAreaElement;
+    jsTextarea?.addEventListener('input', (e: any) => {
+      rule.jsExpression = e.target.value;
+      ctx.onNodeDataChanged();
+    });
+    jsTextarea?.addEventListener('focus', () => { jsTextarea.style.borderColor = '#f59e0b'; });
+    jsTextarea?.addEventListener('blur', () => { jsTextarea.style.borderColor = '#243049'; });
+
+    const btnOpenJsModal = jsFields.querySelector('.btn-open-js-modal') as HTMLButtonElement;
+    btnOpenJsModal?.addEventListener('mouseenter', () => {
+      btnOpenJsModal.style.background = 'rgba(99, 102, 241, 0.3)';
+      btnOpenJsModal.style.color = '#ffffff';
+    });
+    btnOpenJsModal?.addEventListener('mouseleave', () => {
+      btnOpenJsModal.style.background = 'rgba(99, 102, 241, 0.15)';
+      btnOpenJsModal.style.color = '#a5b4fc';
+    });
+    btnOpenJsModal?.addEventListener('click', () => {
       CodeEditorComponent.openCodeModal({
         title: `Expressão JavaScript (Expressão #${ruleIdx + 1})`,
         language: 'javascript',
         value: rule.jsExpression || '',
         onSave: (newVal) => {
           rule.jsExpression = newVal;
-          if (codePreviewEl) {
-            codePreviewEl.innerHTML = CodeSyntaxHighlighter.highlight(newVal || '// Clique no código para editar expressão JS', 'javascript');
-          }
+          if (jsTextarea) jsTextarea.value = newVal;
           ctx.onNodeDataChanged();
           ctx.showToast('Expressão JS salva!', 'success');
         },
       });
+    });
+
+    // Event listener crucial para alternar o modo entre Comparação e Código JS
+    modeSelect.addEventListener('change', () => {
+      const selectedMode = modeSelect.value;
+      rule.evaluationMode = selectedMode;
+      if (selectedMode === 'js_eval') {
+        compFields.style.display = 'none';
+        jsFields.style.display = 'flex';
+        if (rule.jsExpression === undefined) {
+          rule.jsExpression = '';
+        }
+      } else {
+        compFields.style.display = 'flex';
+        jsFields.style.display = 'none';
+      }
+      ctx.onNodeDataChanged();
     });
 
     ruleEl.appendChild(compFields);
@@ -793,6 +885,22 @@ export class FlowPropertiesRenderer {
 
       const currentPath = data.cases[currentIdx];
       if (currentPath) {
+        // Campo de texto grande para o nome do caminho no modal expandido
+        const modalPathNameGroup = document.createElement('div');
+        modalPathNameGroup.style.cssText = 'background: #0d1527; border: 1px solid #1e293b; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;';
+        modalPathNameGroup.innerHTML = `
+          <label style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Nome do Caminho Selecionado:</label>
+          <input type="text" id="modalCurrentPathLabel" value="${currentPath.label || ''}" placeholder="Ex: Sucesso, Erro 404, Status 200..." style="width: 100%; min-height: 40px; padding: 8px 14px; font-size: 14px; font-weight: 600; background: #172033; color: #f8fafc; border: 1px solid #3b82f6; border-radius: 6px; outline: none; box-sizing: border-box;" />
+        `;
+        const modalPathInput = modalPathNameGroup.querySelector('#modalCurrentPathLabel') as HTMLInputElement;
+        modalPathInput?.addEventListener('input', (e: any) => {
+          currentPath.label = e.target.value;
+          const opt = card.querySelector(`#modalSwitchPathSelect option[value="${currentIdx}"]`);
+          if (opt) opt.textContent = currentPath.label || `Caminho #${currentIdx + 1}`;
+          ctx.onNodeDataChanged();
+        });
+        body.appendChild(modalPathNameGroup);
+
         const modalCtx: FlowPropertiesContext = {
           ...ctx,
           renderInspector: () => {
