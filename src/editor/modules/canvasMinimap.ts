@@ -7,6 +7,7 @@ export interface MinimapOptions {
   getNodes: () => AnyAutomationNode[];
   getEdges: () => AutomationEdge[];
   getSelectedNodeId: () => string | undefined;
+  getSelectedNodeIds?: () => string[];
   getZoom: () => number;
   getPanOffset: () => { x: number; y: number };
   onNavigate: (newPanX: number, newPanY: number) => void;
@@ -89,6 +90,7 @@ export class CanvasMinimap {
 
     // Nós no minimapa
     const selectedId = this.options.getSelectedNodeId();
+    const selectedIds = new Set(this.options.getSelectedNodeIds ? this.options.getSelectedNodeIds() : (selectedId ? [selectedId] : []));
     nodes.forEach((node) => {
       const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       const nx = toMmX(node.position.x);
@@ -96,14 +98,15 @@ export class CanvasMinimap {
       const nw = Math.max(8, 210 * mmScale);
       const nh = Math.max(5, 75 * mmScale);
 
+      const isSelected = selectedIds.has(node.id);
       rect.setAttribute('x', String(nx));
       rect.setAttribute('y', String(ny));
       rect.setAttribute('width', String(nw));
       rect.setAttribute('height', String(nh));
       rect.setAttribute('rx', '2');
-      rect.setAttribute('fill', selectedId === node.id ? '#818cf8' : '#334155');
-      rect.setAttribute('stroke', selectedId === node.id ? '#c7d2fe' : '#475569');
-      rect.setAttribute('stroke-width', '1');
+      rect.setAttribute('fill', isSelected ? '#818cf8' : '#334155');
+      rect.setAttribute('stroke', isSelected ? '#c7d2fe' : '#475569');
+      rect.setAttribute('stroke-width', isSelected ? '1.5' : '1');
       minimapSvg.appendChild(rect);
     });
 

@@ -26421,7 +26421,22 @@ var InspectorManager = class {
     const btnActivityInspector = document.getElementById("btnActivityInspector");
     const noSelect = document.getElementById("noSelectionMessage");
     const form = document.getElementById("nodePropertiesForm");
+    const selectedIds = this.callbacks.getSelectedNodeIds ? this.callbacks.getSelectedNodeIds() : [];
     const selectedId = this.callbacks.getSelectedNodeId();
+    if (selectedIds.length > 1) {
+      if (sidebarRight)
+        sidebarRight.classList.remove("collapsed");
+      if (sidebarLeft)
+        sidebarLeft.classList.add("collapsed");
+      btnActivityBlocks?.classList.remove("active");
+      btnActivityInspector?.classList.add("active");
+      if (resizerLeft)
+        resizerLeft.style.display = "block";
+      noSelect.classList.add("hidden");
+      form.classList.remove("hidden");
+      this.renderMultiSelectionInspector(form, selectedIds);
+      return;
+    }
     if (!selectedId) {
       noSelect.classList.remove("hidden");
       form.classList.add("hidden");
@@ -26894,6 +26909,52 @@ var InspectorManager = class {
       }, 50);
     });
   }
+  /**
+   * Renderiza o painel de propriedades quando múltiplos blocos estão selecionados
+   */
+  renderMultiSelectionInspector(form, selectedIds) {
+    form.innerHTML = "";
+    const graph = this.callbacks.getGraph();
+    const selectedNodes = graph.nodes.filter((n2) => selectedIds.includes(n2.id));
+    const card = document.createElement("div");
+    card.className = "multi-selection-inspector-card";
+    card.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #1e293b;">
+        <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); display: flex; align-items: center; justify-content: center; color: #818cf8;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        </div>
+        <div>
+          <div style="font-size: 14px; font-weight: 700; color: #f8fafc;">Sele\xE7\xE3o M\xFAltipla</div>
+          <div style="font-size: 11px; color: #94a3b8;">${selectedNodes.length} blocos selecionados no canvas</div>
+        </div>
+      </div>
+      <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px; font-weight: 600;">Blocos Selecionados:</div>
+      <div style="max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; padding-right: 4px;">
+        ${selectedNodes.map((n2) => `
+          <div style="display: flex; align-items: center; justify-content: space-between; background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 6px 10px; font-size: 11px;">
+            <span style="font-weight: 600; color: #f1f5f9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${n2.data?.label || n2.type}</span>
+            <span style="color: #64748b; font-family: monospace; font-size: 10px;">${n2.type}</span>
+          </div>
+        `).join("")}
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <button type="button" id="btnDeleteSelectedNodesInspector" class="btn btn-danger" style="width: 100%; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.4); color: #f43f5e; border-radius: 6px; cursor: pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          <span>Excluir ${selectedNodes.length} Blocos Selecionados</span>
+        </button>
+        <button type="button" id="btnClearSelectionInspector" class="btn btn-secondary" style="width: 100%; font-size: 12px; padding: 8px; background: #1e293b; border: 1px solid #334155; color: #cbd5e1; border-radius: 6px; cursor: pointer;">
+          Desmarcar Todos
+        </button>
+      </div>
+    `;
+    form.appendChild(card);
+    card.querySelector("#btnDeleteSelectedNodesInspector")?.addEventListener("click", () => {
+      this.callbacks.onDeleteSelected?.();
+    });
+    card.querySelector("#btnClearSelectionInspector")?.addEventListener("click", () => {
+      this.callbacks.onClearSelection?.();
+    });
+  }
 };
 
 // src/editor/modules/canvasPathUtils.ts
@@ -27198,20 +27259,22 @@ var CanvasMinimap = class {
       minimapSvg.appendChild(line);
     });
     const selectedId = this.options.getSelectedNodeId();
+    const selectedIds = new Set(this.options.getSelectedNodeIds ? this.options.getSelectedNodeIds() : selectedId ? [selectedId] : []);
     nodes.forEach((node) => {
       const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       const nx = toMmX(node.position.x);
       const ny = toMmY(node.position.y);
       const nw = Math.max(8, 210 * mmScale);
       const nh = Math.max(5, 75 * mmScale);
+      const isSelected = selectedIds.has(node.id);
       rect.setAttribute("x", String(nx));
       rect.setAttribute("y", String(ny));
       rect.setAttribute("width", String(nw));
       rect.setAttribute("height", String(nh));
       rect.setAttribute("rx", "2");
-      rect.setAttribute("fill", selectedId === node.id ? "#818cf8" : "#334155");
-      rect.setAttribute("stroke", selectedId === node.id ? "#c7d2fe" : "#475569");
-      rect.setAttribute("stroke-width", "1");
+      rect.setAttribute("fill", isSelected ? "#818cf8" : "#334155");
+      rect.setAttribute("stroke", isSelected ? "#c7d2fe" : "#475569");
+      rect.setAttribute("stroke-width", isSelected ? "1.5" : "1");
       minimapSvg.appendChild(rect);
     });
     const indX = toMmX(visibleLeft);
@@ -27279,10 +27342,16 @@ var CanvasMinimap = class {
 var CanvasManager = class {
   constructor(callbacks) {
     this.callbacks = callbacks;
+    const initialId = this.callbacks.getSelectedNodeId();
+    if (initialId) {
+      this.selectedNodeIds.add(initialId);
+      this.lastSelectedNodeId = initialId;
+    }
     this.minimap = new CanvasMinimap({
       getNodes: () => this.callbacks.getGraph().nodes,
       getEdges: () => this.callbacks.getGraph().edges,
       getSelectedNodeId: () => this.callbacks.getSelectedNodeId(),
+      getSelectedNodeIds: () => this.getSelectedNodeIds(),
       getZoom: () => this.zoom,
       getPanOffset: () => ({ ...this.panOffset }),
       onNavigate: (newPanX, newPanY) => {
@@ -27305,6 +27374,26 @@ var CanvasManager = class {
   activeMoveHandler;
   activeUpHandler;
   minimap;
+  // Multi-seleção de Blocos e Caixa Delimitadora (Marquee)
+  selectedNodeIds = /* @__PURE__ */ new Set();
+  lastSelectedNodeId;
+  // Modos de Seleção Configuráveis: 'both' (Híbrido), 'hold' (Apenas Manter Pressionado), 'toggle' (Apenas Alternar)
+  multiSelectMode = "both";
+  areaSelectMode = "both";
+  // Detecção de Duplo Toque nas Teclas (Ctrl e Shift)
+  lastCtrlPressTime = 0;
+  lastShiftPressTime = 0;
+  DOUBLE_TAP_DELAY_MS = 380;
+  // Estados dos Modos Alternáveis
+  isCtrlStickyActive = false;
+  isShiftAreaSelectActive = false;
+  // Caixa Delimitadora (Marquee)
+  isMarqueeActive = false;
+  isMarqueeExpanding = false;
+  marqueeEl;
+  marqueeStart = { x: 0, y: 0 };
+  statusIndicatorEl;
+  isShiftKeyDown = false;
   getSelectedEdgeId() {
     return this.selectedEdgeId;
   }
@@ -27336,6 +27425,65 @@ var CanvasManager = class {
         p.classList.remove("selected-edge");
       }
     });
+  }
+  getSelectedNodeIds() {
+    return Array.from(this.selectedNodeIds);
+  }
+  setSelectedNodeIds(ids) {
+    this.selectedNodeIds = new Set(ids);
+    this.lastSelectedNodeId = ids.length > 0 ? ids[ids.length - 1] : void 0;
+    this.callbacks.setSelectedNodeId(this.lastSelectedNodeId);
+    this.updateSelectionVisuals();
+    this.callbacks.onNodeSelect(this.lastSelectedNodeId);
+  }
+  clearSelection() {
+    this.selectedNodeIds.clear();
+    this.lastSelectedNodeId = void 0;
+    this.callbacks.setSelectedNodeId(void 0);
+    this.updateSelectionVisuals();
+  }
+  updateSelectionSettings(multiSelectMode, areaSelectMode) {
+    if (multiSelectMode)
+      this.multiSelectMode = multiSelectMode;
+    if (areaSelectMode)
+      this.areaSelectMode = areaSelectMode;
+    if (this.multiSelectMode === "hold" && this.isCtrlStickyActive) {
+      this.isCtrlStickyActive = false;
+    }
+    if (this.areaSelectMode === "drag" && this.isShiftAreaSelectActive) {
+      this.cancelMarquee();
+      this.isShiftAreaSelectActive = false;
+    }
+    this.updateStatusIndicator();
+    this.updateCanvasCursor();
+  }
+  updateSelectionVisuals() {
+    const graph = this.callbacks.getGraph();
+    graph.nodes.forEach((n2) => {
+      const el = document.getElementById(`rendered_${n2.id}`);
+      if (el) {
+        if (this.selectedNodeIds.has(n2.id)) {
+          el.classList.add("selected");
+        } else {
+          el.classList.remove("selected");
+        }
+      }
+    });
+    this.renderMinimap();
+  }
+  deleteSelectedNodes() {
+    const graph = this.callbacks.getGraph();
+    const idsToDelete = Array.from(this.selectedNodeIds);
+    if (idsToDelete.length === 0)
+      return;
+    graph.nodes = graph.nodes.filter((n2) => !this.selectedNodeIds.has(n2.id));
+    graph.edges = graph.edges.filter((ed) => !this.selectedNodeIds.has(ed.source) && !this.selectedNodeIds.has(ed.target));
+    this.selectedNodeIds.clear();
+    this.lastSelectedNodeId = void 0;
+    this.callbacks.setSelectedNodeId(void 0);
+    this.render();
+    this.callbacks.onNodeSelect(void 0);
+    this.callbacks.showToast(`${idsToDelete.length} bloco(s) exclu\xEDdo(s).`, "info");
   }
   getZoom() {
     return this.zoom;
@@ -27492,7 +27640,8 @@ var CanvasManager = class {
           break;
         }
       }
-      nodeEl.className = `graph-node ${catClass} ${selectedNodeId === node.id ? "selected" : ""}`;
+      const isSelected = this.selectedNodeIds.has(node.id) || selectedNodeId === node.id;
+      nodeEl.className = `graph-node ${catClass} ${isSelected ? "selected" : ""}`;
       let codeBadgeHtml = "";
       const hasJsRule = (rules) => Array.isArray(rules) && rules.some((r) => r.evaluationMode === "js_eval");
       const hasJsInGroups = (groups) => Array.isArray(groups) && groups.some((g) => hasJsRule(g.rules));
@@ -27544,32 +27693,94 @@ var CanvasManager = class {
           return;
         if (e.target.classList.contains("port-handle"))
           return;
+        if (e.target.classList.contains("node-edit-code-btn"))
+          return;
+        if (e.target.closest(".expand-node-btn"))
+          return;
+        if (e.button !== 0)
+          return;
         e.stopPropagation();
-        this.callbacks.setSelectedNodeId(node.id);
+        const isHoldAllowed = this.multiSelectMode === "hold" || this.multiSelectMode === "both";
+        const isToggleAllowed = this.multiSelectMode === "toggle" || this.multiSelectMode === "both";
+        const isMultiSelectClick = isHoldAllowed && (e.ctrlKey || e.metaKey) || isToggleAllowed && this.isCtrlStickyActive;
+        if (isMultiSelectClick) {
+          if (this.selectedNodeIds.has(node.id)) {
+            this.selectedNodeIds.delete(node.id);
+            if (this.lastSelectedNodeId === node.id) {
+              this.lastSelectedNodeId = this.selectedNodeIds.values().next().value || void 0;
+            }
+            this.callbacks.setSelectedNodeId(this.lastSelectedNodeId);
+            this.updateSelectionVisuals();
+            this.callbacks.onNodeSelect(this.callbacks.getSelectedNodeId());
+            return;
+          } else {
+            this.selectedNodeIds.add(node.id);
+            this.lastSelectedNodeId = node.id;
+            this.callbacks.setSelectedNodeId(node.id);
+            this.updateSelectionVisuals();
+            this.callbacks.onNodeSelect(node.id);
+          }
+        } else {
+          if (!this.selectedNodeIds.has(node.id)) {
+            this.selectedNodeIds.clear();
+            this.selectedNodeIds.add(node.id);
+            this.lastSelectedNodeId = node.id;
+            this.callbacks.setSelectedNodeId(node.id);
+            this.updateSelectionVisuals();
+            this.callbacks.onNodeSelect(node.id);
+          } else {
+            this.lastSelectedNodeId = node.id;
+            this.callbacks.setSelectedNodeId(node.id);
+          }
+        }
         this.isDraggingNode = true;
-        document.querySelectorAll(".graph-node").forEach((el) => el.classList.remove("selected"));
-        nodeEl.classList.add("selected");
-        this.callbacks.onNodeSelect(node.id);
+        this.updateCanvasCursor();
         const startMouseX = e.clientX;
         const startMouseY = e.clientY;
-        const startNodeX = node.position.x;
-        const startNodeY = node.position.y;
+        let hasMoved = false;
+        const startPositions = /* @__PURE__ */ new Map();
+        const currentGraph = this.callbacks.getGraph();
+        currentGraph.nodes.forEach((n2) => {
+          if (this.selectedNodeIds.has(n2.id)) {
+            startPositions.set(n2.id, { x: n2.position.x, y: n2.position.y });
+          }
+        });
         const onMouseMove = (moveEvt) => {
           if (!this.isDraggingNode)
             return;
           const deltaX = (moveEvt.clientX - startMouseX) / this.zoom;
           const deltaY = (moveEvt.clientY - startMouseY) / this.zoom;
-          node.position.x = Math.round(startNodeX + deltaX);
-          node.position.y = Math.round(startNodeY + deltaY);
-          nodeEl.style.left = `${node.position.x}px`;
-          nodeEl.style.top = `${node.position.y}px`;
+          if (!hasMoved && Math.hypot(deltaX, deltaY) > 2) {
+            hasMoved = true;
+          }
+          startPositions.forEach((startPos, nodeId) => {
+            const targetNode = currentGraph.nodes.find((n2) => n2.id === nodeId);
+            if (targetNode) {
+              targetNode.position.x = Math.round(startPos.x + deltaX);
+              targetNode.position.y = Math.round(startPos.y + deltaY);
+              const el = document.getElementById(`rendered_${nodeId}`);
+              if (el) {
+                el.style.left = `${targetNode.position.x}px`;
+                el.style.top = `${targetNode.position.y}px`;
+              }
+            }
+          });
           this.renderEdges();
           this.renderMinimap();
         };
         const onMouseUp = () => {
           this.isDraggingNode = false;
+          this.updateCanvasCursor();
           window.removeEventListener("mousemove", onMouseMove);
           window.removeEventListener("mouseup", onMouseUp);
+          if (!hasMoved && !isMultiSelectClick && this.selectedNodeIds.size > 1) {
+            this.selectedNodeIds.clear();
+            this.selectedNodeIds.add(node.id);
+            this.lastSelectedNodeId = node.id;
+            this.callbacks.setSelectedNodeId(node.id);
+            this.updateSelectionVisuals();
+            this.callbacks.onNodeSelect(node.id);
+          }
           this.renderMinimap();
         };
         window.addEventListener("mousemove", onMouseMove);
@@ -27760,8 +27971,10 @@ var CanvasManager = class {
       return;
     graph.nodes = graph.nodes.filter((n2) => n2.id !== nodeId);
     graph.edges = graph.edges.filter((ed) => ed.source !== nodeId && ed.target !== nodeId);
+    this.selectedNodeIds.delete(nodeId);
     if (this.callbacks.getSelectedNodeId() === nodeId) {
-      this.callbacks.setSelectedNodeId(void 0);
+      this.lastSelectedNodeId = this.selectedNodeIds.values().next().value || void 0;
+      this.callbacks.setSelectedNodeId(this.lastSelectedNodeId);
     }
     this.render();
     this.callbacks.onNodeSelect(this.callbacks.getSelectedNodeId());
@@ -27785,6 +27998,7 @@ var CanvasManager = class {
     this.isCtrlConnectionMode = false;
     document.getElementById("canvasContainer")?.classList.remove("connecting-in-progress");
     document.querySelectorAll(".connecting-source").forEach((el) => el.classList.remove("connecting-source"));
+    this.updateCanvasCursor();
   }
   /**
    * Calcula o centro exato em coordenadas do Canvas de qualquer handle (porta de conexão)
@@ -27930,6 +28144,164 @@ var CanvasManager = class {
   renderMinimap() {
     this.minimap.render();
   }
+  startMarquee(clientX, clientY) {
+    const canvas = document.getElementById("canvasContainer");
+    if (!canvas)
+      return;
+    this.isMarqueeActive = true;
+    this.marqueeStart = { x: clientX, y: clientY };
+    this.updateCanvasCursor();
+    if (!this.marqueeEl) {
+      this.marqueeEl = document.createElement("div");
+      this.marqueeEl.className = "canvas-marquee-box";
+      canvas.appendChild(this.marqueeEl);
+    }
+    this.updateMarqueeVisual(clientX, clientY);
+  }
+  updateMarqueeVisual(currentX, currentY) {
+    if (!this.marqueeEl)
+      return;
+    const canvas = document.getElementById("canvasContainer");
+    if (!canvas)
+      return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const left = Math.min(this.marqueeStart.x, currentX);
+    const top = Math.min(this.marqueeStart.y, currentY);
+    const right = Math.max(this.marqueeStart.x, currentX);
+    const bottom = Math.max(this.marqueeStart.y, currentY);
+    this.marqueeEl.style.left = `${left - canvasRect.left}px`;
+    this.marqueeEl.style.top = `${top - canvasRect.top}px`;
+    this.marqueeEl.style.width = `${Math.max(2, right - left)}px`;
+    this.marqueeEl.style.height = `${Math.max(2, bottom - top)}px`;
+    const candidateIds = this.getNodesInRect(left, top, right, bottom);
+    const graph = this.callbacks.getGraph();
+    graph.nodes.forEach((n2) => {
+      const el = document.getElementById(`rendered_${n2.id}`);
+      if (!el)
+        return;
+      const isCandidate = candidateIds.includes(n2.id);
+      const isAlreadySelected = this.selectedNodeIds.has(n2.id);
+      if (isCandidate || isAlreadySelected) {
+        el.classList.add("selected");
+      } else {
+        el.classList.remove("selected");
+      }
+    });
+  }
+  getNodesInRect(left, top, right, bottom) {
+    const enclosedIds = [];
+    const graph = this.callbacks.getGraph();
+    graph.nodes.forEach((n2) => {
+      const el = document.getElementById(`rendered_${n2.id}`);
+      if (!el)
+        return;
+      const r = el.getBoundingClientRect();
+      const intersects = !(r.right < left || r.left > right || r.bottom < top || r.top > bottom);
+      if (intersects) {
+        enclosedIds.push(n2.id);
+      }
+    });
+    return enclosedIds;
+  }
+  finishMarquee(currentX, currentY, additive = false) {
+    const left = Math.min(this.marqueeStart.x, currentX);
+    const top = Math.min(this.marqueeStart.y, currentY);
+    const right = Math.max(this.marqueeStart.x, currentX);
+    const bottom = Math.max(this.marqueeStart.y, currentY);
+    const enclosedIds = this.getNodesInRect(left, top, right, bottom);
+    if (!additive) {
+      this.selectedNodeIds.clear();
+    }
+    enclosedIds.forEach((id) => this.selectedNodeIds.add(id));
+    this.lastSelectedNodeId = enclosedIds.length > 0 ? enclosedIds[enclosedIds.length - 1] : void 0;
+    this.callbacks.setSelectedNodeId(this.lastSelectedNodeId);
+    this.cancelMarquee();
+    this.updateSelectionVisuals();
+    this.callbacks.onNodeSelect(this.callbacks.getSelectedNodeId());
+    if (enclosedIds.length > 0) {
+      this.callbacks.showToast(`${enclosedIds.length} bloco(s) selecionado(s) pela \xE1rea delimitadora.`, "info");
+    }
+  }
+  cancelMarquee() {
+    this.isMarqueeActive = false;
+    this.isMarqueeExpanding = false;
+    if (this.marqueeEl) {
+      this.marqueeEl.remove();
+      this.marqueeEl = void 0;
+    }
+    this.updateCanvasCursor();
+  }
+  /**
+   * Garante que o ícone do mouse (cursor) seja o mesmo crosshair em ambos os modos:
+   * no modo pressionado (Shift pressionado ou arrastando malha) e no modo alternado (Shift toggle ativo ou expandindo).
+   */
+  updateCanvasCursor() {
+    const canvas = document.getElementById("canvasContainer");
+    if (!canvas)
+      return;
+    const isDragAllowed = this.areaSelectMode === "drag" || this.areaSelectMode === "both";
+    const isBusy = this.isDraggingNode || this.isPanning || !!this.connectingFromNodeId;
+    const shouldShowCrosshair = !isBusy && (this.isMarqueeActive || this.isMarqueeExpanding || this.isShiftAreaSelectActive || isDragAllowed && this.isShiftKeyDown);
+    if (shouldShowCrosshair) {
+      canvas.classList.add("canvas-marquee-mode");
+      canvas.style.cursor = "crosshair";
+      if (this.isMarqueeActive || this.isMarqueeExpanding) {
+        document.body.classList.add("canvas-marquee-active");
+        document.body.style.cursor = "crosshair";
+      }
+    } else {
+      canvas.classList.remove("canvas-marquee-mode");
+      if (!this.isCtrlStickyActive) {
+        canvas.style.cursor = "";
+      }
+      document.body.classList.remove("canvas-marquee-active");
+      document.body.style.cursor = "";
+    }
+  }
+  updateStatusIndicator() {
+    const canvas = document.getElementById("canvasContainer");
+    if (!canvas)
+      return;
+    if (!this.isCtrlStickyActive && !this.isShiftAreaSelectActive) {
+      if (this.statusIndicatorEl) {
+        this.statusIndicatorEl.remove();
+        this.statusIndicatorEl = void 0;
+      }
+      this.updateCanvasCursor();
+      return;
+    }
+    if (!this.statusIndicatorEl) {
+      this.statusIndicatorEl = document.createElement("div");
+      this.statusIndicatorEl.className = "canvas-selection-mode-badge";
+      canvas.appendChild(this.statusIndicatorEl);
+    }
+    let text = "";
+    if (this.isCtrlStickyActive && this.isShiftAreaSelectActive) {
+      text = "Multi-sele\xE7\xE3o & Caixa Delimitadora ativas (Duplo toque Ctrl/Shift ou Esc para desativar)";
+    } else if (this.isCtrlStickyActive) {
+      text = "Modo Multi-sele\xE7\xE3o Individual Ativo \u2014 Clique nos blocos para selecionar (Duplo toque Ctrl para desativar)";
+    } else if (this.isShiftAreaSelectActive) {
+      text = this.isMarqueeExpanding ? "Caixa delimitadora ativa \u2014 Mova o mouse e clique para selecionar (Esc para cancelar)" : "Modo Caixa Delimitadora Ativo \u2014 Clique no canvas para iniciar a \xE1rea (Duplo toque Shift para sair)";
+    }
+    this.updateCanvasCursor();
+    this.statusIndicatorEl.innerHTML = `
+      <span class="badge-dot"></span>
+      <span>${text}</span>
+      <span class="badge-close" title="Desativar modo">\u2715</span>
+    `;
+    this.statusIndicatorEl.querySelector(".badge-close")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (this.activeMoveHandler) {
+        window.removeEventListener("mousemove", this.activeMoveHandler);
+        this.activeMoveHandler = void 0;
+      }
+      this.cancelMarquee();
+      this.isCtrlStickyActive = false;
+      this.isShiftAreaSelectActive = false;
+      this.updateStatusIndicator();
+      this.updateCanvasCursor();
+    });
+  }
   initCanvasEvents() {
     const canvas = document.getElementById("canvasContainer");
     if (!canvas)
@@ -27943,15 +28315,92 @@ var CanvasManager = class {
       const item = JSON.parse(raw);
       this.addNodeToCanvas(item, e.clientX, e.clientY);
     });
+    canvas.addEventListener("mousemove", (e) => {
+      if (e.shiftKey !== this.isShiftKeyDown) {
+        this.isShiftKeyDown = e.shiftKey;
+        this.updateCanvasCursor();
+      }
+    });
+    canvas.addEventListener("mouseenter", (e) => {
+      if (e.shiftKey !== this.isShiftKeyDown) {
+        this.isShiftKeyDown = e.shiftKey;
+        this.updateCanvasCursor();
+      }
+    });
+    canvas.addEventListener("mouseleave", () => {
+      if (!this.isMarqueeActive && !this.isMarqueeExpanding && !this.isShiftAreaSelectActive) {
+        const c = document.getElementById("canvasContainer");
+        c?.classList.remove("canvas-marquee-mode");
+        if (c && !this.isCtrlStickyActive)
+          c.style.cursor = "";
+      }
+    });
+    window.addEventListener("blur", () => {
+      this.isShiftKeyDown = false;
+      this.updateCanvasCursor();
+    });
     canvas.addEventListener("mousedown", (e) => {
-      if (e.target.closest(".graph-node") || e.target.closest(".canvas-floating-controls") || e.target.closest(".canvas-minimap") || e.target.closest(".edge-delete-badge") || e.target.tagName?.toLowerCase() === "path") {
+      if (e.target.closest(".graph-node") || e.target.closest(".canvas-floating-controls") || e.target.closest(".canvas-minimap") || e.target.closest(".edge-delete-badge") || e.target.closest(".canvas-selection-mode-badge") || e.target.tagName?.toLowerCase() === "path") {
         return;
       }
-      this.callbacks.setSelectedNodeId(void 0);
-      this.setSelectedEdgeId(void 0);
-      document.querySelectorAll(".graph-node").forEach((el) => el.classList.remove("selected"));
-      this.callbacks.onNodeSelect(void 0);
+      if (e.button !== 0)
+        return;
+      const isDragAllowed = this.areaSelectMode === "drag" || this.areaSelectMode === "both";
+      if (isDragAllowed && (e.shiftKey || this.isShiftKeyDown)) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.startMarquee(e.clientX, e.clientY);
+        const onMarqueeMove = (moveEvt) => {
+          if (!this.isMarqueeActive)
+            return;
+          this.updateMarqueeVisual(moveEvt.clientX, moveEvt.clientY);
+        };
+        const onMarqueeUp = (upEvt) => {
+          window.removeEventListener("mousemove", onMarqueeMove);
+          window.removeEventListener("mouseup", onMarqueeUp);
+          const isStickyMultiAllowed = this.multiSelectMode === "toggle" || this.multiSelectMode === "both";
+          const isAdditive = upEvt.ctrlKey || upEvt.metaKey || isStickyMultiAllowed && this.isCtrlStickyActive;
+          this.finishMarquee(upEvt.clientX, upEvt.clientY, isAdditive);
+        };
+        window.addEventListener("mousemove", onMarqueeMove);
+        window.addEventListener("mouseup", onMarqueeUp);
+        return;
+      }
+      const isToggleAreaAllowed = this.areaSelectMode === "toggle" || this.areaSelectMode === "both";
+      if (isToggleAreaAllowed && this.isShiftAreaSelectActive) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!this.isMarqueeExpanding) {
+          this.isMarqueeExpanding = true;
+          this.startMarquee(e.clientX, e.clientY);
+          this.updateStatusIndicator();
+          const onToggleMarqueeMove = (moveEvt) => {
+            if (!this.isMarqueeExpanding)
+              return;
+            this.updateMarqueeVisual(moveEvt.clientX, moveEvt.clientY);
+          };
+          this.activeMoveHandler = onToggleMarqueeMove;
+          window.addEventListener("mousemove", onToggleMarqueeMove);
+        } else {
+          if (this.activeMoveHandler) {
+            window.removeEventListener("mousemove", this.activeMoveHandler);
+            this.activeMoveHandler = void 0;
+          }
+          const isStickyMultiAllowed = this.multiSelectMode === "toggle" || this.multiSelectMode === "both";
+          const isAdditive = e.ctrlKey || e.metaKey || isStickyMultiAllowed && this.isCtrlStickyActive;
+          this.finishMarquee(e.clientX, e.clientY, isAdditive);
+          this.isShiftAreaSelectActive = false;
+          this.updateStatusIndicator();
+        }
+        return;
+      }
+      if (!this.isCtrlStickyActive) {
+        this.clearSelection();
+        this.setSelectedEdgeId(void 0);
+        this.callbacks.onNodeSelect(void 0);
+      }
       this.isPanning = true;
+      this.updateCanvasCursor();
       this.panStart = { x: e.clientX - this.panOffset.x, y: e.clientY - this.panOffset.y };
       const onPanMove = (moveEvt) => {
         if (!this.isPanning)
@@ -27962,6 +28411,7 @@ var CanvasManager = class {
       };
       const onPanUp = () => {
         this.isPanning = false;
+        this.updateCanvasCursor();
         window.removeEventListener("mousemove", onPanMove);
         window.removeEventListener("mouseup", onPanUp);
       };
@@ -27993,6 +28443,80 @@ var CanvasManager = class {
     document.getElementById("btnZoomReset")?.addEventListener("click", (e) => {
       e.stopPropagation();
       this.resetTransform();
+    });
+    window.addEventListener("keydown", (e) => {
+      const target2 = e.target;
+      const isInput = target2 && (target2.tagName === "INPUT" || target2.tagName === "TEXTAREA" || target2.isContentEditable);
+      if (isInput)
+        return;
+      if (e.key === "Shift") {
+        if (!this.isShiftKeyDown) {
+          this.isShiftKeyDown = true;
+          this.updateCanvasCursor();
+        }
+      }
+      if ((e.key === "Control" || e.key === "Ctrl") && !e.repeat) {
+        const isToggleAllowed = this.multiSelectMode === "toggle" || this.multiSelectMode === "both";
+        if (isToggleAllowed) {
+          const now = Date.now();
+          if (now - this.lastCtrlPressTime <= this.DOUBLE_TAP_DELAY_MS) {
+            this.lastCtrlPressTime = 0;
+            this.isCtrlStickyActive = !this.isCtrlStickyActive;
+            this.updateStatusIndicator();
+            this.callbacks.showToast(
+              this.isCtrlStickyActive ? "Modo de Multi-sele\xE7\xE3o Individual ativado (Duplo clique Ctrl)." : "Modo de Multi-sele\xE7\xE3o Individual desativado.",
+              "info"
+            );
+          } else {
+            this.lastCtrlPressTime = now;
+          }
+        }
+      }
+      if (e.key === "Shift" && !e.repeat) {
+        const isToggleAllowed = this.areaSelectMode === "toggle" || this.areaSelectMode === "both";
+        if (isToggleAllowed) {
+          const now = Date.now();
+          if (now - this.lastShiftPressTime <= this.DOUBLE_TAP_DELAY_MS) {
+            this.lastShiftPressTime = 0;
+            this.isShiftAreaSelectActive = !this.isShiftAreaSelectActive;
+            if (!this.isShiftAreaSelectActive && this.isMarqueeExpanding) {
+              if (this.activeMoveHandler) {
+                window.removeEventListener("mousemove", this.activeMoveHandler);
+                this.activeMoveHandler = void 0;
+              }
+              this.cancelMarquee();
+            }
+            this.updateStatusIndicator();
+            this.callbacks.showToast(
+              this.isShiftAreaSelectActive ? "Modo Caixa Delimitadora ativado (Duplo clique Shift). Clique no canvas para iniciar a \xE1rea." : "Modo Caixa Delimitadora desativado.",
+              "info"
+            );
+          } else {
+            this.lastShiftPressTime = now;
+          }
+        }
+      }
+      if (e.key === "Escape") {
+        if (this.isMarqueeActive || this.isMarqueeExpanding || this.isShiftAreaSelectActive) {
+          if (this.activeMoveHandler) {
+            window.removeEventListener("mousemove", this.activeMoveHandler);
+            this.activeMoveHandler = void 0;
+          }
+          this.cancelMarquee();
+          this.isShiftAreaSelectActive = false;
+        }
+        if (this.isCtrlStickyActive) {
+          this.isCtrlStickyActive = false;
+        }
+        this.updateStatusIndicator();
+        this.updateCanvasCursor();
+      }
+    });
+    window.addEventListener("keyup", (e) => {
+      if (e.key === "Shift") {
+        this.isShiftKeyDown = false;
+        this.updateCanvasCursor();
+      }
     });
   }
 };
@@ -28437,6 +28961,17 @@ var VisualEditorApp = class {
       {
         getGraph: () => this.graph,
         getSelectedNodeId: () => this.selectedNodeId,
+        getSelectedNodeIds: () => this.canvasManager?.getSelectedNodeIds() || [],
+        onClearSelection: () => {
+          this.canvasManager.clearSelection();
+          this.selectedNodeId = void 0;
+          this.inspectorManager.renderInspector();
+        },
+        onDeleteSelected: () => {
+          this.canvasManager.deleteSelectedNodes();
+          this.selectedNodeId = void 0;
+          this.inspectorManager.renderInspector();
+        },
         onNodeDataChanged: () => {
           this.canvasManager.render();
         },
@@ -28450,12 +28985,14 @@ var VisualEditorApp = class {
     this.canvasManager = new CanvasManager({
       getGraph: () => this.graph,
       getSelectedNodeId: () => this.selectedNodeId,
+      getSelectedNodeIds: () => this.canvasManager.getSelectedNodeIds(),
       setSelectedNodeId: (nodeId) => {
         this.selectedNodeId = nodeId;
       },
       onNodeSelect: (nodeId) => {
         this.selectedNodeId = nodeId;
-        if (nodeId) {
+        const selectedCount = this.canvasManager.getSelectedNodeIds().length;
+        if (nodeId || selectedCount > 0) {
           this.openInspectorSidebar();
         } else {
           this.inspectorManager.renderInspector();
@@ -28477,7 +29014,18 @@ var VisualEditorApp = class {
     this.initBlockCatalogUI();
     this.initGlobalEvents();
     this.initSettingsEvents();
+    this.loadStartupPreferences();
     this.tabManager.loadFromStorage();
+  }
+  loadStartupPreferences() {
+    if (!chrome.storage?.local)
+      return;
+    chrome.storage.local.get("studio_preferences", (stored) => {
+      if (stored?.studio_preferences) {
+        const p = stored.studio_preferences;
+        this.canvasManager.updateSelectionSettings(p.multiSelectMode, p.areaSelectMode);
+      }
+    });
   }
   cleanFlowName(name) {
     return (name || "Minha Automa\xE7\xE3o").replace(/\.(webautomation\.json|json)$/i, "").trim() || "Minha Automa\xE7\xE3o";
@@ -28779,9 +29327,16 @@ var VisualEditorApp = class {
           if (selectedEdge) {
             e.preventDefault();
             this.canvasManager.deleteEdge(selectedEdge);
-          } else if (this.selectedNodeId) {
-            e.preventDefault();
-            this.canvasManager.deleteNode(this.selectedNodeId);
+          } else {
+            const selectedIds = this.canvasManager.getSelectedNodeIds();
+            if (selectedIds.length > 0) {
+              e.preventDefault();
+              this.canvasManager.deleteSelectedNodes();
+              this.selectedNodeId = void 0;
+            } else if (this.selectedNodeId) {
+              e.preventDefault();
+              this.canvasManager.deleteNode(this.selectedNodeId);
+            }
           }
         }
       }
@@ -29044,7 +29599,9 @@ var VisualEditorApp = class {
         autoSave: "always",
         edgeType: "bezier",
         showMinimap: true,
-        snapToGrid: true
+        snapToGrid: true,
+        multiSelectMode: "both",
+        areaSelectMode: "both"
       };
       const mcp = stored.mcp_settings || {
         enabled: false,
@@ -29073,6 +29630,9 @@ var VisualEditorApp = class {
       setSelect("settingsDefaultEdgeType", studio.edgeType);
       setCheck("settingsShowMinimapDefault", studio.showMinimap);
       setCheck("settingsSnapToGridDefault", studio.snapToGrid);
+      setSelect("settingsMultiSelectMode", studio.multiSelectMode || "both");
+      setSelect("settingsAreaSelectMode", studio.areaSelectMode || "both");
+      this.canvasManager.updateSelectionSettings(studio.multiSelectMode || "both", studio.areaSelectMode || "both");
       setCheck("settingsMcpEnabled", mcp.enabled);
       setInput("settingsMcpPortInput", mcp.port);
       const statsEl = document.getElementById("settingsStorageSummaryText");
@@ -29099,8 +29659,11 @@ var VisualEditorApp = class {
         autoSave: getVal("settingsAutoSaveInterval") || "always",
         edgeType: getVal("settingsDefaultEdgeType") || "bezier",
         showMinimap: getCheck("settingsShowMinimapDefault"),
-        snapToGrid: getCheck("settingsSnapToGridDefault")
+        snapToGrid: getCheck("settingsSnapToGridDefault"),
+        multiSelectMode: getVal("settingsMultiSelectMode") || "both",
+        areaSelectMode: getVal("settingsAreaSelectMode") || "both"
       };
+      this.canvasManager.updateSelectionSettings(studio.multiSelectMode, studio.areaSelectMode);
       const mcp = {
         enabled: getCheck("settingsMcpEnabled"),
         port: parseInt(getVal("settingsMcpPortInput") || "3001", 10)

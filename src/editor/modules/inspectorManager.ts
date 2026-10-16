@@ -13,9 +13,12 @@ import { StartPropertiesRenderer } from './inspector/startProperties';
 export interface InspectorCallbacks {
   getGraph: () => WebAutomationGraph;
   getSelectedNodeId: () => string | undefined;
+  getSelectedNodeIds?: () => string[];
   onNodeDataChanged: () => void;
   onRenderGraph: () => void;
   showToast: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void;
+  onClearSelection?: () => void;
+  onDeleteSelected?: () => void;
 }
 
 export class InspectorManager {
@@ -41,7 +44,22 @@ export class InspectorManager {
     const noSelect = document.getElementById('noSelectionMessage')!;
     const form = document.getElementById('nodePropertiesForm') as HTMLFormElement;
 
+    const selectedIds = this.callbacks.getSelectedNodeIds ? this.callbacks.getSelectedNodeIds() : [];
     const selectedId = this.callbacks.getSelectedNodeId();
+
+    if (selectedIds.length > 1) {
+      if (sidebarRight) sidebarRight.classList.remove('collapsed');
+      if (sidebarLeft) sidebarLeft.classList.add('collapsed');
+      btnActivityBlocks?.classList.remove('active');
+      btnActivityInspector?.classList.add('active');
+      if (resizerLeft) resizerLeft.style.display = 'block';
+
+      noSelect.classList.add('hidden');
+      form.classList.remove('hidden');
+      this.renderMultiSelectionInspector(form, selectedIds);
+      return;
+    }
+
     if (!selectedId) {
       noSelect.classList.remove('hidden');
       form.classList.add('hidden');
@@ -558,6 +576,55 @@ export class InspectorManager {
           container.scrollBy({ top: delta, behavior: 'smooth' });
         }
       }, 50);
+    });
+  }
+
+  /**
+   * Renderiza o painel de propriedades quando múltiplos blocos estão selecionados
+   */
+  private renderMultiSelectionInspector(form: HTMLElement, selectedIds: string[]): void {
+    form.innerHTML = '';
+    const graph = this.callbacks.getGraph();
+    const selectedNodes = graph.nodes.filter((n) => selectedIds.includes(n.id));
+
+    const card = document.createElement('div');
+    card.className = 'multi-selection-inspector-card';
+    card.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #1e293b;">
+        <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); display: flex; align-items: center; justify-content: center; color: #818cf8;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        </div>
+        <div>
+          <div style="font-size: 14px; font-weight: 700; color: #f8fafc;">Seleção Múltipla</div>
+          <div style="font-size: 11px; color: #94a3b8;">${selectedNodes.length} blocos selecionados no canvas</div>
+        </div>
+      </div>
+      <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px; font-weight: 600;">Blocos Selecionados:</div>
+      <div style="max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; padding-right: 4px;">
+        ${selectedNodes.map((n) => `
+          <div style="display: flex; align-items: center; justify-content: space-between; background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 6px 10px; font-size: 11px;">
+            <span style="font-weight: 600; color: #f1f5f9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${n.data?.label || n.type}</span>
+            <span style="color: #64748b; font-family: monospace; font-size: 10px;">${n.type}</span>
+          </div>
+        `).join('')}
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <button type="button" id="btnDeleteSelectedNodesInspector" class="btn btn-danger" style="width: 100%; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.4); color: #f43f5e; border-radius: 6px; cursor: pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          <span>Excluir ${selectedNodes.length} Blocos Selecionados</span>
+        </button>
+        <button type="button" id="btnClearSelectionInspector" class="btn btn-secondary" style="width: 100%; font-size: 12px; padding: 8px; background: #1e293b; border: 1px solid #334155; color: #cbd5e1; border-radius: 6px; cursor: pointer;">
+          Desmarcar Todos
+        </button>
+      </div>
+    `;
+    form.appendChild(card);
+
+    card.querySelector('#btnDeleteSelectedNodesInspector')?.addEventListener('click', () => {
+      this.callbacks.onDeleteSelected?.();
+    });
+    card.querySelector('#btnClearSelectionInspector')?.addEventListener('click', () => {
+      this.callbacks.onClearSelection?.();
     });
   }
 }

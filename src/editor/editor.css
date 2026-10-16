@@ -2051,3 +2051,112 @@ select {
   color: #10b981;
 }
 
+/* ========================================================== */
+/* SELEÇÃO MÚLTIPLA E CAIXA DELIMITADORA (MARQUEE)            */
+/* ========================================================== */
+.canvas-marquee-box {
+  position: absolute;
+  border: 1.5px dashed #818cf8;
+  background: rgba(99, 102, 241, 0.15);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 85;
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.25);
+  backdrop-filter: blur(1px);
+}
+
+/* Cursor unificado (crosshair) tanto no modo pressionado quanto no alternado */
+#canvasContainer.canvas-marquee-mode,
+#canvasContainer.canvas-marquee-mode *,
+body.canvas-marquee-active,
+body.canvas-marquee-active * {
+  cursor: crosshair !important;
+}
+
+#canvasContainer.canvas-marquee-mode .canvas-selection-mode-badge,
+#canvasContainer.canvas-marquee-mode .canvas-selection-mode-badge * {
+  cursor: default !important;
+}
+
+#canvasContainer.canvas-marquee-mode .canvas-selection-mode-badge .badge-close {
+  cursor: pointer !important;
+}
+
+#canvasContainer.canvas-marquee-mode .canvas-floating-controls,
+#canvasContainer.canvas-marquee-mode .canvas-floating-controls * {
+  cursor: pointer !important;
+}
+
+.canvas-selection-mode-badge {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  color: #e2e8f0;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+  user-select: none;
+  animation: fadeInDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.canvas-selection-mode-badge .badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6366f1;
+  box-shadow: 0 0 8px #6366f1;
+  animation: pulse-dot 1.5s infinite;
+}
+
+.canvas-selection-mode-badge .badge-close {
+  cursor: pointer;
+  opacity: 0.7;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  transition: all 0.15s ease;
+}
+
+.canvas-selection-mode-badge .badge-close:hover {
+  opacity: 1;
+  color: #f43f5e;
+  transform: scale(1.15);
+}
+
+.multi-selection-inspector-card {
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.7;
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+

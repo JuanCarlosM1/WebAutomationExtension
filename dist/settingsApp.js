@@ -307,6 +307,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const defaultEdgeType = document.getElementById("defaultEdgeType");
   const showMinimapDefault = document.getElementById("showMinimapDefault");
   const snapToGridDefault = document.getElementById("snapToGridDefault");
+  const multiSelectMode = document.getElementById("multiSelectMode");
+  const areaSelectMode = document.getElementById("areaSelectMode");
   const mcpEnabled = document.getElementById("mcpEnabled");
   const mcpPortInput = document.getElementById("mcpPortInput");
   const storageSummaryText = document.getElementById("storageSummaryText");
@@ -345,20 +347,26 @@ document.addEventListener("DOMContentLoaded", async () => {
           maxColumnsInput.value = String(layout.maxColumns ?? 3);
         if (maxRowsInput)
           maxRowsInput.value = String(layout.maxRows ?? 5);
-        const prefs = data.visual_studio_preferences || {
+        const prefs = data.studio_preferences || data.visual_studio_preferences || {
           autoSave: "always",
           edgeType: "bezier",
           minimap: true,
-          snapGrid: true
+          snapGrid: true,
+          multiSelectMode: "both",
+          areaSelectMode: "both"
         };
         if (autoSaveInterval)
           autoSaveInterval.value = prefs.autoSave || "always";
         if (defaultEdgeType)
           defaultEdgeType.value = prefs.edgeType || "bezier";
         if (showMinimapDefault)
-          showMinimapDefault.checked = prefs.minimap !== false;
+          showMinimapDefault.checked = prefs.minimap !== false && prefs.showMinimap !== false;
         if (snapToGridDefault)
-          snapToGridDefault.checked = prefs.snapGrid !== false;
+          snapToGridDefault.checked = prefs.snapGrid !== false && prefs.snapToGrid !== false;
+        if (multiSelectMode)
+          multiSelectMode.value = prefs.multiSelectMode || "both";
+        if (areaSelectMode)
+          areaSelectMode.value = prefs.areaSelectMode || "both";
         const mcp = data.mcp_config || { enabled: false, port: 3001 };
         if (mcpEnabled)
           mcpEnabled.checked = !!mcp.enabled;
@@ -394,7 +402,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       autoSave: autoSaveInterval?.value || "always",
       edgeType: defaultEdgeType?.value || "bezier",
       minimap: showMinimapDefault?.checked ?? true,
-      snapGrid: snapToGridDefault?.checked ?? true
+      showMinimap: showMinimapDefault?.checked ?? true,
+      snapGrid: snapToGridDefault?.checked ?? true,
+      snapToGrid: snapToGridDefault?.checked ?? true,
+      multiSelectMode: multiSelectMode?.value || "both",
+      areaSelectMode: areaSelectMode?.value || "both"
     };
     const mcpConfig = {
       enabled: mcpEnabled?.checked ?? false,
@@ -404,6 +416,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       await chrome.storage.local.set({
         floating_buttons_layout_settings: layoutConfig,
         visual_studio_preferences: studioPrefs,
+        studio_preferences: studioPrefs,
         mcp_config: mcpConfig
       });
       if (chrome.runtime?.sendMessage) {

@@ -17,6 +17,7 @@ import { CanvasMinimap } from './canvasMinimap';
 export interface CanvasManagerCallbacks {
   getGraph: () => WebAutomationGraph;
   getSelectedNodeId: () => string | undefined;
+  getSelectedNodeIds?: () => string[];
   setSelectedNodeId: (nodeId: string | undefined) => void;
   onNodeSelect: (nodeId: string | undefined) => void;
   showToast: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void;
@@ -39,11 +40,43 @@ export class CanvasManager {
   private activeUpHandler?: (e: MouseEvent) => void;
   private minimap: CanvasMinimap;
 
+  // Multi-seleção de Blocos e Caixa Delimitadora (Marquee)
+  private selectedNodeIds: Set<string> = new Set();
+  private lastSelectedNodeId?: string;
+
+  // Modos de Seleção Configuráveis: 'both' (Híbrido), 'hold' (Apenas Manter Pressionado), 'toggle' (Apenas Alternar)
+  private multiSelectMode: 'hold' | 'toggle' | 'both' = 'both';
+  private areaSelectMode: 'drag' | 'toggle' | 'both' = 'both';
+
+  // Detecção de Duplo Toque nas Teclas (Ctrl e Shift)
+  private lastCtrlPressTime = 0;
+  private lastShiftPressTime = 0;
+  private readonly DOUBLE_TAP_DELAY_MS = 380;
+
+  // Estados dos Modos Alternáveis
+  private isCtrlStickyActive: boolean = false;
+  private isShiftAreaSelectActive: boolean = false;
+
+  // Caixa Delimitadora (Marquee)
+  private isMarqueeActive: boolean = false;
+  private isMarqueeExpanding: boolean = false;
+  private marqueeEl?: HTMLElement;
+  private marqueeStart = { x: 0, y: 0 };
+  private statusIndicatorEl?: HTMLElement;
+  private isShiftKeyDown: boolean = false;
+
   constructor(private callbacks: CanvasManagerCallbacks) {
+    const initialId = this.callbacks.getSelectedNodeId();
+    if (initialId) {
+      this.selectedNodeIds.add(initialId);
+      this.lastSelectedNodeId = initialId;
+    }
+
     this.minimap = new CanvasMinimap({
       getNodes: () => this.callbacks.getGraph().nodes,
       getEdges: () => this.callbacks.getGraph().edges,
       getSelectedNodeId: () => this.callbacks.getSelectedNodeId(),
+      getSelectedNodeIds: () => this.getSelectedNodeIds(),
       getZoom: () => this.zoom,
       getPanOffset: () => ({ ...this.panOffset }),
       onNavigate: (newPanX, newPanY) => {
@@ -89,6 +122,74 @@ export class CanvasManager {
         p.classList.remove('selected-edge');
       }
     });
+  }
+
+  public getSelectedNodeIds(): string[] {
+    return Array.from(this.selectedNodeIds);
+  }
+
+  public setSelectedNodeIds(ids: string[]): void {
+    this.selectedNodeIds = new Set(ids);
+    this.lastSelectedNodeId = ids.length > 0 ? ids[ids.length - 1] : undefined;
+    this.callbacks.setSelectedNodeId(this.lastSelectedNodeId);
+    this.updateSelectionVisuals();
+    this.callbacks.onNodeSelect(this.lastSelectedNodeId);
+  }
+
+  public clearSelection(): void {
+    this.selectedNodeIds.clear();
+    this.lastSelectedNodeId = undefined;
+    this.callbacks.setSelectedNodeId(undefined);
+    this.updateSelectionVisuals();
+  }
+
+  public updateSelectionSettings(
+    multiSelectMode?: 'hold' | 'toggle' | 'both',
+    areaSelectMode?: 'drag' | 'toggle' | 'both'
+  ): void {
+    if (multiSelectMode) this.multiSelectMode = multiSelectMode;
+    if (areaSelectMode) this.areaSelectMode = areaSelectMode;
+    if (this.multiSelectMode === 'hold' && this.isCtrlStickyActive) {
+      this.isCtrlStickyActive = false;
+    }
+    if (this.areaSelectMode === 'drag' && this.isShiftAreaSelectActive) {
+      this.cancelMarquee();
+      this.isShiftAreaSelectActive = false;
+    }
+    this.updateStatusIndicator();
+    this.updateCanvasCursor();
+  }
+
+  public updateSelectionVisuals(): void {
+    const graph = this.callbacks.getGraph();
+    graph.nodes.forEach((n) => {
+      const el = document.getElementById(`rendered_${n.id}`);
+      if (el) {
+        if (this.selectedNodeIds.has(n.id)) {
+          el.classList.add('selected');
+        } else {
+          el.classList.remove('selected');
+        }
+      }
+    });
+    this.renderMinimap();
+  }
+
+  public deleteSelectedNodes(): void {
+    const graph = this.callbacks.getGraph();
+    const idsToDelete = Array.from(this.selectedNodeIds);
+    if (idsToDelete.length === 0) return;
+
+    graph.nodes = graph.nodes.filter((n) => !this.selectedNodeIds.has(n.id));
+    graph.edges = graph.edges.filter((ed) => !this.selectedNodeIds.has(ed.source) && !this.selectedNodeIds.has(ed.target));
+
+    this.selectedNodeIds.clear();
+    this.lastSelectedNodeId = undefined;
+    this.callbacks.setSelectedNodeId(undefined);
+
+    this.render();
+    this.callbacks.onNodeSelect(undefined);
+    this.callbacks.showToast(`${idsToDelete.length} bloco(s) excluído(s).`, 'info');
   }
 
   public getZoom(): number {
@@ -266,7 +367,8 @@ export class CanvasManager {
         }
       }
 
-      nodeEl.className = `graph-node ${catClass} ${selectedNodeId === node.id ? 'selected' : ''}`;
+      const isSelected = this.selectedNodeIds.has(node.id) || selectedNodeId === node.id;
+      nodeEl.className = `graph-node ${catClass} ${isSelected ? 'selected' : ''}`;
 
       // Botão ou prévia de código no corpo do nó se for bloco com código JS, HTML ou CSS
       let codeBadgeHtml = '';
@@ -319,43 +421,115 @@ export class CanvasManager {
         ${outputsHtml}
       `;
 
-      // Mover nó (Drag & Drop)
+      // Mover nó ou conjunto de nós selecionados (Drag & Drop com suporte a Multi-Seleção)
       nodeEl.addEventListener('mousedown', (e) => {
         if ((e.target as HTMLElement).classList.contains('delete-node-btn')) return;
         if ((e.target as HTMLElement).classList.contains('node-handle')) return;
         if ((e.target as HTMLElement).classList.contains('port-handle')) return;
+        if ((e.target as HTMLElement).classList.contains('node-edit-code-btn')) return;
+        if ((e.target as HTMLElement).closest('.expand-node-btn')) return;
+        if (e.button !== 0) return;
 
         e.stopPropagation();
-        this.callbacks.setSelectedNodeId(node.id);
-        this.isDraggingNode = true;
 
-        document.querySelectorAll('.graph-node').forEach((el) => el.classList.remove('selected'));
-        nodeEl.classList.add('selected');
-        this.callbacks.onNodeSelect(node.id);
+        // Verifica se a ação é uma alternância de multi-seleção (Ctrl ou Sticky)
+        const isHoldAllowed = this.multiSelectMode === 'hold' || this.multiSelectMode === 'both';
+        const isToggleAllowed = this.multiSelectMode === 'toggle' || this.multiSelectMode === 'both';
+        const isMultiSelectClick = (isHoldAllowed && (e.ctrlKey || e.metaKey)) || (isToggleAllowed && this.isCtrlStickyActive);
+
+        if (isMultiSelectClick) {
+          if (this.selectedNodeIds.has(node.id)) {
+            this.selectedNodeIds.delete(node.id);
+            if (this.lastSelectedNodeId === node.id) {
+              this.lastSelectedNodeId = this.selectedNodeIds.values().next().value || undefined;
+            }
+            this.callbacks.setSelectedNodeId(this.lastSelectedNodeId);
+            this.updateSelectionVisuals();
+            this.callbacks.onNodeSelect(this.callbacks.getSelectedNodeId());
+            return;
+          } else {
+            this.selectedNodeIds.add(node.id);
+            this.lastSelectedNodeId = node.id;
+            this.callbacks.setSelectedNodeId(node.id);
+            this.updateSelectionVisuals();
+            this.callbacks.onNodeSelect(node.id);
+          }
+        } else {
+          // Clique simples sem Ctrl
+          if (!this.selectedNodeIds.has(node.id)) {
+            // Seleciona exclusivamente este bloco
+            this.selectedNodeIds.clear();
+            this.selectedNodeIds.add(node.id);
+            this.lastSelectedNodeId = node.id;
+            this.callbacks.setSelectedNodeId(node.id);
+            this.updateSelectionVisuals();
+            this.callbacks.onNodeSelect(node.id);
+          } else {
+            // Bloco já faz parte do conjunto selecionado: mantém todos para arrasto conjunto
+            this.lastSelectedNodeId = node.id;
+            this.callbacks.setSelectedNodeId(node.id);
+          }
+        }
+
+        this.isDraggingNode = true;
+        this.updateCanvasCursor();
 
         const startMouseX = e.clientX;
         const startMouseY = e.clientY;
-        const startNodeX = node.position.x;
-        const startNodeY = node.position.y;
+        let hasMoved = false;
+
+        // Captura as posições iniciais de todos os nós selecionados
+        const startPositions = new Map<string, { x: number; y: number }>();
+        const currentGraph = this.callbacks.getGraph();
+        currentGraph.nodes.forEach((n) => {
+          if (this.selectedNodeIds.has(n.id)) {
+            startPositions.set(n.id, { x: n.position.x, y: n.position.y });
+          }
+        });
 
         const onMouseMove = (moveEvt: MouseEvent) => {
           if (!this.isDraggingNode) return;
           const deltaX = (moveEvt.clientX - startMouseX) / this.zoom;
           const deltaY = (moveEvt.clientY - startMouseY) / this.zoom;
 
-          node.position.x = Math.round(startNodeX + deltaX);
-          node.position.y = Math.round(startNodeY + deltaY);
+          if (!hasMoved && Math.hypot(deltaX, deltaY) > 2) {
+            hasMoved = true;
+          }
 
-          nodeEl.style.left = `${node.position.x}px`;
-          nodeEl.style.top = `${node.position.y}px`;
+          startPositions.forEach((startPos, nodeId) => {
+            const targetNode = currentGraph.nodes.find((n) => n.id === nodeId);
+            if (targetNode) {
+              targetNode.position.x = Math.round(startPos.x + deltaX);
+              targetNode.position.y = Math.round(startPos.y + deltaY);
+
+              const el = document.getElementById(`rendered_${nodeId}`);
+              if (el) {
+                el.style.left = `${targetNode.position.x}px`;
+                el.style.top = `${targetNode.position.y}px`;
+              }
+            }
+          });
+
           this.renderEdges();
           this.renderMinimap();
         };
 
         const onMouseUp = () => {
           this.isDraggingNode = false;
+          this.updateCanvasCursor();
           window.removeEventListener('mousemove', onMouseMove);
           window.removeEventListener('mouseup', onMouseUp);
+
+          // Se clicou sem arrastar em um bloco que fazia parte de um grupo selecionado e sem Ctrl, foca nele
+          if (!hasMoved && !isMultiSelectClick && this.selectedNodeIds.size > 1) {
+            this.selectedNodeIds.clear();
+            this.selectedNodeIds.add(node.id);
+            this.lastSelectedNodeId = node.id;
+            this.callbacks.setSelectedNodeId(node.id);
+            this.updateSelectionVisuals();
+            this.callbacks.onNodeSelect(node.id);
+          }
+
           this.renderMinimap();
         };
 
@@ -596,8 +770,10 @@ export class CanvasManager {
     graph.nodes = graph.nodes.filter((n) => n.id !== nodeId);
     graph.edges = graph.edges.filter((ed) => ed.source !== nodeId && ed.target !== nodeId);
 
+    this.selectedNodeIds.delete(nodeId);
     if (this.callbacks.getSelectedNodeId() === nodeId) {
-      this.callbacks.setSelectedNodeId(undefined);
+      this.lastSelectedNodeId = this.selectedNodeIds.values().next().value || undefined;
+      this.callbacks.setSelectedNodeId(this.lastSelectedNodeId);
     }
 
     this.render();
@@ -623,6 +799,7 @@ export class CanvasManager {
     this.isCtrlConnectionMode = false;
     document.getElementById('canvasContainer')?.classList.remove('connecting-in-progress');
     document.querySelectorAll('.connecting-source').forEach((el) => el.classList.remove('connecting-source'));
+    this.updateCanvasCursor();
   }
 
   /**
@@ -815,6 +992,192 @@ export class CanvasManager {
     this.minimap.render();
   }
 
+  private startMarquee(clientX: number, clientY: number): void {
+    const canvas = document.getElementById('canvasContainer');
+    if (!canvas) return;
+
+    this.isMarqueeActive = true;
+    this.marqueeStart = { x: clientX, y: clientY };
+
+    this.updateCanvasCursor();
+
+    if (!this.marqueeEl) {
+      this.marqueeEl = document.createElement('div');
+      this.marqueeEl.className = 'canvas-marquee-box';
+      canvas.appendChild(this.marqueeEl);
+    }
+
+    this.updateMarqueeVisual(clientX, clientY);
+  }
+
+  private updateMarqueeVisual(currentX: number, currentY: number): void {
+    if (!this.marqueeEl) return;
+    const canvas = document.getElementById('canvasContainer');
+    if (!canvas) return;
+
+    const canvasRect = canvas.getBoundingClientRect();
+    const left = Math.min(this.marqueeStart.x, currentX);
+    const top = Math.min(this.marqueeStart.y, currentY);
+    const right = Math.max(this.marqueeStart.x, currentX);
+    const bottom = Math.max(this.marqueeStart.y, currentY);
+
+    this.marqueeEl.style.left = `${left - canvasRect.left}px`;
+    this.marqueeEl.style.top = `${top - canvasRect.top}px`;
+    this.marqueeEl.style.width = `${Math.max(2, right - left)}px`;
+    this.marqueeEl.style.height = `${Math.max(2, bottom - top)}px`;
+
+    // Pré-visualização dinâmica dos nós selecionados
+    const candidateIds = this.getNodesInRect(left, top, right, bottom);
+    const graph = this.callbacks.getGraph();
+    graph.nodes.forEach((n) => {
+      const el = document.getElementById(`rendered_${n.id}`);
+      if (!el) return;
+      const isCandidate = candidateIds.includes(n.id);
+      const isAlreadySelected = this.selectedNodeIds.has(n.id);
+      if (isCandidate || isAlreadySelected) {
+        el.classList.add('selected');
+      } else {
+        el.classList.remove('selected');
+      }
+    });
+  }
+
+  private getNodesInRect(left: number, top: number, right: number, bottom: number): string[] {
+    const enclosedIds: string[] = [];
+    const graph = this.callbacks.getGraph();
+    graph.nodes.forEach((n) => {
+      const el = document.getElementById(`rendered_${n.id}`);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const intersects = !(r.right < left || r.left > right || r.bottom < top || r.top > bottom);
+      if (intersects) {
+        enclosedIds.push(n.id);
+      }
+    });
+    return enclosedIds;
+  }
+
+  private finishMarquee(currentX: number, currentY: number, additive: boolean = false): void {
+    const left = Math.min(this.marqueeStart.x, currentX);
+    const top = Math.min(this.marqueeStart.y, currentY);
+    const right = Math.max(this.marqueeStart.x, currentX);
+    const bottom = Math.max(this.marqueeStart.y, currentY);
+
+    const enclosedIds = this.getNodesInRect(left, top, right, bottom);
+
+    if (!additive) {
+      this.selectedNodeIds.clear();
+    }
+    enclosedIds.forEach((id) => this.selectedNodeIds.add(id));
+    this.lastSelectedNodeId = enclosedIds.length > 0 ? enclosedIds[enclosedIds.length - 1] : undefined;
+    this.callbacks.setSelectedNodeId(this.lastSelectedNodeId);
+
+    this.cancelMarquee();
+    this.updateSelectionVisuals();
+    this.callbacks.onNodeSelect(this.callbacks.getSelectedNodeId());
+
+    if (enclosedIds.length > 0) {
+      this.callbacks.showToast(`${enclosedIds.length} bloco(s) selecionado(s) pela área delimitadora.`, 'info');
+    }
+  }
+
+  private cancelMarquee(): void {
+    this.isMarqueeActive = false;
+    this.isMarqueeExpanding = false;
+    if (this.marqueeEl) {
+      this.marqueeEl.remove();
+      this.marqueeEl = undefined;
+    }
+
+    this.updateCanvasCursor();
+  }
+
+  /**
+   * Garante que o ícone do mouse (cursor) seja o mesmo crosshair em ambos os modos:
+   * no modo pressionado (Shift pressionado ou arrastando malha) e no modo alternado (Shift toggle ativo ou expandindo).
+   */
+  public updateCanvasCursor(): void {
+    const canvas = document.getElementById('canvasContainer');
+    if (!canvas) return;
+
+    const isDragAllowed = this.areaSelectMode === 'drag' || this.areaSelectMode === 'both';
+    const isBusy = this.isDraggingNode || this.isPanning || !!this.connectingFromNodeId;
+    const shouldShowCrosshair =
+      !isBusy &&
+      (this.isMarqueeActive ||
+        this.isMarqueeExpanding ||
+        this.isShiftAreaSelectActive ||
+        (isDragAllowed && this.isShiftKeyDown));
+
+    if (shouldShowCrosshair) {
+      canvas.classList.add('canvas-marquee-mode');
+      canvas.style.cursor = 'crosshair';
+      if (this.isMarqueeActive || this.isMarqueeExpanding) {
+        document.body.classList.add('canvas-marquee-active');
+        document.body.style.cursor = 'crosshair';
+      }
+    } else {
+      canvas.classList.remove('canvas-marquee-mode');
+      if (!this.isCtrlStickyActive) {
+        canvas.style.cursor = '';
+      }
+      document.body.classList.remove('canvas-marquee-active');
+      document.body.style.cursor = '';
+    }
+  }
+
+  private updateStatusIndicator(): void {
+    const canvas = document.getElementById('canvasContainer');
+    if (!canvas) return;
+
+    if (!this.isCtrlStickyActive && !this.isShiftAreaSelectActive) {
+      if (this.statusIndicatorEl) {
+        this.statusIndicatorEl.remove();
+        this.statusIndicatorEl = undefined;
+      }
+      this.updateCanvasCursor();
+      return;
+    }
+
+    if (!this.statusIndicatorEl) {
+      this.statusIndicatorEl = document.createElement('div');
+      this.statusIndicatorEl.className = 'canvas-selection-mode-badge';
+      canvas.appendChild(this.statusIndicatorEl);
+    }
+
+    let text = '';
+    if (this.isCtrlStickyActive && this.isShiftAreaSelectActive) {
+      text = 'Multi-seleção & Caixa Delimitadora ativas (Duplo toque Ctrl/Shift ou Esc para desativar)';
+    } else if (this.isCtrlStickyActive) {
+      text = 'Modo Multi-seleção Individual Ativo — Clique nos blocos para selecionar (Duplo toque Ctrl para desativar)';
+    } else if (this.isShiftAreaSelectActive) {
+      text = this.isMarqueeExpanding
+        ? 'Caixa delimitadora ativa — Mova o mouse e clique para selecionar (Esc para cancelar)'
+        : 'Modo Caixa Delimitadora Ativo — Clique no canvas para iniciar a área (Duplo toque Shift para sair)';
+    }
+
+    this.updateCanvasCursor();
+
+    this.statusIndicatorEl.innerHTML = `
+      <span class="badge-dot"></span>
+      <span>${text}</span>
+      <span class="badge-close" title="Desativar modo">✕</span>
+    `;
+
+    this.statusIndicatorEl.querySelector('.badge-close')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.activeMoveHandler) {
+        window.removeEventListener('mousemove', this.activeMoveHandler);
+        this.activeMoveHandler = undefined;
+      }
+      this.cancelMarquee();
+      this.isCtrlStickyActive = false;
+      this.isShiftAreaSelectActive = false;
+      this.updateStatusIndicator();
+      this.updateCanvasCursor();
+    });
+  }
+
   private initCanvasEvents(): void {
     const canvas = document.getElementById('canvasContainer');
     if (!canvas) return;
@@ -830,24 +1193,120 @@ export class CanvasManager {
       this.addNodeToCanvas(item, e.clientX, e.clientY);
     });
 
-    // Pan do Canvas
+    // Rastreia presença do Shift ao mover ou entrar com o mouse no canvas
+    canvas.addEventListener('mousemove', (e) => {
+      if (e.shiftKey !== this.isShiftKeyDown) {
+        this.isShiftKeyDown = e.shiftKey;
+        this.updateCanvasCursor();
+      }
+    });
+
+    canvas.addEventListener('mouseenter', (e) => {
+      if (e.shiftKey !== this.isShiftKeyDown) {
+        this.isShiftKeyDown = e.shiftKey;
+        this.updateCanvasCursor();
+      }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      if (!this.isMarqueeActive && !this.isMarqueeExpanding && !this.isShiftAreaSelectActive) {
+        const c = document.getElementById('canvasContainer');
+        c?.classList.remove('canvas-marquee-mode');
+        if (c && !this.isCtrlStickyActive) c.style.cursor = '';
+      }
+    });
+
+    window.addEventListener('blur', () => {
+      this.isShiftKeyDown = false;
+      this.updateCanvasCursor();
+    });
+
+    // Iniciar Pan do Canvas ou Seleção por Área (Marquee)
     canvas.addEventListener('mousedown', (e) => {
       if (
         (e.target as HTMLElement).closest('.graph-node') ||
         (e.target as HTMLElement).closest('.canvas-floating-controls') ||
         (e.target as HTMLElement).closest('.canvas-minimap') ||
         (e.target as HTMLElement).closest('.edge-delete-badge') ||
+        (e.target as HTMLElement).closest('.canvas-selection-mode-badge') ||
         (e.target as SVGElement).tagName?.toLowerCase() === 'path'
       ) {
         return;
       }
 
-      this.callbacks.setSelectedNodeId(undefined);
-      this.setSelectedEdgeId(undefined);
-      document.querySelectorAll('.graph-node').forEach((el) => el.classList.remove('selected'));
-      this.callbacks.onNodeSelect(undefined);
+      if (e.button !== 0) return;
 
+      // 1. Modo de Seleção por Retângulo (Marquee) - Arrasto Contínuo com Shift (modo 'drag' ou 'both')
+      // Permite soltar a tecla Shift depois de iniciada a malha, mantendo o clique pressionado
+      const isDragAllowed = this.areaSelectMode === 'drag' || this.areaSelectMode === 'both';
+      if (isDragAllowed && (e.shiftKey || this.isShiftKeyDown)) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        this.startMarquee(e.clientX, e.clientY);
+
+        const onMarqueeMove = (moveEvt: MouseEvent) => {
+          if (!this.isMarqueeActive) return;
+          this.updateMarqueeVisual(moveEvt.clientX, moveEvt.clientY);
+        };
+
+        const onMarqueeUp = (upEvt: MouseEvent) => {
+          window.removeEventListener('mousemove', onMarqueeMove);
+          window.removeEventListener('mouseup', onMarqueeUp);
+          const isStickyMultiAllowed = this.multiSelectMode === 'toggle' || this.multiSelectMode === 'both';
+          const isAdditive = upEvt.ctrlKey || upEvt.metaKey || (isStickyMultiAllowed && this.isCtrlStickyActive);
+          this.finishMarquee(upEvt.clientX, upEvt.clientY, isAdditive);
+        };
+
+        window.addEventListener('mousemove', onMarqueeMove);
+        window.addEventListener('mouseup', onMarqueeUp);
+        return;
+      }
+
+      // 2. Modo de Seleção por Retângulo (Marquee) - Dois Cliques com Shift (Início e Término - modo 'toggle' ou 'both')
+      const isToggleAreaAllowed = this.areaSelectMode === 'toggle' || this.areaSelectMode === 'both';
+      if (isToggleAreaAllowed && this.isShiftAreaSelectActive) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!this.isMarqueeExpanding) {
+          // Primeiro clique: inicia a malha
+          this.isMarqueeExpanding = true;
+          this.startMarquee(e.clientX, e.clientY);
+          this.updateStatusIndicator();
+
+          const onToggleMarqueeMove = (moveEvt: MouseEvent) => {
+            if (!this.isMarqueeExpanding) return;
+            this.updateMarqueeVisual(moveEvt.clientX, moveEvt.clientY);
+          };
+
+          this.activeMoveHandler = onToggleMarqueeMove;
+          window.addEventListener('mousemove', onToggleMarqueeMove);
+        } else {
+          // Segundo clique: finaliza a malha e seleciona os itens
+          if (this.activeMoveHandler) {
+            window.removeEventListener('mousemove', this.activeMoveHandler);
+            this.activeMoveHandler = undefined;
+          }
+          const isStickyMultiAllowed = this.multiSelectMode === 'toggle' || this.multiSelectMode === 'both';
+          const isAdditive = e.ctrlKey || e.metaKey || (isStickyMultiAllowed && this.isCtrlStickyActive);
+          this.finishMarquee(e.clientX, e.clientY, isAdditive);
+          this.isShiftAreaSelectActive = false;
+          this.updateStatusIndicator();
+        }
+        return;
+      }
+
+      // 3. Clique regular no fundo do canvas
+      if (!this.isCtrlStickyActive) {
+        this.clearSelection();
+        this.setSelectedEdgeId(undefined);
+        this.callbacks.onNodeSelect(undefined);
+      }
+
+      // Iniciar Pan do Canvas
       this.isPanning = true;
+      this.updateCanvasCursor();
       this.panStart = { x: e.clientX - this.panOffset.x, y: e.clientY - this.panOffset.y };
 
       const onPanMove = (moveEvt: MouseEvent) => {
@@ -859,6 +1318,7 @@ export class CanvasManager {
 
       const onPanUp = () => {
         this.isPanning = false;
+        this.updateCanvasCursor();
         window.removeEventListener('mousemove', onPanMove);
         window.removeEventListener('mouseup', onPanUp);
       };
@@ -897,6 +1357,95 @@ export class CanvasManager {
     document.getElementById('btnZoomReset')?.addEventListener('click', (e) => {
       e.stopPropagation();
       this.resetTransform();
+    });
+
+    // Eventos de teclado para alternar modos e atalhos de seleção (Duplo toque nas teclas)
+    window.addEventListener('keydown', (e) => {
+      const target = e.target as HTMLElement;
+      const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (isInput) return;
+
+      // Ao pressionar Shift no modo contínuo, ativa o cursor crosshair instantaneamente
+      if (e.key === 'Shift') {
+        if (!this.isShiftKeyDown) {
+          this.isShiftKeyDown = true;
+          this.updateCanvasCursor();
+        }
+      }
+
+      // Alternar modo de multi-seleção individual ao apertar a tecla Ctrl duas vezes (Duplo toque)
+      if ((e.key === 'Control' || e.key === 'Ctrl') && !e.repeat) {
+        const isToggleAllowed = this.multiSelectMode === 'toggle' || this.multiSelectMode === 'both';
+        if (isToggleAllowed) {
+          const now = Date.now();
+          if (now - this.lastCtrlPressTime <= this.DOUBLE_TAP_DELAY_MS) {
+            this.lastCtrlPressTime = 0;
+            this.isCtrlStickyActive = !this.isCtrlStickyActive;
+            this.updateStatusIndicator();
+            this.callbacks.showToast(
+              this.isCtrlStickyActive
+                ? 'Modo de Multi-seleção Individual ativado (Duplo clique Ctrl).'
+                : 'Modo de Multi-seleção Individual desativado.',
+              'info'
+            );
+          } else {
+            this.lastCtrlPressTime = now;
+          }
+        }
+      }
+
+      // Alternar modo de seleção por área ao apertar a tecla Shift duas vezes (Duplo toque)
+      if (e.key === 'Shift' && !e.repeat) {
+        const isToggleAllowed = this.areaSelectMode === 'toggle' || this.areaSelectMode === 'both';
+        if (isToggleAllowed) {
+          const now = Date.now();
+          if (now - this.lastShiftPressTime <= this.DOUBLE_TAP_DELAY_MS) {
+            this.lastShiftPressTime = 0;
+            this.isShiftAreaSelectActive = !this.isShiftAreaSelectActive;
+            if (!this.isShiftAreaSelectActive && this.isMarqueeExpanding) {
+              if (this.activeMoveHandler) {
+                window.removeEventListener('mousemove', this.activeMoveHandler);
+                this.activeMoveHandler = undefined;
+              }
+              this.cancelMarquee();
+            }
+            this.updateStatusIndicator();
+            this.callbacks.showToast(
+              this.isShiftAreaSelectActive
+                ? 'Modo Caixa Delimitadora ativado (Duplo clique Shift). Clique no canvas para iniciar a área.'
+                : 'Modo Caixa Delimitadora desativado.',
+              'info'
+            );
+          } else {
+            this.lastShiftPressTime = now;
+          }
+        }
+      }
+
+      // Tecla Escape para cancelar qualquer seleção ou modo ativo
+      if (e.key === 'Escape') {
+        if (this.isMarqueeActive || this.isMarqueeExpanding || this.isShiftAreaSelectActive) {
+          if (this.activeMoveHandler) {
+            window.removeEventListener('mousemove', this.activeMoveHandler);
+            this.activeMoveHandler = undefined;
+          }
+          this.cancelMarquee();
+          this.isShiftAreaSelectActive = false;
+        }
+        if (this.isCtrlStickyActive) {
+          this.isCtrlStickyActive = false;
+        }
+        this.updateStatusIndicator();
+        this.updateCanvasCursor();
+      }
+    });
+
+    // Ao soltar Shift, se não houver malha ativa arrastando, restaura o cursor padrão
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'Shift') {
+        this.isShiftKeyDown = false;
+        this.updateCanvasCursor();
+      }
     });
   }
 }

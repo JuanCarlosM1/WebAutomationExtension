@@ -47,6 +47,17 @@ class VisualEditorApp {
       {
         getGraph: () => this.graph,
         getSelectedNodeId: () => this.selectedNodeId,
+        getSelectedNodeIds: () => this.canvasManager?.getSelectedNodeIds() || [],
+        onClearSelection: () => {
+          this.canvasManager.clearSelection();
+          this.selectedNodeId = undefined;
+          this.inspectorManager.renderInspector();
+        },
+        onDeleteSelected: () => {
+          this.canvasManager.deleteSelectedNodes();
+          this.selectedNodeId = undefined;
+          this.inspectorManager.renderInspector();
+        },
         onNodeDataChanged: () => {
           this.canvasManager.render();
         },
@@ -62,12 +73,14 @@ class VisualEditorApp {
     this.canvasManager = new CanvasManager({
       getGraph: () => this.graph,
       getSelectedNodeId: () => this.selectedNodeId,
+      getSelectedNodeIds: () => this.canvasManager.getSelectedNodeIds(),
       setSelectedNodeId: (nodeId) => {
         this.selectedNodeId = nodeId;
       },
       onNodeSelect: (nodeId) => {
         this.selectedNodeId = nodeId;
-        if (nodeId) {
+        const selectedCount = this.canvasManager.getSelectedNodeIds().length;
+        if (nodeId || selectedCount > 0) {
           this.openInspectorSidebar();
         } else {
           this.inspectorManager.renderInspector();
@@ -92,7 +105,18 @@ class VisualEditorApp {
     this.initBlockCatalogUI();
     this.initGlobalEvents();
     this.initSettingsEvents();
+    this.loadStartupPreferences();
     this.tabManager.loadFromStorage();
+  }
+
+  private loadStartupPreferences(): void {
+    if (!chrome.storage?.local) return;
+    chrome.storage.local.get('studio_preferences', (stored) => {
+      if (stored?.studio_preferences) {
+        const p = stored.studio_preferences;
+        this.canvasManager.updateSelectionSettings(p.multiSelectMode, p.areaSelectMode);
+      }
+    });
   }
 
   public cleanFlowName(name?: string): string {
@@ -427,9 +451,16 @@ class VisualEditorApp {
           if (selectedEdge) {
             e.preventDefault();
             this.canvasManager.deleteEdge(selectedEdge);
-          } else if (this.selectedNodeId) {
-            e.preventDefault();
-            this.canvasManager.deleteNode(this.selectedNodeId);
+          } else {
+            const selectedIds = this.canvasManager.getSelectedNodeIds();
+            if (selectedIds.length > 0) {
+              e.preventDefault();
+              this.canvasManager.deleteSelectedNodes();
+              this.selectedNodeId = undefined;
+            } else if (this.selectedNodeId) {
+              e.preventDefault();
+              this.canvasManager.deleteNode(this.selectedNodeId);
+            }
           }
         }
       }
@@ -726,6 +757,8 @@ class VisualEditorApp {
         edgeType: 'bezier',
         showMinimap: true,
         snapToGrid: true,
+        multiSelectMode: 'both',
+        areaSelectMode: 'both',
       };
       const mcp = stored.mcp_settings || {
         enabled: false,
@@ -754,6 +787,10 @@ class VisualEditorApp {
       setSelect('settingsDefaultEdgeType', studio.edgeType);
       setCheck('settingsShowMinimapDefault', studio.showMinimap);
       setCheck('settingsSnapToGridDefault', studio.snapToGrid);
+
+      setSelect('settingsMultiSelectMode', studio.multiSelectMode || 'both');
+      setSelect('settingsAreaSelectMode', studio.areaSelectMode || 'both');
+      this.canvasManager.updateSelectionSettings(studio.multiSelectMode || 'both', studio.areaSelectMode || 'both');
 
       setCheck('settingsMcpEnabled', mcp.enabled);
       setInput('settingsMcpPortInput', mcp.port);
@@ -786,7 +823,11 @@ class VisualEditorApp {
         edgeType: getVal('settingsDefaultEdgeType') || 'bezier',
         showMinimap: getCheck('settingsShowMinimapDefault'),
         snapToGrid: getCheck('settingsSnapToGridDefault'),
+        multiSelectMode: (getVal('settingsMultiSelectMode') as any) || 'both',
+        areaSelectMode: (getVal('settingsAreaSelectMode') as any) || 'both',
       };
+
+      this.canvasManager.updateSelectionSettings(studio.multiSelectMode, studio.areaSelectMode);
 
       const mcp = {
         enabled: getCheck('settingsMcpEnabled'),

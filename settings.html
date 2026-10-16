@@ -238,6 +238,24 @@
           </label>
           <span class="desc">Facilita a organização alinhando blocos automaticamente.</span>
         </div>
+        <div class="form-group">
+          <label for="multiSelectMode">Modo de Seleção Múltipla Individual</label>
+          <select id="multiSelectMode" class="form-control">
+            <option value="both">Modo Híbrido (Pressionar ou Duplo Toque) (Padrão)</option>
+            <option value="hold">Apenas Pressionar e Manter Ctrl</option>
+            <option value="toggle">Apenas Alternar Modo com Duplo Toque em Ctrl</option>
+          </select>
+          <span class="desc">Permite selecionar múltiplos blocos mantendo Ctrl pressionado, alternando o modo ao apertar Ctrl duas vezes rapidamente, ou ambos ao mesmo tempo.</span>
+        </div>
+        <div class="form-group">
+          <label for="areaSelectMode">Modo de Seleção por Retângulo (Marquee)</label>
+          <select id="areaSelectMode" class="form-control">
+            <option value="both">Modo Híbrido (Arrasto com Shift ou Duplo Toque) (Padrão)</option>
+            <option value="drag">Apenas Arrasto Contínuo com Shift</option>
+            <option value="toggle">Apenas Alternar com Duplo Toque em Shift (Dois Cliques)</option>
+          </select>
+          <span class="desc">Permite gerar a área arrastando com Shift pressionado, alternando o modo de dois cliques ao apertar Shift duas vezes rapidamente, ou ambos simultaneamente.</span>
+        </div>
       </div>
     </section>
 
