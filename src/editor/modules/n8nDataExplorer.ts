@@ -53,30 +53,306 @@ export class N8NDataExplorer {
    */
   public static generateDefaultMock(node: AnyAutomationNode): any {
     const data = node.data as any;
+    const now = Date.now();
+    const isoDate = new Date(now).toISOString();
+
     switch (node.type) {
-      case 'extract_data':
-        return { [data.saveToVar || 'extractedData']: 'Exemplo de texto capturado', status: 'success' };
-      case 'scrape_list':
-        return {
-          [data.saveToVar || 'items']: [
-            { id: 1, title: 'Item 1', price: 'R$ 99,00' },
-            { id: 2, title: 'Item 2', price: 'R$ 149,00' },
-          ],
-          count: 2,
-        };
-      case 'http_request':
-        return {
-          [data.saveResponseToVar || 'apiResponse']: { status: 200, message: 'OK', data: { id: 101, name: 'Resultado da API' } },
-          status: 200,
-        };
-      case 'set_variable':
-        return { [data.varName || 'variavel']: data.valueExpression || 'valor' };
       case 'start':
-        return { triggeredAt: new Date().toISOString(), triggerType: (data.triggers?.[0]?.type) || 'manual' };
-      case 'inject_javascript':
-        return { executed: true, result: 'Retorno do script' };
+        return {
+          started: true,
+          trigger: data.triggerType || (data.triggers?.[0]?.type) || 'manual',
+          url: 'https://exemplo.com/pagina',
+          currentUrl: 'https://exemplo.com/pagina',
+          timestamp: now,
+          isoDate,
+          variables: {},
+        };
+
+      case 'delay':
+        return {
+          delayed: true,
+          delayedMs: data.fixedMs ?? 1500,
+          delayedSeconds: Number(((data.fixedMs ?? 1500) / 1000).toFixed(2)),
+          isRandom: Boolean(data.isRandom),
+          completedAt: now,
+          isoDate,
+        };
+
+      case 'switch':
+        return {
+          matched: true,
+          matchedCase: data.cases?.[0]?.id || 'case_1',
+          matchedCaseId: data.cases?.[0]?.id || 'case_1',
+          matchedCaseLabel: data.cases?.[0]?.label || 'Caso 1',
+          branch: data.cases?.[0]?.id || 'case_1',
+          evaluatedAt: now,
+        };
+
+      case 'while_loop':
+        return {
+          completed: true,
+          iterations: 5,
+          maxIterationsReached: false,
+          completedAt: now,
+        };
+
+      case 'for_loop':
+        return {
+          completed: true,
+          totalIterations: typeof data.countExpression === 'number' ? data.countExpression : 10,
+          loopType: data.loopType || 'count',
+          itemVar: data.itemVarName || 'item',
+          indexVar: data.indexVarName || 'index',
+          completedAt: now,
+        };
+
+      case 'if_element_exists':
+        return {
+          exists: true,
+          selector: data.selector || '.btn-primary',
+          selectorType: data.selectorType || 'css',
+          branch: 'true',
+          checkedAt: now,
+        };
+
+      case 'try_catch':
+        return {
+          succeeded: true,
+          branch: 'try_body',
+          error: null,
+          errorVar: data.errorVarName || 'lastError',
+          completedAt: now,
+        };
+
+      case 'navigate':
+        return {
+          navigated: true,
+          url: data.url || 'https://exemplo.com',
+          currentUrl: data.url || 'https://exemplo.com',
+          requestedUrl: data.url || 'https://exemplo.com',
+          waitUntil: data.waitUntil || 'load',
+          timestamp: now,
+        };
+
+      case 'tab_action':
+        return {
+          success: true,
+          action: data.action || 'new_tab',
+          tabId: 2,
+          url: data.url || 'https://exemplo.com',
+          currentUrl: data.url || 'https://exemplo.com',
+          timestamp: now,
+        };
+
+      case 'history_navigation':
+        return {
+          navigated: true,
+          action: data.action || 'reload',
+          currentUrl: 'https://exemplo.com',
+          url: 'https://exemplo.com',
+          ignoreCache: Boolean(data.ignoreCache),
+          timestamp: now,
+        };
+
+      case 'click_element':
+        return {
+          clicked: true,
+          selector: data.selector || 'button',
+          selectorType: data.selectorType || 'css',
+          clickType: data.clickType || 'single',
+          coordinates: null,
+          currentUrl: 'https://exemplo.com',
+          url: 'https://exemplo.com',
+          timestamp: now,
+        };
+
+      case 'type_input':
+        return {
+          typed: true,
+          selector: data.selector || 'input',
+          selectorType: data.selectorType || 'css',
+          text: data.text || 'Texto Exemplo',
+          value: data.text || 'Texto Exemplo',
+          textLength: (data.text || 'Texto Exemplo').length,
+          mode: data.mode || 'human_typing',
+          clearedBefore: Boolean(data.clearBeforeTyping),
+          pressedEnter: Boolean(data.pressEnterAfter),
+          timestamp: now,
+        };
+
+      case 'press_key':
+        return {
+          pressed: true,
+          key: data.key || 'Enter',
+          modifiers: data.modifiers || [],
+          selector: data.selector || null,
+          selectorType: data.selectorType || 'css',
+          timestamp: now,
+        };
+
+      case 'hover_focus':
+        return {
+          success: true,
+          action: data.action || 'hover',
+          selector: data.selector || '.card',
+          selectorType: data.selectorType || 'css',
+          timestamp: now,
+        };
+
+      case 'scroll':
+        return {
+          scrolled: true,
+          target: data.target || 'bottom',
+          selector: data.selector || null,
+          selectorType: data.selectorType || 'css',
+          deltaX: data.deltaX ?? 0,
+          deltaY: data.deltaY ?? 500,
+          smooth: Boolean(data.smooth !== false),
+          timestamp: now,
+        };
+
+      case 'wait_for_element':
+        return {
+          found: true,
+          selector: data.selector || '#element',
+          selectorType: data.selectorType || 'css',
+          state: data.state || 'visible',
+          timeoutMs: data.timeoutMs || 5000,
+          timestamp: now,
+        };
+
+      case 'set_variable': {
+        const vName = data.varName || 'meuDado';
+        const vVal = data.valueExpression || 'valor';
+        return {
+          varName: vName,
+          value: vVal,
+          [vName]: vVal,
+          type: typeof vVal,
+          isReadonly: Boolean(data.readonly),
+          updatedAt: now,
+        };
+      }
+
+      case 'extract_data': {
+        const sampleText = 'Exemplo de texto capturado no DOM';
+        const result: Record<string, any> = {
+          value: sampleText,
+          extracted: sampleText,
+          selector: data.selector || 'h1',
+          selectorType: data.selectorType || 'css',
+          extractType: data.extractType || 'innerText',
+          attributeName: data.attributeName || null,
+          length: sampleText.length,
+          extractedAt: now,
+        };
+        if (data.saveToVar) {
+          result[data.saveToVar] = sampleText;
+        }
+        return result;
+      }
+
+      case 'scrape_list': {
+        const sampleItems = [
+          { id: 1, titulo: 'Produto A', preco: 'R$ 99,00' },
+          { id: 2, titulo: 'Produto B', preco: 'R$ 149,00' },
+        ];
+        const result: Record<string, any> = {
+          items: sampleItems,
+          count: sampleItems.length,
+          total: sampleItems.length,
+          firstItem: sampleItems[0],
+          lastItem: sampleItems[1],
+          fields: (data.fields || []).map((f: any) => f.name || 'campo'),
+          selector: data.selector || '.card',
+          scrapedAt: now,
+        };
+        if (data.saveToVar) {
+          result[data.saveToVar] = sampleItems;
+        }
+        return result;
+      }
+
+      case 'http_request': {
+        const sampleData = { id: 101, name: 'Resultado da API', success: true };
+        const result: Record<string, any> = {
+          data: sampleData,
+          response: sampleData,
+          status: 200,
+          statusText: 'OK',
+          ok: true,
+          headers: { 'content-type': 'application/json' },
+          url: data.url || 'https://api.exemplo.com/dados',
+          method: data.method || 'GET',
+          timestamp: now,
+        };
+        if (data.saveResponseToVar) {
+          result[data.saveResponseToVar] = sampleData;
+        }
+        if (data.saveStatusToVar) {
+          result[data.saveStatusToVar] = 200;
+        }
+        return result;
+      }
+
+      case 'export_file':
+        return {
+          exported: true,
+          filename: data.filename || 'dados.json',
+          format: data.format || 'json',
+          size: 1024,
+          mimeType: data.format === 'csv' ? 'text/csv' : 'application/json',
+          sourceVar: data.sourceVar || 'items',
+          itemsCount: 10,
+          timestamp: now,
+        };
+
+      case 'inject_javascript': {
+        const sampleResult = { status: 'ok', data: 'Executado com sucesso' };
+        const result: Record<string, any> = {
+          ...sampleResult,
+          result: sampleResult,
+          executed: true,
+          context: data.context || 'content_script',
+          timestamp: now,
+        };
+        if (data.saveResultToVar) {
+          result[data.saveResultToVar] = sampleResult;
+        }
+        return result;
+      }
+
+      case 'inject_html':
+        return {
+          injected: true,
+          targetSelector: data.targetSelector || 'body',
+          selectorType: data.selectorType || 'css',
+          position: data.position || 'beforeend',
+          htmlLength: (data.html || '').length,
+          timestamp: now,
+        };
+
+      case 'inject_css':
+        return {
+          injected: true,
+          target: data.target || 'page',
+          styleId: data.styleId || 'custom-style',
+          cssLength: (data.css || '').length,
+          timestamp: now,
+        };
+
+      case 'web_component':
+        return {
+          injected: true,
+          containerId: data.containerId || 'custom-widget',
+          mode: data.mode || 'shadow_dom',
+          hasScript: Boolean(data.js),
+          hasStyle: Boolean(data.css),
+          timestamp: now,
+        };
+
       default:
-        return { success: true };
+        return { success: true, timestamp: now };
     }
   }
 

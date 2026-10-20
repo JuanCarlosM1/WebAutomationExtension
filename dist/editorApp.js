@@ -22716,30 +22716,280 @@ var N8NDataExplorer = class _N8NDataExplorer {
    */
   static generateDefaultMock(node) {
     const data2 = node.data;
+    const now = Date.now();
+    const isoDate = new Date(now).toISOString();
     switch (node.type) {
-      case "extract_data":
-        return { [data2.saveToVar || "extractedData"]: "Exemplo de texto capturado", status: "success" };
-      case "scrape_list":
-        return {
-          [data2.saveToVar || "items"]: [
-            { id: 1, title: "Item 1", price: "R$ 99,00" },
-            { id: 2, title: "Item 2", price: "R$ 149,00" }
-          ],
-          count: 2
-        };
-      case "http_request":
-        return {
-          [data2.saveResponseToVar || "apiResponse"]: { status: 200, message: "OK", data: { id: 101, name: "Resultado da API" } },
-          status: 200
-        };
-      case "set_variable":
-        return { [data2.varName || "variavel"]: data2.valueExpression || "valor" };
       case "start":
-        return { triggeredAt: (/* @__PURE__ */ new Date()).toISOString(), triggerType: data2.triggers?.[0]?.type || "manual" };
-      case "inject_javascript":
-        return { executed: true, result: "Retorno do script" };
+        return {
+          started: true,
+          trigger: data2.triggerType || data2.triggers?.[0]?.type || "manual",
+          url: "https://exemplo.com/pagina",
+          currentUrl: "https://exemplo.com/pagina",
+          timestamp: now,
+          isoDate,
+          variables: {}
+        };
+      case "delay":
+        return {
+          delayed: true,
+          delayedMs: data2.fixedMs ?? 1500,
+          delayedSeconds: Number(((data2.fixedMs ?? 1500) / 1e3).toFixed(2)),
+          isRandom: Boolean(data2.isRandom),
+          completedAt: now,
+          isoDate
+        };
+      case "switch":
+        return {
+          matched: true,
+          matchedCase: data2.cases?.[0]?.id || "case_1",
+          matchedCaseId: data2.cases?.[0]?.id || "case_1",
+          matchedCaseLabel: data2.cases?.[0]?.label || "Caso 1",
+          branch: data2.cases?.[0]?.id || "case_1",
+          evaluatedAt: now
+        };
+      case "while_loop":
+        return {
+          completed: true,
+          iterations: 5,
+          maxIterationsReached: false,
+          completedAt: now
+        };
+      case "for_loop":
+        return {
+          completed: true,
+          totalIterations: typeof data2.countExpression === "number" ? data2.countExpression : 10,
+          loopType: data2.loopType || "count",
+          itemVar: data2.itemVarName || "item",
+          indexVar: data2.indexVarName || "index",
+          completedAt: now
+        };
+      case "if_element_exists":
+        return {
+          exists: true,
+          selector: data2.selector || ".btn-primary",
+          selectorType: data2.selectorType || "css",
+          branch: "true",
+          checkedAt: now
+        };
+      case "try_catch":
+        return {
+          succeeded: true,
+          branch: "try_body",
+          error: null,
+          errorVar: data2.errorVarName || "lastError",
+          completedAt: now
+        };
+      case "navigate":
+        return {
+          navigated: true,
+          url: data2.url || "https://exemplo.com",
+          currentUrl: data2.url || "https://exemplo.com",
+          requestedUrl: data2.url || "https://exemplo.com",
+          waitUntil: data2.waitUntil || "load",
+          timestamp: now
+        };
+      case "tab_action":
+        return {
+          success: true,
+          action: data2.action || "new_tab",
+          tabId: 2,
+          url: data2.url || "https://exemplo.com",
+          currentUrl: data2.url || "https://exemplo.com",
+          timestamp: now
+        };
+      case "history_navigation":
+        return {
+          navigated: true,
+          action: data2.action || "reload",
+          currentUrl: "https://exemplo.com",
+          url: "https://exemplo.com",
+          ignoreCache: Boolean(data2.ignoreCache),
+          timestamp: now
+        };
+      case "click_element":
+        return {
+          clicked: true,
+          selector: data2.selector || "button",
+          selectorType: data2.selectorType || "css",
+          clickType: data2.clickType || "single",
+          coordinates: null,
+          currentUrl: "https://exemplo.com",
+          url: "https://exemplo.com",
+          timestamp: now
+        };
+      case "type_input":
+        return {
+          typed: true,
+          selector: data2.selector || "input",
+          selectorType: data2.selectorType || "css",
+          text: data2.text || "Texto Exemplo",
+          value: data2.text || "Texto Exemplo",
+          textLength: (data2.text || "Texto Exemplo").length,
+          mode: data2.mode || "human_typing",
+          clearedBefore: Boolean(data2.clearBeforeTyping),
+          pressedEnter: Boolean(data2.pressEnterAfter),
+          timestamp: now
+        };
+      case "press_key":
+        return {
+          pressed: true,
+          key: data2.key || "Enter",
+          modifiers: data2.modifiers || [],
+          selector: data2.selector || null,
+          selectorType: data2.selectorType || "css",
+          timestamp: now
+        };
+      case "hover_focus":
+        return {
+          success: true,
+          action: data2.action || "hover",
+          selector: data2.selector || ".card",
+          selectorType: data2.selectorType || "css",
+          timestamp: now
+        };
+      case "scroll":
+        return {
+          scrolled: true,
+          target: data2.target || "bottom",
+          selector: data2.selector || null,
+          selectorType: data2.selectorType || "css",
+          deltaX: data2.deltaX ?? 0,
+          deltaY: data2.deltaY ?? 500,
+          smooth: Boolean(data2.smooth !== false),
+          timestamp: now
+        };
+      case "wait_for_element":
+        return {
+          found: true,
+          selector: data2.selector || "#element",
+          selectorType: data2.selectorType || "css",
+          state: data2.state || "visible",
+          timeoutMs: data2.timeoutMs || 5e3,
+          timestamp: now
+        };
+      case "set_variable": {
+        const vName = data2.varName || "meuDado";
+        const vVal = data2.valueExpression || "valor";
+        return {
+          varName: vName,
+          value: vVal,
+          [vName]: vVal,
+          type: typeof vVal,
+          isReadonly: Boolean(data2.readonly),
+          updatedAt: now
+        };
+      }
+      case "extract_data": {
+        const sampleText = "Exemplo de texto capturado no DOM";
+        const result = {
+          value: sampleText,
+          extracted: sampleText,
+          selector: data2.selector || "h1",
+          selectorType: data2.selectorType || "css",
+          extractType: data2.extractType || "innerText",
+          attributeName: data2.attributeName || null,
+          length: sampleText.length,
+          extractedAt: now
+        };
+        if (data2.saveToVar) {
+          result[data2.saveToVar] = sampleText;
+        }
+        return result;
+      }
+      case "scrape_list": {
+        const sampleItems = [
+          { id: 1, titulo: "Produto A", preco: "R$ 99,00" },
+          { id: 2, titulo: "Produto B", preco: "R$ 149,00" }
+        ];
+        const result = {
+          items: sampleItems,
+          count: sampleItems.length,
+          total: sampleItems.length,
+          firstItem: sampleItems[0],
+          lastItem: sampleItems[1],
+          fields: (data2.fields || []).map((f) => f.name || "campo"),
+          selector: data2.selector || ".card",
+          scrapedAt: now
+        };
+        if (data2.saveToVar) {
+          result[data2.saveToVar] = sampleItems;
+        }
+        return result;
+      }
+      case "http_request": {
+        const sampleData = { id: 101, name: "Resultado da API", success: true };
+        const result = {
+          data: sampleData,
+          response: sampleData,
+          status: 200,
+          statusText: "OK",
+          ok: true,
+          headers: { "content-type": "application/json" },
+          url: data2.url || "https://api.exemplo.com/dados",
+          method: data2.method || "GET",
+          timestamp: now
+        };
+        if (data2.saveResponseToVar) {
+          result[data2.saveResponseToVar] = sampleData;
+        }
+        if (data2.saveStatusToVar) {
+          result[data2.saveStatusToVar] = 200;
+        }
+        return result;
+      }
+      case "export_file":
+        return {
+          exported: true,
+          filename: data2.filename || "dados.json",
+          format: data2.format || "json",
+          size: 1024,
+          mimeType: data2.format === "csv" ? "text/csv" : "application/json",
+          sourceVar: data2.sourceVar || "items",
+          itemsCount: 10,
+          timestamp: now
+        };
+      case "inject_javascript": {
+        const sampleResult = { status: "ok", data: "Executado com sucesso" };
+        const result = {
+          ...sampleResult,
+          result: sampleResult,
+          executed: true,
+          context: data2.context || "content_script",
+          timestamp: now
+        };
+        if (data2.saveResultToVar) {
+          result[data2.saveResultToVar] = sampleResult;
+        }
+        return result;
+      }
+      case "inject_html":
+        return {
+          injected: true,
+          targetSelector: data2.targetSelector || "body",
+          selectorType: data2.selectorType || "css",
+          position: data2.position || "beforeend",
+          htmlLength: (data2.html || "").length,
+          timestamp: now
+        };
+      case "inject_css":
+        return {
+          injected: true,
+          target: data2.target || "page",
+          styleId: data2.styleId || "custom-style",
+          cssLength: (data2.css || "").length,
+          timestamp: now
+        };
+      case "web_component":
+        return {
+          injected: true,
+          containerId: data2.containerId || "custom-widget",
+          mode: data2.mode || "shadow_dom",
+          hasScript: Boolean(data2.js),
+          hasStyle: Boolean(data2.css),
+          timestamp: now
+        };
       default:
-        return { success: true };
+        return { success: true, timestamp: now };
     }
   }
   /**

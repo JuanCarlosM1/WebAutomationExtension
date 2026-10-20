@@ -10097,6 +10097,7 @@ var ExecutionEngine = class {
     const catchNodes = this.getNextNodes(node.id, graph, "catch_branch");
     const defaultNodes = this.getNextNodes(node.id, graph, "default");
     let succeeded = true;
+    let caughtError = null;
     try {
       for (const tNode of tryNodes) {
         await this.traverseNode(tNode, graph, context);
@@ -10104,16 +10105,26 @@ var ExecutionEngine = class {
     } catch (err) {
       succeeded = false;
       const errorMsg = err?.message || String(err);
+      caughtError = errorMsg;
       context.log("warn", `Exce\xE7\xE3o capturada no Try/Catch: ${errorMsg}`, node.id);
       context.state.set(errorVar, errorMsg);
       for (const cNode of catchNodes) {
         await this.traverseNode(cNode, graph, context);
       }
     }
+    const tryCatchOutput = {
+      succeeded,
+      branch: succeeded ? "try_body" : "catch_branch",
+      error: caughtError,
+      errorVar,
+      completedAt: Date.now()
+    };
+    context.state.recordNodeOutput(node.id, node.data?.label, tryCatchOutput);
     context.events.onNodeComplete?.(node, {
       nodeId: node.id,
       status: "success",
       outputHandle: succeeded ? "try_body" : "catch_branch",
+      outputData: tryCatchOutput,
       startTime: Date.now(),
       endTime: Date.now(),
       durationMs: 0
@@ -10163,10 +10174,18 @@ var ExecutionEngine = class {
     if (iteration >= maxIterations) {
       context.log("warn", `Loop While atingiu o limite de seguran\xE7a de ${maxIterations} itera\xE7\xF5es.`, node.id);
     }
+    const whileOutput = {
+      completed: true,
+      iterations: iteration,
+      maxIterationsReached: iteration >= maxIterations,
+      completedAt: Date.now()
+    };
+    context.state.recordNodeOutput(node.id, node.data?.label, whileOutput);
     context.events.onNodeComplete?.(node, {
       nodeId: node.id,
       status: "success",
       outputHandle: "loop_done",
+      outputData: whileOutput,
       startTime: Date.now(),
       endTime: Date.now(),
       durationMs: 0
@@ -10217,10 +10236,20 @@ var ExecutionEngine = class {
         await this.traverseNode(bNode, graph, context);
       }
     }
+    const forOutput = {
+      completed: true,
+      totalIterations: itemsToIterate.length,
+      loopType: data2.loopType || "count",
+      itemVar,
+      indexVar,
+      completedAt: Date.now()
+    };
+    context.state.recordNodeOutput(node.id, node.data?.label, forOutput);
     context.events.onNodeComplete?.(node, {
       nodeId: node.id,
       status: "success",
       outputHandle: "loop_done",
+      outputData: forOutput,
       startTime: Date.now(),
       endTime: Date.now(),
       durationMs: 0
@@ -10286,7 +10315,17 @@ var StartBlockHandler = class extends BaseBlockHandler {
   async execute(node, context) {
     const trigger = node.data.triggerType || "manual";
     context.log("info", `Gatilho acionado: ${trigger}`, node.id);
-    return this.success(node.id, "default", { trigger, timestamp: Date.now() });
+    const currentUrl = await context.driver.getCurrentUrl().catch(() => "");
+    const now = Date.now();
+    return this.success(node.id, "default", {
+      started: true,
+      trigger,
+      url: currentUrl,
+      currentUrl,
+      timestamp: now,
+      isoDate: new Date(now).toISOString(),
+      variables: context.state.getAll()
+    });
   }
 };
 
@@ -10301,7 +10340,15 @@ var DelayBlockHandler = class extends BaseBlockHandler {
     }
     context.log("debug", `Aguardando delay de ${delayMs}ms...`, node.id);
     await new Promise((resolve) => setTimeout(resolve, delayMs));
-    return this.success(node.id, "default", { delayedMs: delayMs });
+    const now = Date.now();
+    return this.success(node.id, "default", {
+      delayed: true,
+      delayedMs: delayMs,
+      delayedSeconds: Number((delayMs / 1e3).toFixed(2)),
+      isRandom: Boolean(node.data.isRandom),
+      completedAt: now,
+      isoDate: new Date(now).toISOString()
+    });
   }
 };
 
@@ -10310,6 +10357,8 @@ var SwitchBlockHandler = class extends BaseBlockHandler {
   type = "switch";
   async execute(node, context) {
     const { cases, hasDefaultBranch } = node.data;
+    const prevInput = context.state.getLastNodeOutput();
+    const inputPayload = typeof prevInput === "object" && prevInput !== null && !Array.isArray(prevInput) ? prevInput : {};
     for (const testCase of cases) {
       let passed = false;
       if (Array.isArray(testCase.conditionGroups) && testCase.conditionGroups.length > 0) {
@@ -10328,14 +10377,36 @@ var SwitchBlockHandler = class extends BaseBlockHandler {
       }
       if (passed) {
         context.log("info", `Condi\xE7\xE3o satisfeita para o caso [${testCase.label || testCase.id}]`, node.id);
-        return this.success(node.id, testCase.id, { matchedCase: testCase.id, label: testCase.label });
+        return this.success(node.id, testCase.id, {
+          ...inputPayload,
+          matched: true,
+          matchedCase: testCase.id,
+          matchedCaseId: testCase.id,
+          matchedCaseLabel: testCase.label,
+          branch: testCase.id,
+          evaluatedAt: Date.now()
+        });
       }
     }
     if (hasDefaultBranch) {
       context.log("info", "Nenhuma condi\xE7\xE3o satisfeita. Seguindo caminho default.", node.id);
-      return this.success(node.id, "default", { matchedCase: "default" });
+      return this.success(node.id, "default", {
+        ...inputPayload,
+        matched: false,
+        matchedCase: "default",
+        matchedCaseId: "default",
+        branch: "default",
+        evaluatedAt: Date.now()
+      });
     }
-    return this.success(node.id, void 0, { matchedCase: null });
+    return this.success(node.id, void 0, {
+      ...inputPayload,
+      matched: false,
+      matchedCase: null,
+      matchedCaseId: null,
+      branch: null,
+      evaluatedAt: Date.now()
+    });
   }
 };
 
@@ -10349,7 +10420,13 @@ var IfElementExistsBlockHandler = class extends BaseBlockHandler {
     const exists = await context.driver.elementExists(interpolatedSelector, selectorType, timeoutMs);
     const branch = exists ? "true" : "false";
     context.log("info", `Elemento ${exists ? "encontrado" : "n\xE3o encontrado"}. Seguindo caminho: ${branch}`, node.id);
-    return this.success(node.id, branch, { exists, selector: interpolatedSelector });
+    return this.success(node.id, branch, {
+      exists,
+      selector: interpolatedSelector,
+      selectorType: selectorType || "css",
+      branch,
+      checkedAt: Date.now()
+    });
   }
 };
 
@@ -10360,7 +10437,15 @@ var NavigateBlockHandler = class extends BaseBlockHandler {
     const url = context.state.interpolate(node.data.url);
     context.log("info", `Navegando para URL: ${url}`, node.id);
     await context.driver.navigateTo(url, node.data.waitUntil, node.data.timeoutMs);
-    return this.success(node.id, "default", { url, waitUntil: node.data.waitUntil });
+    const finalUrl = await context.driver.getCurrentUrl().catch(() => url);
+    return this.success(node.id, "default", {
+      navigated: true,
+      url: finalUrl,
+      currentUrl: finalUrl,
+      requestedUrl: url,
+      waitUntil: node.data.waitUntil,
+      timestamp: Date.now()
+    });
   }
 };
 
@@ -10369,20 +10454,21 @@ var TabActionBlockHandler = class extends BaseBlockHandler {
   type = "tab_action";
   async execute(node, context) {
     const { action, queryType, queryValue, saveUrlToVar, active } = node.data;
-    let resultPayload = { action };
+    let resultPayload = { action, success: true, timestamp: Date.now() };
     switch (action) {
       case "new_tab": {
         const targetUrl = node.data.url ? context.state.interpolate(node.data.url) : void 0;
         const res2 = await context.driver.createTab(targetUrl, active);
         if (saveUrlToVar && res2.url)
           context.state.set(saveUrlToVar, res2.url);
-        resultPayload = { ...resultPayload, tabId: res2.tabId, url: res2.url };
+        resultPayload = { ...resultPayload, tabId: res2.tabId, url: res2.url, currentUrl: res2.url, active };
         break;
       }
       case "switch_tab": {
         const val = typeof queryValue === "string" ? context.state.interpolate(queryValue) : queryValue;
         await context.driver.switchTab(queryType || "title", val);
-        resultPayload = { ...resultPayload, queryType, queryValue: val };
+        const currentUrl = await context.driver.getCurrentUrl().catch(() => "");
+        resultPayload = { ...resultPayload, queryType: queryType || "title", queryValue: val, currentUrl, url: currentUrl };
         break;
       }
       case "close_tab": {
@@ -10395,7 +10481,7 @@ var TabActionBlockHandler = class extends BaseBlockHandler {
         const currentUrl = await context.driver.getCurrentUrl();
         if (saveUrlToVar)
           context.state.set(saveUrlToVar, currentUrl);
-        resultPayload = { ...resultPayload, currentUrl };
+        resultPayload = { ...resultPayload, currentUrl, url: currentUrl };
         break;
       }
     }
@@ -10408,7 +10494,15 @@ var HistoryNavigationBlockHandler = class extends BaseBlockHandler {
   type = "history_navigation";
   async execute(node, context) {
     await context.driver.navigateHistory(node.data.action, node.data.ignoreCache);
-    return this.success(node.id, "default", { action: node.data.action, ignoreCache: node.data.ignoreCache });
+    const currentUrl = await context.driver.getCurrentUrl().catch(() => "");
+    return this.success(node.id, "default", {
+      navigated: true,
+      action: node.data.action,
+      currentUrl,
+      url: currentUrl,
+      ignoreCache: Boolean(node.data.ignoreCache),
+      timestamp: Date.now()
+    });
   }
 };
 
@@ -10424,10 +10518,16 @@ var ClickElementBlockHandler = class extends BaseBlockHandler {
       node.data.timeoutMs,
       node.data.clickCoordinates
     );
+    const currentUrl = await context.driver.getCurrentUrl().catch(() => "");
     return this.success(node.id, "default", {
       clicked: true,
       selector,
-      clickType: node.data.clickType
+      selectorType: node.data.selectorType || "css",
+      clickType: node.data.clickType || "single",
+      coordinates: node.data.clickCoordinates || null,
+      currentUrl,
+      url: currentUrl,
+      timestamp: Date.now()
     });
   }
 };
@@ -10452,8 +10552,14 @@ var TypeInputBlockHandler = class extends BaseBlockHandler {
     return this.success(node.id, "default", {
       typed: true,
       selector,
+      selectorType: node.data.selectorType || "css",
+      text,
+      value: text,
       textLength: text.length,
-      mode: node.data.mode
+      mode: node.data.mode || "human_typing",
+      clearedBefore: Boolean(node.data.clearBeforeTyping),
+      pressedEnter: Boolean(node.data.pressEnterAfter),
+      timestamp: Date.now()
     });
   }
 };
@@ -10465,9 +10571,12 @@ var PressKeyBlockHandler = class extends BaseBlockHandler {
     const selector = node.data.selector ? context.state.interpolate(node.data.selector) : void 0;
     await context.driver.pressKey(node.data.key, node.data.modifiers, selector, node.data.selectorType);
     return this.success(node.id, "default", {
+      pressed: true,
       key: node.data.key,
       modifiers: node.data.modifiers || [],
-      selector
+      selector: selector || null,
+      selectorType: node.data.selectorType || "css",
+      timestamp: Date.now()
     });
   }
 };
@@ -10479,8 +10588,11 @@ var HoverFocusBlockHandler = class extends BaseBlockHandler {
     const selector = context.state.interpolate(node.data.selector);
     await context.driver.hoverOrFocus(selector, node.data.selectorType, node.data.action, node.data.timeoutMs);
     return this.success(node.id, "default", {
+      success: true,
+      action: node.data.action || "hover",
       selector,
-      action: node.data.action
+      selectorType: node.data.selectorType || "css",
+      timestamp: Date.now()
     });
   }
 };
@@ -10499,10 +10611,14 @@ var ScrollBlockHandler = class extends BaseBlockHandler {
       node.data.smooth
     );
     return this.success(node.id, "default", {
+      scrolled: true,
       target: node.data.target,
-      selector,
-      deltaX: node.data.deltaX,
-      deltaY: node.data.deltaY
+      selector: selector || null,
+      selectorType: node.data.selectorType || "css",
+      deltaX: node.data.deltaX ?? 0,
+      deltaY: node.data.deltaY ?? 0,
+      smooth: Boolean(node.data.smooth),
+      timestamp: Date.now()
     });
   }
 };
@@ -10516,7 +10632,10 @@ var WaitForElementBlockHandler = class extends BaseBlockHandler {
     return this.success(node.id, "default", {
       found,
       selector,
-      state: node.data.state
+      selectorType: node.data.selectorType || "css",
+      state: node.data.state || "visible",
+      timeoutMs: node.data.timeoutMs,
+      timestamp: Date.now()
     });
   }
 };
@@ -10528,7 +10647,13 @@ var SetVariableBlockHandler = class extends BaseBlockHandler {
     const { varName, evaluationType, valueExpression, readonly } = node.data;
     if (context.state.isReadonly(varName)) {
       context.log("warn", "Vari\xE1vel [" + varName + "] \xE9 constante/somente leitura e n\xE3o pode ser modificada.", node.id);
-      return this.success(node.id, "default", { [varName]: context.state.get(varName), blocked: true });
+      return this.success(node.id, "default", {
+        varName,
+        value: context.state.get(varName),
+        [varName]: context.state.get(varName),
+        blocked: true,
+        isReadonly: true
+      });
     }
     let finalValue;
     if (evaluationType === "template") {
@@ -10558,7 +10683,15 @@ var SetVariableBlockHandler = class extends BaseBlockHandler {
     }
     context.events.onVariableChange?.(varName, finalValue);
     context.log("info", `Vari\xE1vel [${varName}] definida com valor: ${JSON.stringify(finalValue)}`, node.id);
-    return this.success(node.id, "default", { [varName]: finalValue, value: finalValue });
+    const valType = Array.isArray(finalValue) ? "array" : finalValue === null ? "null" : typeof finalValue;
+    return this.success(node.id, "default", {
+      varName,
+      value: finalValue,
+      [varName]: finalValue,
+      type: valType,
+      isReadonly: Boolean(readonly),
+      updatedAt: Date.now()
+    });
   }
 };
 
@@ -10593,12 +10726,31 @@ var HttpRequestBlockHandler = class extends BaseBlockHandler {
     if (saveStatusToVar) {
       context.state.set(saveStatusToVar, response.status);
     }
-    return this.success(node.id, "default", {
+    const responseHeaders = {};
+    try {
+      response.headers.forEach((v, k) => {
+        responseHeaders[k] = v;
+      });
+    } catch {
+    }
+    const outputData = {
+      data: data2,
       response: data2,
       status: response.status,
+      statusText: response.statusText,
       ok: response.ok,
-      data: data2
-    });
+      headers: responseHeaders,
+      url: resolvedUrl,
+      method: method || "GET",
+      timestamp: Date.now()
+    };
+    if (saveResponseToVar) {
+      outputData[saveResponseToVar] = data2;
+    }
+    if (saveStatusToVar) {
+      outputData[saveStatusToVar] = response.status;
+    }
+    return this.success(node.id, "default", outputData);
   }
 };
 
@@ -10618,8 +10770,20 @@ var ExtractDataBlockHandler = class extends BaseBlockHandler {
       context.state.set(node.data.saveToVar, data2);
     }
     context.log("info", `Dado extra\xEDdo salvo em [${node.data.saveToVar || "output"}]`, node.id);
-    const resultPayload = node.data.saveToVar ? { [node.data.saveToVar]: data2, value: data2 } : { value: data2 };
-    return this.success(node.id, "default", resultPayload);
+    const outputData = {
+      value: data2,
+      extracted: data2,
+      selector,
+      selectorType: node.data.selectorType || "css",
+      extractType: node.data.extractType,
+      attributeName: node.data.attributeName || null,
+      length: typeof data2 === "string" ? data2.length : Array.isArray(data2) ? data2.length : void 0,
+      extractedAt: Date.now()
+    };
+    if (node.data.saveToVar) {
+      outputData[node.data.saveToVar] = data2;
+    }
+    return this.success(node.id, "default", outputData);
   }
 };
 
@@ -10639,11 +10803,24 @@ var ScrapeListBlockHandler = class extends BaseBlockHandler {
       context.state.set(node.data.saveToVar, items);
     }
     context.log("info", `Lista raspada (${items.length} itens) salva em [${node.data.saveToVar || "output"}]`, node.id);
-    return this.success(node.id, "default", {
-      [node.data.saveToVar || "items"]: items,
+    const count = items.length;
+    const firstItem = count > 0 ? items[0] : null;
+    const lastItem = count > 0 ? items[count - 1] : null;
+    const fieldNames = (node.data.fields || []).map((f) => f.name);
+    const outputData = {
       items,
-      count: items.length
-    });
+      count,
+      total: count,
+      firstItem,
+      lastItem,
+      fields: fieldNames,
+      selector,
+      scrapedAt: Date.now()
+    };
+    if (node.data.saveToVar) {
+      outputData[node.data.saveToVar] = items;
+    }
+    return this.success(node.id, "default", outputData);
   }
 };
 
@@ -10672,7 +10849,17 @@ var ExportFileBlockHandler = class extends BaseBlockHandler {
     }
     await context.driver.downloadFile(content, filename, mimeType);
     context.log("info", `Arquivo ${filename} exportado com sucesso.`, node.id);
-    return this.success(node.id, "default", { filename, format: node.data.format, size: content.length });
+    const itemsCount = Array.isArray(rawData) ? rawData.length : void 0;
+    return this.success(node.id, "default", {
+      exported: true,
+      filename,
+      format: node.data.format,
+      size: content.length,
+      mimeType,
+      sourceVar: node.data.sourceVar,
+      itemsCount,
+      timestamp: Date.now()
+    });
   }
 };
 
@@ -10686,7 +10873,26 @@ var InjectJavascriptBlockHandler = class extends BaseBlockHandler {
     if (node.data.saveResultToVar) {
       context.state.set(node.data.saveResultToVar, result);
     }
-    const outputData = typeof result === "object" && result !== null ? result : { result };
+    let outputData;
+    if (typeof result === "object" && result !== null && !Array.isArray(result)) {
+      outputData = {
+        ...result,
+        result,
+        executed: true,
+        context: node.data.context,
+        timestamp: Date.now()
+      };
+    } else {
+      outputData = {
+        result,
+        executed: true,
+        context: node.data.context,
+        timestamp: Date.now()
+      };
+    }
+    if (node.data.saveResultToVar) {
+      outputData[node.data.saveResultToVar] = result;
+    }
     return this.success(node.id, "default", outputData);
   }
 };
@@ -10698,7 +10904,14 @@ var InjectHtmlBlockHandler = class extends BaseBlockHandler {
     const html = context.state.interpolate(node.data.html);
     const selector = context.state.interpolate(node.data.targetSelector);
     await context.driver.injectHtml(html, selector, node.data.position, node.data.selectorType);
-    return this.success(node.id, "default", { injected: true, targetSelector: selector, position: node.data.position });
+    return this.success(node.id, "default", {
+      injected: true,
+      targetSelector: selector,
+      selectorType: node.data.selectorType || "css",
+      position: node.data.position || "beforeend",
+      htmlLength: html.length,
+      timestamp: Date.now()
+    });
   }
 };
 
@@ -10708,7 +10921,13 @@ var InjectCssBlockHandler = class extends BaseBlockHandler {
   async execute(node, context) {
     const css = context.state.interpolate(node.data.css);
     await context.driver.injectCss(css, node.data.target, node.data.styleId);
-    return this.success(node.id, "default", { injected: true, target: node.data.target, styleId: node.data.styleId });
+    return this.success(node.id, "default", {
+      injected: true,
+      target: node.data.target || "page",
+      styleId: node.data.styleId || null,
+      cssLength: css.length,
+      timestamp: Date.now()
+    });
   }
 };
 
@@ -10723,7 +10942,10 @@ var WebComponentBlockHandler = class extends BaseBlockHandler {
     return this.success(node.id, "default", {
       injected: true,
       containerId: node.data.containerId,
-      mode: node.data.mode
+      mode: node.data.mode || "shadow_dom",
+      hasScript: Boolean(js && js.trim()),
+      hasStyle: Boolean(css && css.trim()),
+      timestamp: Date.now()
     });
   }
 };
