@@ -31,9 +31,23 @@ function getNextScriptId(): string {
   return `script${num}`;
 }
 
-async function executeScriptInPageContext(code: string, args: any[] = []): Promise<DomActionResult> {
+function computeScriptChecksum(content: string): string {
+  let hash1 = 5381;
+  let hash2 = 52711;
+  for (let i = 0; i < content.length; i++) {
+    const char = content.charCodeAt(i);
+    hash1 = ((hash1 << 5) + hash1) ^ char;
+    hash2 = ((hash2 << 5) + hash2) ^ char;
+  }
+  const h1 = (hash1 >>> 0).toString(16).padStart(8, '0');
+  const h2 = (hash2 >>> 0).toString(16).padStart(8, '0');
+  return `wa_${h1}${h2}_len${content.length}`;
+}
+
+async function executeScriptInPageContext(code: string): Promise<DomActionResult> {
   return new Promise<DomActionResult>((resolve) => {
     const scriptId = getNextScriptId();
+    const checksum = computeScriptChecksum(code);
     const eventId = '__wa_res_' + scriptId + '_' + Date.now();
     let finished = false;
 
@@ -48,7 +62,8 @@ async function executeScriptInPageContext(code: string, args: any[] = []): Promi
       cleanup();
       const detail = e.detail || {};
       if (detail.success) {
-        resolve({ success: true, data: detail.result });
+        // Sucesso na execução isolada (sem retornar dados/variáveis do usuário ao fluxo)
+        resolve({ success: true, data: { scriptId, executed: true } });
       } else {
         resolve({ success: false, error: detail.error });
       }
@@ -57,73 +72,116 @@ async function executeScriptInPageContext(code: string, args: any[] = []): Promi
     window.addEventListener(eventId, onResult);
 
     try {
-      if (!isExtensionContextValid()) {
-        const vars: Record<string, any> = { args };
-        (args || []).forEach((a: any, i: number) => { vars[`arg${i}`] = a; });
-        const res = SafeJsEvaluator.evaluate(code, vars);
-        resolve({ success: true, data: res });
+      // 1. PRIMEIRO: Injetar o código na página sem gerar erros de segurança com o Manifest V3.
+      // O uso de type="application/x-webautomations-script" assegura que o parser HTML do navegador
+      // insira o elemento no DOM sem tentar executá-lo imediatamente como JS ativo, prevenindo
+      // violações de CSP da página hospedeira (como "script-src 'self'", restrições de nonce ou unsafe-inline).
+      const scriptEl = document.createElement('script');
+      scriptEl.id = scriptId;
+      scriptEl.type = 'application/x-webautomations-script';
+      scriptEl.setAttribute('data-script-id', scriptId);
+      scriptEl.setAttribute('data-script-index', String(scriptDomCounter - 1));
+      scriptEl.setAttribute('data-name', 'script' + (scriptDomCounter - 1));
+      scriptEl.setAttribute('data-checksum', checksum);
+      scriptEl.setAttribute('data-injected-at', new Date().toISOString());
+      scriptEl.setAttribute('data-wa-stage', 'injected');
+      scriptEl.classList.add('wa-injected-script', scriptId, 'script' + (scriptDomCounter - 1));
+      scriptEl.textContent = code;
+
+      // Anexa o elemento de script ao DOM da página
+      (document.head || document.documentElement || document.body).appendChild(scriptEl);
+
+      // 2. SEGUNDO: Sempre verificar antes de executar se o código injetado é o mesmo que foi escrito no fluxo.
+      const targetScript = document.getElementById(scriptId) as HTMLScriptElement | null;
+      if (!targetScript) {
+        cleanup();
+        resolve({
+          success: false,
+          error: `[WebAutomations] Erro: Elemento de script #${scriptId} não foi encontrado no DOM da página antes da execução.`,
+        });
         return;
       }
 
-      // Cria a tag <script> com o ID sequencial (script000, script001, script002...)
-      const script = document.createElement('script');
-      script.id = scriptId;
-      script.setAttribute('data-script-id', scriptId);
-      script.setAttribute('data-script-index', String(scriptDomCounter - 1));
-      script.setAttribute('name', 'script' + (scriptDomCounter - 1));
-      script.setAttribute('data-event-id', eventId);
-      script.classList.add(scriptId, 'script' + (scriptDomCounter - 1));
-      script.src = chrome.runtime.getURL('dist/pageScriptBridge.js') + `?id=${scriptId}`;
+      const injectedCodeInDom = targetScript.textContent || '';
+      const injectedChecksum = targetScript.getAttribute('data-checksum');
 
+      // Verificação rigorosa de integridade: conteúdo textual e assinatura devem corresponder ao fluxo
+      const codeIsIdentical = injectedCodeInDom === code;
+      const checksumMatches = (computeScriptChecksum(injectedCodeInDom) === checksum) && (injectedChecksum === checksum);
+
+      if (!codeIsIdentical || !checksumMatches) {
+        targetScript.setAttribute('data-wa-stage', 'integrity_violation');
+        targetScript.setAttribute('data-wa-error', 'Código no DOM difere do código original do fluxo');
+        cleanup();
+        resolve({
+          success: false,
+          error: `[WebAutomations Security] Falha de integridade: O código injetado no DOM (#${scriptId}) não corresponde exatamente ao código configurado no fluxo! Execução bloqueada por segurança.`,
+        });
+        return;
+      }
+
+      targetScript.setAttribute('data-wa-stage', 'verified');
+
+      // Tenta instalar a ponte de execução da página no contexto MAIN se ainda não estiver presente
+      if (!document.getElementById('__wa_page_bridge_loader__') && isExtensionContextValid()) {
+        try {
+          const bridgeLoader = document.createElement('script');
+          bridgeLoader.id = '__wa_page_bridge_loader__';
+          bridgeLoader.src = chrome.runtime.getURL('dist/pageScriptBridge.js');
+          bridgeLoader.async = false;
+          (document.head || document.documentElement || document.body).appendChild(bridgeLoader);
+        } catch {
+          // Se a CSP impedir injeção de script externo via bridge, o fallback SafeJsEvaluator assumirá a execução
+        }
+      }
+
+      // 3. TERCEIRO: Executar o código de forma que ele não seja capaz de se comunicar com o resto do fluxo
+      // O código roda sem receber variáveis, contexto ou argumentos do fluxo, e nenhum valor retornado é enviado de volta
       const dispatchExecution = () => {
         if (finished) return;
         window.dispatchEvent(
           new CustomEvent('__WA_EXECUTE_PAGE_SCRIPT__', {
-            detail: { scriptId, eventId, code, args },
+            detail: { scriptId, eventId, checksum, expectedCode: code },
           })
         );
       };
 
-      script.onload = dispatchExecution;
-      script.onerror = () => {
-        if (!finished) {
-          cleanup();
-          const vars: Record<string, any> = { args };
-          (args || []).forEach((a: any, i: number) => { vars[`arg${i}`] = a; });
-          const res = SafeJsEvaluator.evaluate(code, vars);
-          resolve({ success: true, data: res });
-        }
-      };
-
-      // Insere o script no DOM da página
-      (document.head || document.documentElement).appendChild(script);
-
-      // Despacha também caso a ponte já esteja carregada e ouvindo
       dispatchExecution();
-    } catch {
+    } catch (err: any) {
       if (!finished) {
         cleanup();
-        const vars: Record<string, any> = { args };
-        (args || []).forEach((a: any, i: number) => { vars[`arg${i}`] = a; });
-        const res = SafeJsEvaluator.evaluate(code, vars);
-        resolve({ success: true, data: res });
+        resolve({ success: false, error: err?.message || String(err) });
       }
     }
 
-    // Fallback seguro caso a injeção na página não responda
+    // Fallback de execução caso a ponte no MAIN world não responda (ex: bloqueada por CSP de script externo)
     setTimeout(() => {
       if (!finished) {
         cleanup();
         try {
-          const vars: Record<string, any> = { args };
-          (args || []).forEach((a: any, i: number) => { vars[`arg${i}`] = a; });
-          const res = SafeJsEvaluator.evaluate(code, vars);
-          resolve({ success: true, data: res });
+          const targetScript = document.getElementById(scriptId) as HTMLScriptElement | null;
+          if (!targetScript) {
+            resolve({ success: false, error: `Script #${scriptId} não encontrado no DOM para execução de fallback.` });
+            return;
+          }
+
+          const currentDomCode = targetScript.textContent || '';
+          if (currentDomCode !== code || computeScriptChecksum(currentDomCode) !== checksum) {
+            targetScript.setAttribute('data-wa-stage', 'integrity_violation');
+            resolve({ success: false, error: `[WebAutomations Security] Verificação de integridade falhou no script #${scriptId}.` });
+            return;
+          }
+
+          targetScript.setAttribute('data-wa-stage', 'executing');
+          // Executa com escopo totalmente isolado ({}) - sem repassar vars e sem retornar dados ao fluxo
+          SafeJsEvaluator.evaluate(`(function() {\n${currentDomCode}\n})()`, {});
+          targetScript.setAttribute('data-wa-stage', 'executed');
+          resolve({ success: true, data: { scriptId, executed: true } });
         } catch (err: any) {
-          resolve({ success: false, error: err.message });
+          resolve({ success: false, error: err?.message || String(err) });
         }
       }
-    }, 1500);
+    }, 400);
   });
 }
 
@@ -405,8 +463,8 @@ async function handleDomAction(message: DomActionMessage): Promise<DomActionResu
     }
 
     case 'INJECT_SCRIPT': {
-      const { code, args = [] } = payload;
-      return await executeScriptInPageContext(code, args);
+      const { code } = payload;
+      return await executeScriptInPageContext(code);
     }
 
     default:

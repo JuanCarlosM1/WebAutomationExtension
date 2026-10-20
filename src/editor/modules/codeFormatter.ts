@@ -11,7 +11,7 @@ export class CodeFormatter {
     try {
       if (lang === 'javascript') {
         return this.beautifyJS(trimmed);
-      } else if (lang === 'html') {
+      } else if (lang === 'html' || lang === 'svg') {
         return this.beautifyHTML(trimmed);
       } else if (lang === 'css') {
         return this.beautifyCSS(trimmed);

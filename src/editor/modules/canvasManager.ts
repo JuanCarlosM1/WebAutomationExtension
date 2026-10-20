@@ -113,9 +113,8 @@ export class CanvasManager {
   }
 
   private highlightSelectedEdge(): void {
-    const paths = document.querySelectorAll('.edges-svg-layer path');
+    const paths = document.querySelectorAll('.edges-svg-layer path.edge-visual-line');
     paths.forEach((p) => {
-      if (p.getAttribute('stroke') === 'transparent') return;
       if (p.getAttribute('data-edge-id') === this.selectedEdgeId) {
         p.classList.add('selected-edge');
       } else {
@@ -874,26 +873,22 @@ export class CanvasManager {
       // 1. Linha invisível mais grossa para facilitar o clique com o mouse na corda
       const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       hitPath.setAttribute('d', pathData);
+      hitPath.setAttribute('class', 'edge-hitbox');
       hitPath.setAttribute('fill', 'none');
       hitPath.setAttribute('stroke', 'transparent');
-      hitPath.setAttribute('stroke-width', '20');
+      hitPath.setAttribute('stroke-width', '22');
       hitPath.setAttribute('stroke-linecap', 'round');
       hitPath.setAttribute('data-edge-id', edge.id);
-      hitPath.style.cursor = 'pointer';
 
       // 2. Linha visual da corda
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', pathData);
+      path.setAttribute('class', `edge-visual-line ${this.selectedEdgeId === edge.id ? 'selected-edge' : ''}`);
       path.setAttribute('fill', 'none');
       path.setAttribute('stroke', strokeColor);
       path.setAttribute('stroke-width', '2.5');
       path.setAttribute('stroke-linecap', 'round');
       path.setAttribute('data-edge-id', edge.id);
-      path.style.cursor = 'pointer';
-
-      if (this.selectedEdgeId === edge.id) {
-        path.classList.add('selected-edge');
-      }
 
       // Função para selecionar a corda
       const selectThisEdge = (e: MouseEvent) => {
@@ -944,9 +939,13 @@ export class CanvasManager {
       deleteBadge.addEventListener('click', deleteThisEdge);
       deleteBadge.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation());
 
-      // svgEdges desenha a linha de clique hitPath e a linha visual (z-index 5, atrás dos blocos para nunca cobrir handles)
-      svgEdges.appendChild(hitPath);
-      svgEdges.appendChild(path);
+      // Agrupa hitbox e linha visual em um grupo coeso para hover estável sem cintilação de cursor
+      const edgeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      edgeGroup.setAttribute('class', 'edge-group');
+      edgeGroup.setAttribute('data-edge-id', edge.id);
+      edgeGroup.appendChild(hitPath);
+      edgeGroup.appendChild(path);
+      svgEdges.appendChild(edgeGroup);
 
       // svgControls recebe o badge de deletar (z-index 25, acima dos blocos para fácil exclusão)
       if (svgControls) {

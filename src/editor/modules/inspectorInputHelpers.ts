@@ -1,7 +1,7 @@
 /**
  * Utilitários para criação padronizada de inputs de formulário no Inspector
  */
-import { CodeEditorComponent, CodeLanguage } from './codeEditorComponent';
+import { CodeEditorComponent, CodeLanguage, CodeModalExplorerContext } from './codeEditorComponent';
 import { HtmlElementAnalyzer } from './htmlElementAnalyzer';
 
 import { CodeSyntaxHighlighter } from './codeSyntaxHighlighter';
@@ -144,7 +144,8 @@ export class InspectorInputHelpers {
     onChange: (val: string) => void,
     onNodeDataChanged?: () => void,
     showToast?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void,
-    _height = '200px'
+    _height = '200px',
+    explorerContext?: CodeModalExplorerContext
   ): void {
     const group = document.createElement('div');
     group.className = 'form-group code-preview-group';
@@ -153,30 +154,44 @@ export class InspectorInputHelpers {
       javascript: '#f59e0b',
       html: '#ec4899',
       css: '#06b6d4',
+      svg: '#10b981',
     }[language];
 
     const langTitle = {
       javascript: 'JS',
       html: 'HTML',
       css: 'CSS',
+      svg: 'SVG',
     }[language];
 
     const linesCount = (value || '').split('\n').length;
 
     group.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
         <label style="margin-bottom: 0;">${labelText}</label>
         <div style="display: flex; align-items: center; gap: 8px;">
           <span class="code-field-line-count" style="font-size: 10px; color: #64748b;">${linesCount} linha${linesCount === 1 ? '' : 's'}</span>
           <span style="font-size: 10px; font-weight: 700; color: ${langBadgeColor}; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px;">${langTitle}</span>
         </div>
       </div>
-      <div class="code-field-preview-container" style="background: #090d16; border: 1px solid #1e293b; border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: all 0.2s ease; resize: none !important; user-select: none;" title="Clique no código para abrir o editor">
+      <div class="code-field-preview-container" style="background: #090d16; border: 1px solid #1e293b; border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: all 0.2s ease; resize: none !important; user-select: none; position: relative;" title="Clique para abrir o editor de código">
         <pre class="code-field-preview-code" style="margin: 0; padding: 0; background: transparent; border: none; font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 11px; line-height: 1.5; color: #f1f5f9; max-height: 120px; overflow-y: auto; overflow-x: hidden; white-space: pre-wrap; word-break: break-all; resize: none !important;"><code>${CodeSyntaxHighlighter.highlight(value || '// Clique para abrir o editor de código', language)}</code></pre>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px; gap: 8px;">
+        <span style="font-size: 10px; color: #64748b; display: inline-flex; align-items: center; gap: 4px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          Edição permitida apenas no Editor de Código
+        </span>
+        <button type="button" class="btn-open-code-modal" style="display: inline-flex; align-items: center; gap: 5px; background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4); padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          <span>Abrir no Editor</span>
+        </button>
       </div>
     `;
 
     const previewContainer = group.querySelector('.code-field-preview-container') as HTMLElement;
+    const btnOpenModal = group.querySelector('.btn-open-code-modal') as HTMLElement;
+
     previewContainer?.addEventListener('mouseenter', () => {
       previewContainer.style.borderColor = '#6366f1';
       previewContainer.style.boxShadow = '0 0 12px rgba(99, 102, 241, 0.2)';
@@ -186,11 +201,21 @@ export class InspectorInputHelpers {
       previewContainer.style.boxShadow = 'none';
     });
 
+    btnOpenModal?.addEventListener('mouseenter', () => {
+      btnOpenModal.style.background = 'rgba(99, 102, 241, 0.3)';
+      btnOpenModal.style.color = '#ffffff';
+    });
+    btnOpenModal?.addEventListener('mouseleave', () => {
+      btnOpenModal.style.background = 'rgba(99, 102, 241, 0.15)';
+      btnOpenModal.style.color = '#a5b4fc';
+    });
+
     const openEditor = () => {
       CodeEditorComponent.openCodeModal({
         title: labelText,
         language,
         value: value || '',
+        explorerContext,
         onSave: (newVal) => {
           value = newVal;
           onChange(newVal);
@@ -208,6 +233,7 @@ export class InspectorInputHelpers {
     };
 
     previewContainer?.addEventListener('click', openEditor);
+    btnOpenModal?.addEventListener('click', openEditor);
     container.appendChild(group);
   }
 

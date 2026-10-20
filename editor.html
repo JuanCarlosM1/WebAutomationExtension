@@ -131,6 +131,15 @@
             </svg>
             <span class="activity-tooltip">Cores do Fluxo</span>
           </button>
+          <button id="btnActivityVariables" class="activity-btn" title="Variáveis do Fluxo">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="7" y1="8" x2="17" y2="8"></line>
+              <line x1="7" y1="12" x2="17" y2="12"></line>
+              <line x1="7" y1="16" x2="13" y2="16"></line>
+            </svg>
+            <span class="activity-tooltip">Variáveis do Fluxo</span>
+          </button>
           <button id="btnActivityAnalyzer" class="activity-btn" title="Analisador de Elementos HTML (Menu Compacto na Página)">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"></circle>
@@ -184,6 +193,22 @@
           </div>
           <div class="colors-sidebar-content" id="colorsSidebarContent" style="padding: 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 12px;">
             <!-- Painel de cores gerenciado pelo ColorPickerManager -->
+          </div>
+        </aside>
+
+        <!-- Left Sidebar: Flow Variables (Variáveis do Fluxo) -->
+        <aside class="sidebar-variables collapsed" id="sidebarVariables">
+          <div class="sidebar-header">
+            <div>
+              <h3>Variáveis do Fluxo</h3>
+              <p>Variáveis globais e constantes do fluxo</p>
+            </div>
+            <button id="btnToggleSidebarVariables" class="sidebar-toggle-btn" title="Fechar Variáveis">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <div class="variables-sidebar-content" id="variablesSidebarContent" style="padding: 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 12px;">
+            <!-- Painel gerenciado pelo VariablesManager -->
           </div>
         </aside>
 
@@ -348,6 +373,13 @@
                 <option value="toggle">Apenas Alternar com Duplo Toque em Shift (Dois Cliques)</option>
               </select>
               <span class="desc" style="font-size: 11px; color: #64748b; margin-top: 4px;">Permite gerar a área arrastando com Shift pressionado, alternando o modo de dois cliques ao apertar Shift duas vezes rapidamente, ou ambos simultaneamente.</span>
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+              <label class="form-check" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 8px;">
+                <input type="checkbox" id="settingsDisableSidebarEditing" style="accent-color: #6366f1;" />
+                <span style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Desativar edição de blocos na barra lateral esquerda (apenas modo expandido)</span>
+              </label>
+              <span class="desc" style="font-size: 11px; color: #64748b; margin-top: 4px;">Quando ativado, os blocos só podem ser configurados e editados pelo modal expandido. A barra lateral esquerda não exibirá campos editáveis, focando no editor expandido.</span>
             </div>
           </div>
         </section>

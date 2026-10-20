@@ -1,7 +1,7 @@
 /**
  * Autocomplete items and language suggestions dictionary
  */
-export type CodeLanguage = 'javascript' | 'html' | 'css';
+export type CodeLanguage = 'javascript' | 'html' | 'css' | 'svg';
 
 export interface AutocompleteItem {
   label: string;
@@ -110,4 +110,27 @@ export const HTML_SUGGESTIONS: AutocompleteItem[] = [
   { label: 'class', type: 'property', insertText: 'class=""', detail: 'attribute', cursorOffset: 7 },
   { label: 'id', type: 'property', insertText: 'id=""', detail: 'attribute', cursorOffset: 4 },
   { label: 'style-attr', type: 'property', insertText: 'style=""', detail: 'style attribute', cursorOffset: 7 },
+];
+
+export const SVG_SUGGESTIONS: AutocompleteItem[] = [
+  { label: 'svg', type: 'tag', insertText: '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">\n  \n</svg>', detail: 'svg root element', cursorOffset: 71 },
+  { label: 'path', type: 'tag', insertText: '<path d="" fill="currentColor" />', detail: 'svg path', cursorOffset: 9 },
+  { label: 'circle', type: 'tag', insertText: '<circle cx="12" cy="12" r="10" />', detail: 'svg circle', cursorOffset: 32 },
+  { label: 'rect', type: 'tag', insertText: '<rect x="0" y="0" width="24" height="24" rx="4" />', detail: 'svg rectangle', cursorOffset: 50 },
+  { label: 'line', type: 'tag', insertText: '<line x1="0" y1="0" x2="24" y2="24" stroke="currentColor" stroke-width="2" />', detail: 'svg line', cursorOffset: 77 },
+  { label: 'polyline', type: 'tag', insertText: '<polyline points="" fill="none" stroke="currentColor" stroke-width="2" />', detail: 'svg polyline', cursorOffset: 17 },
+  { label: 'polygon', type: 'tag', insertText: '<polygon points="" fill="currentColor" />', detail: 'svg polygon', cursorOffset: 16 },
+  { label: 'g', type: 'tag', insertText: '<g fill="currentColor">\n  \n</g>', detail: 'svg group', cursorOffset: 27 },
+  { label: 'text', type: 'tag', insertText: '<text x="12" y="12" text-anchor="middle" font-size="12"></text>', detail: 'svg text', cursorOffset: 56 },
+  { label: 'defs', type: 'tag', insertText: '<defs>\n  \n</defs>', detail: 'definitions', cursorOffset: 9 },
+  { label: 'linearGradient', type: 'tag', insertText: '<linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">\n  <stop offset="0%" stop-color="#3b82f6" />\n  <stop offset="100%" stop-color="#8b5cf6" />\n</linearGradient>', detail: 'linear gradient', cursorOffset: 173 },
+  { label: 'viewBox', type: 'property', insertText: 'viewBox="0 0 24 24"', detail: 'viewBox' },
+  { label: 'fill', type: 'property', insertText: 'fill="currentColor"', detail: 'fill color' },
+  { label: 'stroke', type: 'property', insertText: 'stroke="currentColor"', detail: 'stroke color' },
+  { label: 'stroke-width', type: 'property', insertText: 'stroke-width="2"', detail: 'stroke width' },
+  { label: 'stroke-linecap', type: 'property', insertText: 'stroke-linecap="round"', detail: 'cap style' },
+  { label: 'stroke-linejoin', type: 'property', insertText: 'stroke-linejoin="round"', detail: 'join style' },
+  { label: 'd', type: 'property', insertText: 'd=""', detail: 'path data', cursorOffset: 3 },
+  { label: 'width', type: 'property', insertText: 'width="24"', detail: 'width' },
+  { label: 'height', type: 'property', insertText: 'height="24"', detail: 'height' },
 ];

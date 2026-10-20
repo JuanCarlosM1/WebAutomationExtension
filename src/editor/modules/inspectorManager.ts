@@ -9,6 +9,7 @@ import { FlowPropertiesRenderer } from './inspector/flowProperties';
 import { DomPropertiesRenderer } from './inspector/domProperties';
 import { DataPropertiesRenderer } from './inspector/dataProperties';
 import { StartPropertiesRenderer } from './inspector/startProperties';
+import { N8NDataExplorer } from './n8nDataExplorer';
 
 export interface InspectorCallbacks {
   getGraph: () => WebAutomationGraph;
@@ -25,6 +26,21 @@ export class InspectorManager {
   private expandedTriggerIndices: Set<number> = new Set([0]);
   private expandedCaseIndices: Set<number> = new Set([0]);
   private pendingScrollSelector?: string;
+  private disableSidebarEditing: boolean = false;
+  private runtimeNodeOutputs: Record<string, any> = {};
+
+  public setDisableSidebarEditing(disabled: boolean): void {
+    this.disableSidebarEditing = disabled;
+    this.renderInspector();
+  }
+
+  public setRuntimeNodeOutputs(outputs: Record<string, any>): void {
+    this.runtimeNodeOutputs = outputs || {};
+  }
+
+  public updateRuntimeNodeOutput(nodeId: string, output: any): void {
+    this.runtimeNodeOutputs[nodeId] = output;
+  }
 
   constructor(
     private callbacks: InspectorCallbacks,
@@ -84,6 +100,41 @@ export class InspectorManager {
 
     noSelect.classList.add('hidden');
     form.classList.remove('hidden');
+
+    if (this.disableSidebarEditing) {
+      form.innerHTML = `
+        <div style="background: #090e18; border: 1px solid #1e293b; border-left: 3px solid #6366f1; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(99, 102, 241, 0.15); display: flex; align-items: center; justify-content: center; color: #818cf8; font-size: 16px;">
+              🔒
+            </div>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; color: #f8fafc;">${node.data.label || node.type}</div>
+              <span style="font-size: 10px; background: #1e293b; color: #818cf8; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;">${node.type}</span>
+            </div>
+          </div>
+          
+          <div style="background: #0b0f19; border: 1px solid #1a2333; border-radius: 6px; padding: 10px; font-size: 11px; color: #94a3b8; line-height: 1.4;">
+            <strong style="color: #cbd5e1; display: block; margin-bottom: 2px;">Edição na Barra Lateral Desativada</strong>
+            Conforme definido nas Configurações, a edição deste bloco deve ser realizada no Modo Expandido.
+          </div>
+
+          <button type="button" id="btnSidebarOpenExpanded" class="btn btn-primary" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; font-size: 12px; font-weight: 600; background: #6366f1; border-color: #6366f1; cursor: pointer; border-radius: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+            <span>Editar no Modo Expandido</span>
+          </button>
+          
+          <div style="font-size: 10px; color: #64748b; text-align: center;">
+            Dica: você também pode dar duplo clique no bloco no canvas.
+          </div>
+        </div>
+      `;
+      form.querySelector('#btnSidebarOpenExpanded')?.addEventListener('click', () => {
+        this.openExpandedModal(node.id);
+      });
+      return;
+    }
+
     this.populatePropertiesForm(form, node);
 
     // Se o modal expandido estiver aberto, sincroniza seu formulário também
@@ -276,6 +327,9 @@ export class InspectorManager {
         } else {
           this.addTextareaInput(form, 'Valor ou Expressão', data.valueExpression ?? '', (val) => data.valueExpression = val);
         }
+        this.addCheckboxInput(form, '🔒 Impedir alterações futuras nesta variável (Constante / Somente Leitura)', !!data.readonly, (val) => {
+          data.readonly = val;
+        });
         break;
       case 'extract_data':
         DataPropertiesRenderer.renderExtractData(form, data, {
@@ -304,7 +358,12 @@ export class InspectorManager {
           { value: 'background', label: 'No Background da Extensão' },
         ], (val) => data.context = val);
         this.addCodeEditorInput(form, 'Código JavaScript', 'javascript', data.code || 'console.log("Olá");', (val) => data.code = val, '220px');
-        this.addTextInput(form, 'Salvar Resultado na Variável (opcional)', data.saveResultToVar || '', (val) => data.saveResultToVar = val);
+        {
+          const noticeGroup = document.createElement('div');
+          noticeGroup.style.cssText = 'background: rgba(99, 102, 241, 0.08); border: 1px dashed rgba(99, 102, 241, 0.3); border-radius: 6px; padding: 8px 10px; margin-top: 6px; font-size: 11px; color: #94a3b8; line-height: 1.4;';
+          noticeGroup.innerHTML = '🔒 <strong>Execução Isolada:</strong> O código é injetado e executado sem comunicação direta com o fluxo. Ferramentas de comunicação da extensão serão integradas posteriormente.';
+          form.appendChild(noticeGroup);
+        }
         break;
       case 'inject_html':
         InspectorInputHelpers.addSelectorInput(form, 'Seletor do Elemento Alvo', data.targetSelector || 'body', (val) => data.targetSelector = val);
@@ -376,7 +435,7 @@ export class InspectorManager {
                 <h3 id="expandedModalNodeTitle" style="font-size: 15px; font-weight: 700; color: #f8fafc; margin: 0;">${node.data.label || node.type}</h3>
                 <span style="font-size: 10px; background: #1e293b; color: #818cf8; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;">${node.type}</span>
               </div>
-              <p style="font-size: 11px; color: #94a3b8; margin: 2px 0 0 0;">Configurações expandidas do bloco selecionado</p>
+              <p style="font-size: 11px; color: #94a3b8; margin: 2px 0 0 0;">Configurações expandidas e fluxo de dados estilo N8N</p>
             </div>
           </div>
           <button id="btnCloseExpandedModal" class="sidebar-toggle-btn" title="Fechar visualização expandida (Esc)">
@@ -384,9 +443,35 @@ export class InspectorManager {
           </button>
         </div>
         <div class="node-expand-body">
-          <form id="expandedNodeModalForm" class="node-form">
-            <!-- Campos gerados dinamicamente -->
-          </form>
+          <!-- Painel Esquerdo: Explorador N8N de Dados Anteriores e Variáveis -->
+          <div id="expandedModalLeftPane" class="node-expand-explorer-pane">
+            <!-- N8NDataExplorer renderizado aqui -->
+          </div>
+
+          <!-- Painel Direito: Configurações do Bloco e Saída -->
+          <div id="expandedModalRightPane" class="node-expand-form-pane">
+            <!-- Abas do painel direito -->
+            <div style="display: flex; gap: 6px; padding: 10px 20px 0 20px; border-bottom: 1px solid #1e293b; background: #0c121e;">
+              <button type="button" id="btnTabExpandedConfig" style="padding: 7px 16px; border: none; border-bottom: 2px solid #3b82f6; background: transparent; color: #60a5fa; font-weight: 700; font-size: 12px; cursor: pointer;">
+                Configurações do Bloco
+              </button>
+              <button type="button" id="btnTabExpandedOutput" style="padding: 7px 16px; border: none; border-bottom: 2px solid transparent; background: transparent; color: #94a3b8; font-weight: 600; font-size: 12px; cursor: pointer;">
+                Dados de Saída ($output)
+              </button>
+            </div>
+
+            <!-- Tab Content 1: Formulário de Configuração -->
+            <div id="expandedTabContentConfig" style="padding: 20px; flex: 1; overflow-y: auto;">
+              <form id="expandedNodeModalForm" class="node-form">
+                <!-- Campos gerados dinamicamente -->
+              </form>
+            </div>
+
+            <!-- Tab Content 2: Dados de Saída do Bloco -->
+            <div id="expandedTabContentOutput" style="padding: 20px; flex: 1; overflow-y: auto; display: none;">
+              <!-- Container de Saída -->
+            </div>
+          </div>
         </div>
         <!-- Botões de Ação do Rodapé -->
         <div class="node-expand-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-top: 1px solid #1e293b; background: #0b1120;">
@@ -404,30 +489,137 @@ export class InspectorManager {
       </div>
     `;
 
-      // Backup dos dados originais para possibilidade de descarte
-      const backupNodeData = JSON.parse(JSON.stringify(node.data || {}));
-      let changesCommitted = false;
+    // Backup dos dados originais para possibilidade de descarte
+    const backupNodeData = JSON.parse(JSON.stringify(node.data || {}));
+    let changesCommitted = false;
 
-      const formEl = backdrop.querySelector('#expandedNodeModalForm') as HTMLElement;
-      this.populatePropertiesForm(formEl, node);
+    const formEl = backdrop.querySelector('#expandedNodeModalForm') as HTMLElement;
+    this.populatePropertiesForm(formEl, node);
 
-      // Função de descarte: restaura o estado original do nó e atualiza tudo imediatamente
-      const discardChanges = () => {
-        node.data = JSON.parse(JSON.stringify(backupNodeData));
-        this.closeExpandedModal();
-        this.renderInspector();
-        this.callbacks.onNodeDataChanged();
-        this.callbacks.showToast('Alterações no bloco foram descartadas.', 'info');
-      };
+    // Rastreia foco em inputs do formulário para permitir inserção de tags via 1 clique
+    let lastFocusedInput: HTMLInputElement | HTMLTextAreaElement | null = null;
+    formEl.addEventListener('focusin', (e) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        lastFocusedInput = target as any;
+      }
+    });
 
-      // Função de conclusão: confirma as alterações e sincroniza a barra lateral imediatamente
-      const commitChanges = () => {
-        changesCommitted = true;
-        this.closeExpandedModal();
-        this.renderInspector();
-        this.callbacks.onNodeDataChanged();
-        this.callbacks.showToast('Alterações no bloco aplicadas com sucesso!', 'success');
-      };
+    const insertIntoInput = (inputEl: HTMLInputElement | HTMLTextAreaElement, expr: string) => {
+      const start = inputEl.selectionStart ?? inputEl.value.length;
+      const end = inputEl.selectionEnd ?? inputEl.value.length;
+      const val = inputEl.value;
+      inputEl.value = val.slice(0, start) + expr + val.slice(end);
+      inputEl.selectionStart = inputEl.selectionEnd = start + expr.length;
+      inputEl.focus();
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    const handleInsertExpression = (expr: string) => {
+      if (lastFocusedInput && document.body.contains(lastFocusedInput)) {
+        insertIntoInput(lastFocusedInput, expr);
+      } else {
+        navigator.clipboard.writeText(expr);
+        this.callbacks.showToast(`Copiado para a área de transferência: ${expr}`, 'success');
+      }
+    };
+
+    // Suporte a Drag & Drop de variáveis e dados de blocos anteriores diretamente nos inputs
+    formEl.addEventListener('dragover', (e) => {
+      const target = (e.target as HTMLElement)?.closest('input, textarea') as HTMLInputElement | HTMLTextAreaElement | null;
+      if (target) {
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        target.classList.add('drag-over-input');
+      } else if (lastFocusedInput && document.body.contains(lastFocusedInput)) {
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      }
+    });
+
+    formEl.addEventListener('dragleave', (e) => {
+      const target = (e.target as HTMLElement)?.closest('input, textarea') as HTMLElement | null;
+      if (target) {
+        target.classList.remove('drag-over-input');
+      }
+    });
+
+    formEl.addEventListener('drop', (e) => {
+      const expr = e.dataTransfer?.getData('application/x-n8n-tag') || e.dataTransfer?.getData('text/plain');
+      const target = (e.target as HTMLElement)?.closest('input, textarea') as HTMLInputElement | HTMLTextAreaElement | null;
+      if (target) {
+        target.classList.remove('drag-over-input');
+      }
+      if (expr) {
+        e.preventDefault();
+        if (target) {
+          insertIntoInput(target, expr);
+          this.callbacks.showToast(`Inserido no campo: ${expr}`, 'success');
+        } else if (lastFocusedInput && document.body.contains(lastFocusedInput)) {
+          insertIntoInput(lastFocusedInput, expr);
+          this.callbacks.showToast(`Inserido no campo: ${expr}`, 'success');
+        } else {
+          navigator.clipboard.writeText(expr);
+          this.callbacks.showToast(`Copiado para a área de transferência: ${expr}`, 'success');
+        }
+      }
+    });
+
+    // Renderiza Explorador N8N de dados anteriores e variáveis
+    const explorerContainer = backdrop.querySelector('#expandedModalLeftPane') as HTMLElement;
+    if (explorerContainer) {
+      N8NDataExplorer.render(explorerContainer, {
+        graph,
+        currentNode: node,
+        runtimeNodeOutputs: this.runtimeNodeOutputs,
+        onInsertExpression: handleInsertExpression,
+        onShowToast: (msg, type) => this.callbacks.showToast(msg, type),
+      });
+    }
+
+    // Abas do painel direito: Configurações vs Saída do Bloco
+    const outputTabContainer = backdrop.querySelector('#expandedTabContentOutput') as HTMLElement;
+    const configTabContainer = backdrop.querySelector('#expandedTabContentConfig') as HTMLElement;
+    const btnTabConfig = backdrop.querySelector('#btnTabExpandedConfig') as HTMLButtonElement;
+    const btnTabOutput = backdrop.querySelector('#btnTabExpandedOutput') as HTMLButtonElement;
+
+    btnTabConfig?.addEventListener('click', () => {
+      configTabContainer.style.display = 'block';
+      outputTabContainer.style.display = 'none';
+      btnTabConfig.style.borderBottomColor = '#3b82f6';
+      btnTabConfig.style.color = '#60a5fa';
+      btnTabOutput.style.borderBottomColor = 'transparent';
+      btnTabOutput.style.color = '#94a3b8';
+    });
+
+    btnTabOutput?.addEventListener('click', () => {
+      configTabContainer.style.display = 'none';
+      outputTabContainer.style.display = 'block';
+      btnTabOutput.style.borderBottomColor = '#3b82f6';
+      btnTabOutput.style.color = '#60a5fa';
+      btnTabConfig.style.borderBottomColor = 'transparent';
+      btnTabConfig.style.color = '#94a3b8';
+      this.renderNodeOutputPanel(outputTabContainer, node);
+    });
+
+    // Função de descarte: restaura o estado original do nó e atualiza tudo imediatamente
+    const discardChanges = () => {
+      node.data = JSON.parse(JSON.stringify(backupNodeData));
+      this.closeExpandedModal();
+      this.renderInspector();
+      this.callbacks.onNodeDataChanged();
+      this.callbacks.showToast('Alterações no bloco foram descartadas.', 'info');
+    };
+
+    // Função de conclusão: confirma as alterações e sincroniza a barra lateral imediatamente
+    const commitChanges = () => {
+      changesCommitted = true;
+      this.closeExpandedModal();
+      this.renderInspector();
+      this.callbacks.onNodeDataChanged();
+      this.callbacks.showToast('Alterações no bloco aplicadas com sucesso!', 'success');
+    };
 
       backdrop.querySelector('#btnDiscardExpandedModal')?.addEventListener('click', discardChanges);
       backdrop.querySelector('#btnDoneExpandedModal')?.addEventListener('click', commitChanges);
@@ -468,6 +660,202 @@ export class InspectorManager {
       const existing = document.getElementById('expandedNodeModalBackdrop');
       existing?.remove();
     }
+
+  /**
+   * Atualiza o explorador de dados do lado esquerdo do modal expandido
+   */
+  private refreshExpandedExplorer(node: AnyAutomationNode): void {
+    const explorerContainer = document.getElementById('expandedModalLeftPane');
+    if (explorerContainer) {
+      N8NDataExplorer.render(explorerContainer, {
+        graph: this.callbacks.getGraph(),
+        currentNode: node,
+        runtimeNodeOutputs: this.runtimeNodeOutputs,
+        onInsertExpression: (expr) => {
+          const focused = document.activeElement as HTMLInputElement | HTMLTextAreaElement;
+          if (
+            focused &&
+            (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA') &&
+            document.getElementById('expandedNodeModalForm')?.contains(focused)
+          ) {
+            const start = focused.selectionStart ?? focused.value.length;
+            const end = focused.selectionEnd ?? focused.value.length;
+            const val = focused.value;
+            focused.value = val.slice(0, start) + expr + val.slice(end);
+            focused.selectionStart = focused.selectionEnd = start + expr.length;
+            focused.dispatchEvent(new Event('input', { bubbles: true }));
+            focused.dispatchEvent(new Event('change', { bubbles: true }));
+          } else {
+            navigator.clipboard.writeText(expr);
+            this.callbacks.showToast(`Copiado: ${expr}`, 'success');
+          }
+        },
+        onShowToast: (m, t) => this.callbacks.showToast(m, t),
+      });
+    }
+  }
+
+  /**
+   * Renderiza o painel com os dados de saída do bloco e permite definir dados de teste (Mock como opção, não regra)
+   */
+  private renderNodeOutputPanel(container: HTMLElement, node: AnyAutomationNode): void {
+    container.innerHTML = '';
+    const nodeLabel = node.data?.label || node.type;
+    const outputResult = N8NDataExplorer.getNodeOutputResult(node, this.runtimeNodeOutputs);
+    const isMockEnabled = !!(node.data as any).useMockOutput;
+    const hasRuntimeData = outputResult.source === 'runtime';
+
+    const panel = document.createElement('div');
+    panel.style.cssText = 'max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px;';
+
+    // Status badge
+    let badgeHtml = '';
+    if (outputResult.source === 'runtime') {
+      badgeHtml = `<span style="font-size: 10px; background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 2px 8px; border-radius: 4px; font-weight: 600;">🟢 Execução Real</span>`;
+    } else if (outputResult.source === 'mock') {
+      badgeHtml = `<span style="font-size: 10px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; padding: 2px 8px; border-radius: 4px; font-weight: 600;">🟡 Dados Simulados (Mock)</span>`;
+    } else {
+      badgeHtml = `<span style="font-size: 10px; background: rgba(148, 163, 184, 0.15); color: #94a3b8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">⚪ Não Executado (Sem Dados)</span>`;
+    }
+
+    // JSON a exibir
+    let currentDataToDisplay = outputResult.data;
+    if (isMockEnabled && (node.data as any).outputData !== undefined) {
+      currentDataToDisplay = (node.data as any).outputData;
+    } else if (isMockEnabled && currentDataToDisplay === null) {
+      currentDataToDisplay = N8NDataExplorer.generateDefaultMock(node);
+    }
+    const jsonStr = currentDataToDisplay ? JSON.stringify(currentDataToDisplay, null, 2) : '';
+
+    panel.innerHTML = `
+      <div style="background: #090e18; border: 1px solid #1e293b; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 13px; font-weight: 700; color: #f8fafc;">Dados Produzidos por Este Bloco ($output)</span>
+            ${badgeHtml}
+          </div>
+          <button type="button" id="btnCopyNodeExpr" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">
+            📋 Copiar {{ $node["${nodeLabel}"].json }}
+          </button>
+        </div>
+
+        <div style="font-size: 11px; color: #94a3b8; line-height: 1.4;">
+          Estes dados representam a saída gerada por este bloco. Blocos subsequentes conectados a ele podem referenciá-lo usando:
+          <code style="background: #1e293b; color: #60a5fa; padding: 2px 5px; border-radius: 4px; font-family: monospace;">{{ $node["${nodeLabel}"].json.campo }}</code>
+          ou <code style="background: #1e293b; color: #34d399; padding: 2px 5px; border-radius: 4px; font-family: monospace;">{{ $json.campo }}</code> (no bloco imediatamente seguinte).
+        </div>
+
+        <!-- Opção de Mock (Agora OPCIONAL e não regra) -->
+        <div style="background: #0d1527; border: 1px solid ${isMockEnabled ? '#3b82f6' : '#243049'}; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;">
+              <input type="checkbox" id="chkUseMockOutput" ${isMockEnabled ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px; accent-color: #3b82f6;" />
+              <span style="font-size: 12px; font-weight: 600; color: #f1f5f9;">Habilitar dados simulados (Mock) para este bloco</span>
+            </label>
+            ${isMockEnabled ? `<button type="button" id="btnResetDefaultMock" class="btn btn-secondary" style="font-size: 10px; padding: 2px 8px;">Restaurar Amostra Padrão</button>` : ''}
+          </div>
+          <div style="font-size: 11px; color: #64748b; line-height: 1.4; margin-left: 26px;">
+            Por padrão, o fluxo utiliza apenas resultados de execuções reais. Marque esta opção caso deseje simular dados de saída para testar expressões e variáveis antes de rodar a automação.
+          </div>
+        </div>
+
+        ${isMockEnabled ? `
+          <!-- Modo Edição de Mock -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Editor de Dados Simulados (JSON):</label>
+              <span style="font-size: 10px; color: #38bdf8;">Blocos seguintes enxergarão esta estrutura</span>
+            </div>
+            <textarea id="nodeOutputJsonArea" style="
+              width: 100%; box-sizing: border-box; height: 200px; font-family: monospace; font-size: 12px; background: #080c14; color: #a5f3fc; border: 1px solid #243049; border-radius: 6px; padding: 10px; outline: none; line-height: 1.4; resize: vertical;
+            ">${jsonStr}</textarea>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 10px; color: #64748b;">Altere o JSON acima para simular diferentes cenários nos nós subsequentes.</span>
+            <button type="button" id="btnSaveMockOutput" class="btn btn-primary" style="font-size: 11px; padding: 6px 14px;">
+              💾 Salvar Dados Simulados
+            </button>
+          </div>
+        ` : hasRuntimeData ? `
+          <!-- Modo Visualização de Dados Reais -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Saída Real da Última Execução (Somente Leitura):</label>
+              <span style="font-size: 10px; color: #34d399;">Gerado durante execução real</span>
+            </div>
+            <pre style="
+              width: 100%; box-sizing: border-box; max-height: 220px; overflow-y: auto; font-family: monospace; font-size: 12px; background: #080c14; color: #86efac; border: 1px solid #166534; border-radius: 6px; padding: 12px; line-height: 1.4; margin: 0;
+            ">${jsonStr}</pre>
+          </div>
+        ` : `
+          <!-- Modo Sem Dados e Sem Mock -->
+          <div style="background: #080d1a; border: 1px dashed #334155; border-radius: 6px; padding: 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            <div style="font-size: 24px;">📊</div>
+            <div style="font-size: 13px; font-weight: 600; color: #cbd5e1;">Nenhum dado real disponível no momento</div>
+            <div style="font-size: 11px; color: #64748b; max-width: 440px; line-height: 1.4;">
+              Execute o fluxo para coletar dados reais deste bloco ou marque a opção <strong>"Habilitar dados simulados (Mock)"</strong> acima para definir uma estrutura de teste.
+            </div>
+          </div>
+        `}
+      </div>
+    `;
+
+    panel.querySelector('#btnCopyNodeExpr')?.addEventListener('click', () => {
+      const expr = `{{ $node["${nodeLabel}"].json }}`;
+      navigator.clipboard.writeText(expr);
+      this.callbacks.showToast(`Copiado: ${expr}`, 'success');
+    });
+
+    panel.querySelector('#chkUseMockOutput')?.addEventListener('change', (e: any) => {
+      const checked = e.target.checked;
+      (node.data as any).useMockOutput = checked;
+      if (checked) {
+        if (!(node.data as any).outputData) {
+          (node.data as any).outputData = N8NDataExplorer.generateDefaultMock(node);
+        }
+        this.runtimeNodeOutputs[node.id] = (node.data as any).outputData;
+        this.callbacks.showToast('Dados simulados (Mock) ativados para este bloco.', 'info');
+      } else {
+        if (this.runtimeNodeOutputs[node.id] === (node.data as any).outputData) {
+          delete this.runtimeNodeOutputs[node.id];
+        }
+        this.callbacks.showToast('Dados simulados desativados. Usando apenas execuções reais.', 'info');
+      }
+      this.callbacks.onNodeDataChanged();
+      this.renderNodeOutputPanel(container, node);
+      this.refreshExpandedExplorer(node);
+    });
+
+    panel.querySelector('#btnResetDefaultMock')?.addEventListener('click', () => {
+      const defMock = N8NDataExplorer.generateDefaultMock(node);
+      (node.data as any).outputData = defMock;
+      (node.data as any).useMockOutput = true;
+      this.runtimeNodeOutputs[node.id] = defMock;
+      this.callbacks.onNodeDataChanged();
+      this.callbacks.showToast('Amostra de mock restaurada.', 'info');
+      this.renderNodeOutputPanel(container, node);
+      this.refreshExpandedExplorer(node);
+    });
+
+    panel.querySelector('#btnSaveMockOutput')?.addEventListener('click', () => {
+      const area = panel.querySelector('#nodeOutputJsonArea') as HTMLTextAreaElement;
+      try {
+        const parsed = JSON.parse(area.value);
+        (node.data as any).outputData = parsed;
+        (node.data as any).useMockOutput = true;
+        this.runtimeNodeOutputs[node.id] = parsed;
+        this.callbacks.onNodeDataChanged();
+        this.callbacks.showToast('Dados simulados salvos com sucesso!', 'success');
+        this.renderNodeOutputPanel(container, node);
+        this.refreshExpandedExplorer(node);
+      } catch (e: any) {
+        this.callbacks.showToast('JSON inválido nos dados simulados.', 'error');
+      }
+    });
+
+    container.appendChild(panel);
+  }
 
   // Helpers de criação de inputs
   private addTextInput(container: HTMLElement, labelText: string, value: string, onChange: (val: string) => void): void {
@@ -534,6 +922,14 @@ export class InspectorManager {
     onChange: (val: string) => void,
     height = '200px'
   ): void {
+    const selectedId = this.callbacks.getSelectedNodeId();
+    const currentNode = selectedId ? this.callbacks.getGraph().nodes.find((n) => n.id === selectedId) : undefined;
+    const explorerContext = {
+      graph: this.callbacks.getGraph(),
+      currentNode,
+      runtimeNodeOutputs: this.runtimeNodeOutputs,
+      onShowToast: this.callbacks.showToast,
+    };
     InspectorInputHelpers.addCodeEditorInput(
       container,
       labelText,
@@ -542,7 +938,8 @@ export class InspectorManager {
       onChange,
       this.callbacks.onNodeDataChanged,
       this.callbacks.showToast,
-      height
+      height,
+      explorerContext
     );
   }
 

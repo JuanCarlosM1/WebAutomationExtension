@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const snapToGridDefault = document.getElementById('snapToGridDefault') as HTMLInputElement;
   const multiSelectMode = document.getElementById('multiSelectMode') as HTMLSelectElement;
   const areaSelectMode = document.getElementById('areaSelectMode') as HTMLSelectElement;
+  const disableSidebarEditing = document.getElementById('disableSidebarEditing') as HTMLInputElement;
 
   const mcpEnabled = document.getElementById('mcpEnabled') as HTMLInputElement;
   const mcpPortInput = document.getElementById('mcpPortInput') as HTMLInputElement;
@@ -76,6 +77,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (snapToGridDefault) snapToGridDefault.checked = prefs.snapGrid !== false && prefs.snapToGrid !== false;
         if (multiSelectMode) multiSelectMode.value = prefs.multiSelectMode || 'both';
         if (areaSelectMode) areaSelectMode.value = prefs.areaSelectMode || 'both';
+        if (disableSidebarEditing) disableSidebarEditing.checked = !!prefs.disableSidebarEditing;
 
         // 3. MCP Config
         const mcp = data.mcp_config || { enabled: false, port: 3001 };
@@ -123,6 +125,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       snapToGrid: snapToGridDefault?.checked ?? true,
       multiSelectMode: multiSelectMode?.value || 'both',
       areaSelectMode: areaSelectMode?.value || 'both',
+      disableSidebarEditing: disableSidebarEditing?.checked ?? false,
     };
 
     const mcpConfig = {

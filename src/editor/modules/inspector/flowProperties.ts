@@ -652,52 +652,24 @@ export class FlowPropertiesRenderer {
       ctx.onNodeDataChanged();
     });
 
-    // Campos de Código JS
+    // Campos de Código JS (não permite edição direta na barra lateral, apenas via Code Editor)
     const jsFields = document.createElement('div');
     jsFields.className = 'rule-js-fields';
     jsFields.style.cssText = `display: ${mode === 'js_eval' ? 'flex' : 'none'}; flex-direction: column; gap: 8px;`;
-    jsFields.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <label style="font-size: 10px; font-weight: 700; color: #f59e0b; text-transform: uppercase;">Código / Expressão JavaScript</label>
-        <button type="button" class="btn-open-js-modal" style="display: inline-flex; align-items: center; gap: 5px; background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4); padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s;">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
-          <span>Abrir no Editor Completo</span>
-        </button>
-      </div>
-      <textarea class="rule-js-textarea" rows="5" placeholder="// Digite a expressão ou código JS que retorna verdadeiro ou falso, ex:\nreturn context.status === 200;\n// ou uma expressão direta:\ncontext.count < 10" style="width: 100%; min-height: 110px; padding: 10px 12px; font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 12px; line-height: 1.5; background: #090d16; color: #38bdf8; border: 1px solid #243049; border-radius: 6px; box-sizing: border-box; resize: vertical; outline: none; transition: border-color 0.2s;">${rule.jsExpression || ''}</textarea>
-      <span style="font-size: 10px; color: #64748b;">A expressão é avaliada dinamicamente e deve retornar <code>true</code> ou <code>false</code>. Variáveis disponíveis: <code>context</code>, <code>vars</code>.</span>
-    `;
 
-    const jsTextarea = jsFields.querySelector('.rule-js-textarea') as HTMLTextAreaElement;
-    jsTextarea?.addEventListener('input', (e: any) => {
-      rule.jsExpression = e.target.value;
-      ctx.onNodeDataChanged();
-    });
-    jsTextarea?.addEventListener('focus', () => { jsTextarea.style.borderColor = '#f59e0b'; });
-    jsTextarea?.addEventListener('blur', () => { jsTextarea.style.borderColor = '#243049'; });
-
-    const btnOpenJsModal = jsFields.querySelector('.btn-open-js-modal') as HTMLButtonElement;
-    btnOpenJsModal?.addEventListener('mouseenter', () => {
-      btnOpenJsModal.style.background = 'rgba(99, 102, 241, 0.3)';
-      btnOpenJsModal.style.color = '#ffffff';
-    });
-    btnOpenJsModal?.addEventListener('mouseleave', () => {
-      btnOpenJsModal.style.background = 'rgba(99, 102, 241, 0.15)';
-      btnOpenJsModal.style.color = '#a5b4fc';
-    });
-    btnOpenJsModal?.addEventListener('click', () => {
-      CodeEditorComponent.openCodeModal({
-        title: `Expressão JavaScript (Expressão #${ruleIdx + 1})`,
-        language: 'javascript',
-        value: rule.jsExpression || '',
-        onSave: (newVal) => {
-          rule.jsExpression = newVal;
-          if (jsTextarea) jsTextarea.value = newVal;
-          ctx.onNodeDataChanged();
-          ctx.showToast('Expressão JS salva!', 'success');
-        },
-      });
-    });
+    InspectorInputHelpers.addCodeEditorInput(
+      jsFields,
+      `Expressão JavaScript (Expressão #${ruleIdx + 1})`,
+      'javascript',
+      rule.jsExpression || '',
+      (newVal) => {
+        rule.jsExpression = newVal;
+        ctx.onNodeDataChanged();
+      },
+      ctx.onNodeDataChanged,
+      ctx.showToast,
+      '120px'
+    );
 
     // Event listener crucial para alternar o modo entre Comparação e Código JS
     modeSelect.addEventListener('change', () => {

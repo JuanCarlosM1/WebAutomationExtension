@@ -262,15 +262,11 @@ export class ChromeBrowserDriver implements IBrowserDriver {
     });
   }
 
-  public async injectScript(code: string, context: 'content_script' | 'background', args: any[] = []): Promise<any> {
-    const vars = args.reduce((acc, arg, i) => {
-      acc[`arg${i}`] = arg;
-      return acc;
-    }, {} as Record<string, any>);
-    vars['args'] = args;
-
+  public async injectScript(code: string, context: 'content_script' | 'background', _args: any[] = []): Promise<any> {
+    // Executa de forma isolada, sem passar variáveis ou expor comunicação direta com o resto do fluxo
     if (context === 'background') {
-      return SafeJsEvaluator.evaluate(code, vars);
+      SafeJsEvaluator.evaluate(`(function() {\n${code}\n})()`, {});
+      return { success: true, executed: true };
     }
 
     const tabId = await this.getTargetTabId();
@@ -278,10 +274,11 @@ export class ChromeBrowserDriver implements IBrowserDriver {
     const isExtensionPage = !tab?.url || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('chrome://');
 
     if (isExtensionPage) {
-      return SafeJsEvaluator.evaluate(code, vars);
+      SafeJsEvaluator.evaluate(`(function() {\n${code}\n})()`, {});
+      return { success: true, executed: true };
     }
 
-    return await this.sendToContentScript('INJECT_SCRIPT', { code, args });
+    return await this.sendToContentScript('INJECT_SCRIPT', { code });
   }
 
   public async injectHtml(html: string, targetSelector: string, position: string, selectorType?: 'css' | 'xpath'): Promise<void> {

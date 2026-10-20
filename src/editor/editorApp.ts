@@ -12,9 +12,11 @@ import { ColorPickerManager } from './modules/colorPickerManager';
 import { InspectorManager } from './modules/inspectorManager';
 import { CanvasManager } from './modules/canvasManager';
 import { WorkflowTabManager } from './modules/tabManager';
+import { VariablesManager } from './modules/variablesManager';
 import { showToast, showModalDialog, sanitizeGraph, DialogMenu } from './modules/editorUtils';
 import { FlowSettingsModal } from './modules/flowSettingsModal';
 import { HtmlElementAnalyzer } from './modules/htmlElementAnalyzer';
+import { CodeEditorComponent } from './modules/codeEditorComponent';
 
 // Registrar avaliador JS em conformidade com a CSP do Manifest V3 (sem 'unsafe-eval')
 StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars);
@@ -28,6 +30,7 @@ class VisualEditorApp {
   private inspectorManager: InspectorManager;
   private canvasManager: CanvasManager;
   private tabManager: WorkflowTabManager;
+  private variablesManager: VariablesManager;
 
   constructor() {
     this.graph = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
@@ -94,11 +97,34 @@ class VisualEditorApp {
       },
     });
 
+    // Provedor de contexto global para o CodeEditorComponent (dados anteriores e variáveis N8N)
+    CodeEditorComponent.setDefaultContextResolver(() => {
+      const selectedId = this.selectedNodeId || this.canvasManager?.getSelectedNodeIds()?.[0];
+      const selectedNode = selectedId ? this.graph.nodes.find((n) => n.id === selectedId) : undefined;
+      return {
+        graph: this.graph,
+        currentNode: selectedNode,
+        runtimeNodeOutputs: (this.inspectorManager as any)?.runtimeNodeOutputs || {},
+        onShowToast: (msg, type) => showToast(msg, type),
+      };
+    });
+
+
     // 4. Inicializar WorkflowTabManager
     this.tabManager = new WorkflowTabManager({
       onOpenFlow: (flow) => this.openStudio(flow),
       onViewChange: (view) => this.switchView(view),
       onRunFlowDirectly: (flow) => this.runFlowDirectly(flow),
+      showToast: (msg, type) => showToast(msg, type),
+    });
+
+    // 5. Inicializar VariablesManager
+    this.variablesManager = new VariablesManager({
+      getGraph: () => this.graph,
+      onVariablesChanged: () => {
+        this.canvasManager?.render();
+        this.inspectorManager?.renderInspector();
+      },
       showToast: (msg, type) => showToast(msg, type),
     });
 
@@ -111,10 +137,15 @@ class VisualEditorApp {
 
   private loadStartupPreferences(): void {
     if (!chrome.storage?.local) return;
-    chrome.storage.local.get('studio_preferences', (stored) => {
-      if (stored?.studio_preferences) {
-        const p = stored.studio_preferences;
-        this.canvasManager.updateSelectionSettings(p.multiSelectMode, p.areaSelectMode);
+    chrome.storage.local.get(['studio_preferences', 'visual_studio_preferences'], (stored) => {
+      const p = stored?.visual_studio_preferences || stored?.studio_preferences;
+      if (p) {
+        if (p.multiSelectMode !== undefined || p.areaSelectMode !== undefined) {
+          this.canvasManager.updateSelectionSettings(p.multiSelectMode, p.areaSelectMode);
+        }
+        if (p.disableSidebarEditing !== undefined) {
+          this.inspectorManager.setDisableSidebarEditing(Boolean(p.disableSidebarEditing));
+        }
       }
     });
   }
@@ -136,7 +167,9 @@ class VisualEditorApp {
     const sidebarLeft = document.getElementById('sidebarLibrary');
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
+    const sidebarVariables = document.getElementById('sidebarVariables');
     const resizerLeft = document.getElementById('resizerLeft');
+    const btnActivityVariables = document.getElementById('btnActivityVariables');
 
     if (view === 'settings') {
       mainWorkspace?.classList.add('settings-mode');
@@ -149,9 +182,11 @@ class VisualEditorApp {
       if (sidebarLeft) sidebarLeft.style.display = 'none';
       if (sidebarRight) sidebarRight.style.display = 'none';
       if (sidebarColors) sidebarColors.style.display = 'none';
+      if (sidebarVariables) sidebarVariables.style.display = 'none';
       if (resizerLeft) resizerLeft.style.display = 'none';
 
       btnActivitySettings?.classList.add('active');
+      btnActivityVariables?.classList.remove('active');
       this.loadSettingsUI();
       window.history.replaceState({}, '', `${window.location.pathname}?tab=settings`);
     } else {
@@ -165,6 +200,7 @@ class VisualEditorApp {
       if (sidebarLeft) sidebarLeft.style.display = '';
       if (sidebarRight) sidebarRight.style.display = '';
       if (sidebarColors) sidebarColors.style.display = '';
+      if (sidebarVariables) sidebarVariables.style.display = '';
       if (resizerLeft) resizerLeft.style.display = '';
 
       btnActivitySettings?.classList.remove('active');
@@ -203,6 +239,9 @@ class VisualEditorApp {
     this.switchView('studio');
     this.canvasManager.updateCanvasTransform();
     this.canvasManager.render();
+    if ((this.graph as any).lastExecutionData?.nodeOutputs) {
+      this.inspectorManager.setRuntimeNodeOutputs((this.graph as any).lastExecutionData.nodeOutputs);
+    }
     this.inspectorManager.renderInspector();
     this.tabManager.renderTabs();
   }
@@ -317,6 +356,13 @@ class VisualEditorApp {
           if (res?.success) {
             this.appendLog({ timestamp: Date.now(), level: 'info', message: 'Execução concluída com sucesso!' });
             this.renderVariables(res.variables || {});
+            if (res.nodeOutputs) {
+              this.inspectorManager.setRuntimeNodeOutputs(res.nodeOutputs);
+              (this.graph as any).lastExecutionData = {
+                nodeOutputs: res.nodeOutputs,
+                timestamp: Date.now(),
+              };
+            }
             showToast('Fluxo executado com sucesso!', 'success');
           } else if (res?.error) {
             this.appendLog({ timestamp: Date.now(), level: 'error', message: res.error });
@@ -551,13 +597,16 @@ class VisualEditorApp {
     const sidebarLeft = document.getElementById('sidebarLibrary');
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
+    const sidebarVariables = document.getElementById('sidebarVariables');
     const resizerLeft = document.getElementById('resizerLeft');
     const btnToggleLeft = document.getElementById('btnToggleSidebarLeft');
     const btnToggleRight = document.getElementById('btnToggleSidebarRight');
     const btnToggleColors = document.getElementById('btnToggleSidebarColors');
+    const btnToggleVariables = document.getElementById('btnToggleSidebarVariables');
     const btnActivityBlocks = document.getElementById('btnActivityBlocks');
     const btnActivityInspector = document.getElementById('btnActivityInspector');
     const btnActivityColors = document.getElementById('btnActivityColors');
+    const btnActivityVariables = document.getElementById('btnActivityVariables');
     const btnActivityAnalyzer = document.getElementById('btnActivityAnalyzer');
     const btnActivitySettings = document.getElementById('btnActivitySettings');
     const btnDashboardSettings = document.getElementById('btnDashboardSettings');
@@ -581,8 +630,10 @@ class VisualEditorApp {
     btnActivityBlocks?.addEventListener('click', () => this.openBlocksSidebar());
     btnActivityInspector?.addEventListener('click', () => this.openInspectorSidebar());
     btnActivityColors?.addEventListener('click', () => this.openColorsSidebar());
+    btnActivityVariables?.addEventListener('click', () => this.openVariablesSidebar());
     btnToggleLeft?.addEventListener('click', () => this.openBlocksSidebar());
     btnToggleColors?.addEventListener('click', () => this.openBlocksSidebar());
+    btnToggleVariables?.addEventListener('click', () => this.openBlocksSidebar());
     btnToggleRight?.addEventListener('click', () => {
       this.selectedNodeId = undefined;
       document.querySelectorAll('.graph-node').forEach((el) => el.classList.remove('selected'));
@@ -607,6 +658,8 @@ class VisualEditorApp {
 
         const activePanel = (sidebarColors && !sidebarColors.classList.contains('collapsed'))
           ? sidebarColors
+          : (sidebarVariables && !sidebarVariables.classList.contains('collapsed'))
+          ? sidebarVariables
           : (sidebarRight && !sidebarRight.classList.contains('collapsed'))
           ? sidebarRight
           : sidebarLeft;
@@ -621,6 +674,7 @@ class VisualEditorApp {
           if (sidebarLeft) sidebarLeft.style.width = wStr;
           if (sidebarRight) sidebarRight.style.width = wStr;
           if (sidebarColors) sidebarColors.style.width = wStr;
+          if (sidebarVariables) sidebarVariables.style.width = wStr;
         };
 
         const onMouseUp = (upEvent: MouseEvent) => {
@@ -647,6 +701,13 @@ class VisualEditorApp {
         this.highlightActiveNode(msg.nodeId);
       } else if (msg.type === 'NODE_COMPLETE') {
         this.unhighlightActiveNode(msg.nodeId);
+        if (msg.nodeOutputs) {
+          this.inspectorManager.setRuntimeNodeOutputs(msg.nodeOutputs);
+          (this.graph as any).lastExecutionData = {
+            nodeOutputs: msg.nodeOutputs,
+            timestamp: Date.now(),
+          };
+        }
       } else if (msg.type === 'LOG') {
         this.appendLog(msg.log);
       } else if (msg.type === 'STATUS_CHANGE') {
@@ -660,10 +721,12 @@ class VisualEditorApp {
     const sidebarLeft = document.getElementById('sidebarLibrary');
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
+    const sidebarVariables = document.getElementById('sidebarVariables');
     const resizerLeft = document.getElementById('resizerLeft');
     const btnActivityBlocks = document.getElementById('btnActivityBlocks');
     const btnActivityInspector = document.getElementById('btnActivityInspector');
     const btnActivityColors = document.getElementById('btnActivityColors');
+    const btnActivityVariables = document.getElementById('btnActivityVariables');
 
     sidebarLeft?.classList.remove('collapsed');
     btnActivityBlocks?.classList.add('active');
@@ -674,6 +737,9 @@ class VisualEditorApp {
     sidebarColors?.classList.add('collapsed');
     btnActivityColors?.classList.remove('active');
 
+    sidebarVariables?.classList.add('collapsed');
+    btnActivityVariables?.classList.remove('active');
+
     if (resizerLeft) resizerLeft.style.display = 'block';
   }
 
@@ -682,10 +748,12 @@ class VisualEditorApp {
     const sidebarLeft = document.getElementById('sidebarLibrary');
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
+    const sidebarVariables = document.getElementById('sidebarVariables');
     const resizerLeft = document.getElementById('resizerLeft');
     const btnActivityBlocks = document.getElementById('btnActivityBlocks');
     const btnActivityInspector = document.getElementById('btnActivityInspector');
     const btnActivityColors = document.getElementById('btnActivityColors');
+    const btnActivityVariables = document.getElementById('btnActivityVariables');
 
     sidebarRight?.classList.remove('collapsed');
     btnActivityInspector?.classList.add('active');
@@ -696,6 +764,9 @@ class VisualEditorApp {
     sidebarColors?.classList.add('collapsed');
     btnActivityColors?.classList.remove('active');
 
+    sidebarVariables?.classList.add('collapsed');
+    btnActivityVariables?.classList.remove('active');
+
     this.inspectorManager.renderInspector();
     if (resizerLeft) resizerLeft.style.display = 'block';
   }
@@ -705,10 +776,12 @@ class VisualEditorApp {
     const sidebarLeft = document.getElementById('sidebarLibrary');
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
+    const sidebarVariables = document.getElementById('sidebarVariables');
     const resizerLeft = document.getElementById('resizerLeft');
     const btnActivityBlocks = document.getElementById('btnActivityBlocks');
     const btnActivityInspector = document.getElementById('btnActivityInspector');
     const btnActivityColors = document.getElementById('btnActivityColors');
+    const btnActivityVariables = document.getElementById('btnActivityVariables');
 
     sidebarColors?.classList.remove('collapsed');
     btnActivityColors?.classList.add('active');
@@ -719,7 +792,38 @@ class VisualEditorApp {
     sidebarRight?.classList.add('collapsed');
     btnActivityInspector?.classList.remove('active');
 
+    sidebarVariables?.classList.add('collapsed');
+    btnActivityVariables?.classList.remove('active');
+
     this.colorPickerManager.renderColorsSidebar();
+    if (resizerLeft) resizerLeft.style.display = 'block';
+  }
+
+  public openVariablesSidebar(): void {
+    if (this.currentView === 'settings') return;
+    const sidebarLeft = document.getElementById('sidebarLibrary');
+    const sidebarRight = document.getElementById('sidebarInspector');
+    const sidebarColors = document.getElementById('sidebarColors');
+    const sidebarVariables = document.getElementById('sidebarVariables');
+    const resizerLeft = document.getElementById('resizerLeft');
+    const btnActivityBlocks = document.getElementById('btnActivityBlocks');
+    const btnActivityInspector = document.getElementById('btnActivityInspector');
+    const btnActivityColors = document.getElementById('btnActivityColors');
+    const btnActivityVariables = document.getElementById('btnActivityVariables');
+
+    sidebarVariables?.classList.remove('collapsed');
+    btnActivityVariables?.classList.add('active');
+
+    sidebarLeft?.classList.add('collapsed');
+    btnActivityBlocks?.classList.remove('active');
+
+    sidebarRight?.classList.add('collapsed');
+    btnActivityInspector?.classList.remove('active');
+
+    sidebarColors?.classList.add('collapsed');
+    btnActivityColors?.classList.remove('active');
+
+    this.variablesManager.renderVariablesSidebar();
     if (resizerLeft) resizerLeft.style.display = 'block';
   }
 
@@ -728,12 +832,14 @@ class VisualEditorApp {
     const sidebarLeft = document.getElementById('sidebarLibrary');
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
+    const sidebarVariables = document.getElementById('sidebarVariables');
 
     const isLeftOpen = sidebarLeft && !sidebarLeft.classList.contains('collapsed');
     const isRightOpen = sidebarRight && !sidebarRight.classList.contains('collapsed');
     const isColorsOpen = sidebarColors && !sidebarColors.classList.contains('collapsed');
+    const isVariablesOpen = sidebarVariables && !sidebarVariables.classList.contains('collapsed');
 
-    if (!isLeftOpen && !isRightOpen && !isColorsOpen) {
+    if (!isLeftOpen && !isRightOpen && !isColorsOpen && !isVariablesOpen) {
       this.openBlocksSidebar();
     }
   }
@@ -743,6 +849,7 @@ class VisualEditorApp {
     chrome.storage.local.get([
       'floating_buttons_layout_settings',
       'studio_preferences',
+      'visual_studio_preferences',
       'mcp_settings',
       'web_automations'
     ], (stored) => {
@@ -752,13 +859,14 @@ class VisualEditorApp {
         maxColumns: 3,
         maxRows: 5,
       };
-      const studio = stored.studio_preferences || {
+      const studio = stored.visual_studio_preferences || stored.studio_preferences || {
         autoSave: 'always',
         edgeType: 'bezier',
         showMinimap: true,
         snapToGrid: true,
         multiSelectMode: 'both',
         areaSelectMode: 'both',
+        disableSidebarEditing: false,
       };
       const mcp = stored.mcp_settings || {
         enabled: false,
@@ -787,6 +895,7 @@ class VisualEditorApp {
       setSelect('settingsDefaultEdgeType', studio.edgeType);
       setCheck('settingsShowMinimapDefault', studio.showMinimap);
       setCheck('settingsSnapToGridDefault', studio.snapToGrid);
+      setCheck('settingsDisableSidebarEditing', studio.disableSidebarEditing);
 
       setSelect('settingsMultiSelectMode', studio.multiSelectMode || 'both');
       setSelect('settingsAreaSelectMode', studio.areaSelectMode || 'both');
@@ -825,9 +934,11 @@ class VisualEditorApp {
         snapToGrid: getCheck('settingsSnapToGridDefault'),
         multiSelectMode: (getVal('settingsMultiSelectMode') as any) || 'both',
         areaSelectMode: (getVal('settingsAreaSelectMode') as any) || 'both',
+        disableSidebarEditing: Boolean(getCheck('settingsDisableSidebarEditing')),
       };
 
       this.canvasManager.updateSelectionSettings(studio.multiSelectMode, studio.areaSelectMode);
+      this.inspectorManager.setDisableSidebarEditing(studio.disableSidebarEditing);
 
       const mcp = {
         enabled: getCheck('settingsMcpEnabled'),
@@ -838,6 +949,7 @@ class VisualEditorApp {
         chrome.storage.local.set({
           floating_buttons_layout_settings: layout,
           studio_preferences: studio,
+          visual_studio_preferences: studio,
           mcp_settings: mcp,
         }, () => {
           showToast('Configurações salvas com sucesso!', 'success');

@@ -75,8 +75,8 @@ export class CodeSyntaxHighlighter {
       // 5. Unidades e Números
       text = text.replace(/\b(\d+(?:px|em|rem|%|vh|vw|s|ms|deg)?)\b/g, (m) => saveToken(`<span class="tok-num">${m}</span>`));
 
-    } else if (lang === 'html') {
-      // 1. Comentários HTML
+    } else if (lang === 'html' || lang === 'svg') {
+      // 1. Comentários HTML / SVG
       text = text.replace(/(<!--[\s\S]*?-->)/g, (match) => {
         return saveToken(`<span class="tok-com">${this.escapeHtml(match)}</span>`);
       });

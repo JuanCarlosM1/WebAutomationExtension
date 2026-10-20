@@ -634,16 +634,35 @@ export class StartPropertiesRenderer {
         });
         iconContentDiv.appendChild(emojiInput);
       } else if (fb.iconType === 'svg') {
-        const svgInput = document.createElement('textarea');
-        svgInput.value = fb.svgIcon || '<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>';
-        svgInput.placeholder = '<svg viewBox="0 0 24 24" ...>...</svg>';
-        svgInput.rows = 3;
-        svgInput.style.cssText = 'width: 100%; padding: 5px 8px; font-size: 11px; font-family: monospace; background: #172033; color: white; border: 1px solid #243049; border-radius: 4px; resize: vertical;';
-        svgInput.addEventListener('input', (e: any) => {
-          fb.svgIcon = e.target.value;
-          ctx.onNodeDataChanged?.();
-        });
-        iconContentDiv.appendChild(svgInput);
+        const defaultSvg = '<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>';
+        const currentSvg = fb.svgIcon || defaultSvg;
+
+        // Container com pré-visualização ao vivo do ícone SVG
+        const previewContainer = document.createElement('div');
+        previewContainer.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 6px 10px; background: #0b0f19; border: 1px solid #1e293b; border-radius: 6px;';
+        previewContainer.innerHTML = `
+          <div id="svgIconLivePreview" style="width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; color: #38bdf8;">
+            ${currentSvg}
+          </div>
+          <span style="font-size: 11px; color: #94a3b8;">Pré-visualização do Ícone SVG</span>
+        `;
+        iconContentDiv.appendChild(previewContainer);
+
+        InspectorInputHelpers.addCodeEditorInput(
+          iconContentDiv,
+          'Código SVG do Ícone',
+          'svg',
+          currentSvg,
+          (val) => {
+            fb.svgIcon = val;
+            const previewEl = previewContainer.querySelector('#svgIconLivePreview');
+            if (previewEl) previewEl.innerHTML = val || '';
+            ctx.onNodeDataChanged?.();
+          },
+          ctx.onNodeDataChanged,
+          ctx.showToast,
+          '160px'
+        );
       } else if (fb.iconType === 'image') {
         const uploadContainer = document.createElement('div');
         uploadContainer.style.cssText = 'display: flex; flex-direction: column; gap: 6px;';

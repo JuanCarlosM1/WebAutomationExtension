@@ -482,8 +482,9 @@ body {
   background: #0d131f;
   border: 1px solid #3b82f6;
   border-radius: 14px;
-  width: 92%;
-  max-width: 920px;
+  width: 95%;
+  max-width: 1200px;
+  height: 88vh;
   max-height: 88vh;
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(59, 130, 246, 0.25);
   display: flex;
@@ -494,7 +495,7 @@ body {
 }
 
 .node-expand-header {
-  padding: 16px 20px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--border-subtle);
   background: #111827;
   display: flex;
@@ -503,14 +504,37 @@ body {
 }
 
 .node-expand-body {
-  padding: 24px;
-  overflow-y: auto;
+  padding: 0;
+  overflow: hidden;
   flex: 1;
+  background: #0b0f19;
+  display: flex;
+  flex-direction: row;
+}
+
+.node-expand-explorer-pane {
+  width: 380px;
+  min-width: 320px;
+  max-width: 440px;
+  background: #080c14;
+  border-right: 1px solid #1e293b;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.node-expand-form-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
   background: #0b0f19;
 }
 
-.node-expand-body .node-form {
-  max-width: 840px;
+.node-expand-form-pane .node-form {
+  max-width: 760px;
   margin: 0 auto;
 }
 
@@ -846,15 +870,34 @@ body {
   pointer-events: auto;
 }
 
-.edges-svg-layer path {
+.edges-svg-layer g.edge-group {
+  cursor: pointer;
+}
+
+.edges-svg-layer path.edge-visual-line {
   cursor: pointer;
   pointer-events: stroke;
   transition: stroke-width 0.15s ease, filter 0.15s ease;
 }
 
-.edges-svg-layer path:hover {
+.edges-svg-layer g.edge-group:hover path.edge-visual-line,
+.edges-svg-layer path.edge-visual-line:hover {
   stroke-width: 4.5px !important;
   filter: drop-shadow(0 0 4px currentColor);
+}
+
+.edges-svg-layer path.edge-hitbox {
+  pointer-events: stroke !important;
+  cursor: pointer !important;
+  stroke: transparent !important;
+  stroke-width: 22px !important;
+  transition: none !important;
+}
+
+.edges-svg-layer path.edge-hitbox:hover {
+  stroke: transparent !important;
+  stroke-width: 22px !important;
+  filter: none !important;
 }
 
 .edges-svg-layer path.selected-edge {
@@ -1213,7 +1256,8 @@ body {
 
 .sidebar-inspector,
 .sidebar-library,
-.sidebar-colors {
+.sidebar-colors,
+.sidebar-variables {
   width: 320px;
   min-width: 240px;
   max-width: 600px;
@@ -1232,11 +1276,13 @@ body {
 #viewStudio:has(#viewSettings.active) .sidebar-library,
 #viewStudio:has(#viewSettings.active) .sidebar-inspector,
 #viewStudio:has(#viewSettings.active) .sidebar-colors,
+#viewStudio:has(#viewSettings.active) .sidebar-variables,
 #viewStudio:has(#viewSettings.active) .sidebar-resizer,
 .workspace.settings-mode .activity-bar-left,
 .workspace.settings-mode .sidebar-library,
 .workspace.settings-mode .sidebar-inspector,
 .workspace.settings-mode .sidebar-colors,
+.workspace.settings-mode .sidebar-variables,
 .workspace.settings-mode .sidebar-resizer {
   display: none !important;
   pointer-events: none !important;
@@ -1248,7 +1294,8 @@ body {
 /* Transição rápida e suave apenas quando NÃO estiver arrastando manualmente */
 body:not(.is-resizing-active) .sidebar-inspector,
 body:not(.is-resizing-active) .sidebar-library,
-body:not(.is-resizing-active) .sidebar-colors {
+body:not(.is-resizing-active) .sidebar-colors,
+body:not(.is-resizing-active) .sidebar-variables {
   transition: width 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -1266,7 +1313,8 @@ body.is-resizing-active * {
 /* Estado Recolhido / Escondido das Barras Laterais */
 .sidebar-library.collapsed,
 .sidebar-inspector.collapsed,
-.sidebar-colors.collapsed {
+.sidebar-colors.collapsed,
+.sidebar-variables.collapsed {
   width: 0 !important;
   min-width: 0 !important;
   padding: 0 !important;
@@ -1836,9 +1884,9 @@ select {
   background: #090d16;
   border: 1px solid #6366f1;
   border-radius: 12px;
-  width: 90%;
-  max-width: 980px;
-  height: 82vh;
+  width: 95vw;
+  max-width: 1240px;
+  height: 86vh;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.9), 0 0 50px rgba(99, 102, 241, 0.35);
   display: flex;
   flex-direction: column;
@@ -2159,4 +2207,13 @@ body.canvas-marquee-active * {
     transform: translate(-50%, 0);
   }
 }
+
+/* Drag & Drop Feedback para Inputs e Textareas no Editor */
+.drag-over-input {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35) !important;
+  background-color: rgba(59, 130, 246, 0.08) !important;
+  transition: all 0.15s ease;
+}
+
 

@@ -15,15 +15,25 @@ import {
   AutocompleteItem,
   JS_BUILTIN_SUGGESTIONS,
   CSS_SUGGESTIONS,
-  HTML_SUGGESTIONS
+  HTML_SUGGESTIONS,
+  SVG_SUGGESTIONS,
 } from './codeEditorSuggestions';
 import { CodeSyntaxValidator } from './codeSyntaxValidator';
 import { CodeFormatter } from './codeFormatter';
 import { CodeSyntaxHighlighter } from './codeSyntaxHighlighter';
 import { ColorPickerManager } from './colorPickerManager';
+import { N8NDataExplorer } from './n8nDataExplorer';
+import { AnyAutomationNode, WebAutomationGraph } from '../../../../BibliotecaDeDev/src/types/schema';
 
 export type { CodeLanguage, AutocompleteItem };
-export { JS_BUILTIN_SUGGESTIONS, CSS_SUGGESTIONS, HTML_SUGGESTIONS };
+export { JS_BUILTIN_SUGGESTIONS, CSS_SUGGESTIONS, HTML_SUGGESTIONS, SVG_SUGGESTIONS };
+
+export interface CodeModalExplorerContext {
+  graph: WebAutomationGraph;
+  currentNode?: AnyAutomationNode;
+  runtimeNodeOutputs?: Record<string, any>;
+  onShowToast?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void;
+}
 
 export interface CodeEditorOptions {
   language: CodeLanguage;
@@ -71,6 +81,12 @@ export class CodeEditorComponent {
   private btnUndo?: HTMLButtonElement;
   private btnRedo?: HTMLButtonElement;
 
+  private static defaultContextResolver?: () => CodeModalExplorerContext | null;
+
+  public static setDefaultContextResolver(resolver: () => CodeModalExplorerContext | null): void {
+    CodeEditorComponent.defaultContextResolver = resolver;
+  }
+
   constructor(options: CodeEditorOptions) {
     this.currentLanguage = options.language;
     this.currentValue = options.value || '';
@@ -92,6 +108,23 @@ export class CodeEditorComponent {
     return this.container;
   }
 
+  public getTextarea(): HTMLTextAreaElement {
+    return this.textarea;
+  }
+
+  public insertTextAtCursor(text: string): void {
+    const start = this.textarea.selectionStart ?? this.textarea.value.length;
+    const end = this.textarea.selectionEnd ?? this.textarea.value.length;
+    const val = this.textarea.value;
+    this.textarea.value = val.slice(0, start) + text + val.slice(end);
+    this.textarea.selectionStart = this.textarea.selectionEnd = start + text.length;
+    this.currentValue = this.textarea.value;
+    this.recordHistory(this.currentValue, this.textarea.selectionStart, this.textarea.selectionEnd);
+    this.updateEditor();
+    this.onChange(this.currentValue);
+    this.textarea.focus();
+  }
+
   public setValue(val: string): void {
     this.currentValue = val;
     this.textarea.value = val;
@@ -104,13 +137,14 @@ export class CodeEditorComponent {
   }
 
   /**
-   * Abre um editor de código em um modal centralizado e proeminente sobre o canvas
+   * Abre um editor de código em um modal centralizado com acesso direto a dados anteriores e variáveis
    */
   public static openCodeModal(params: {
     title: string;
     language: CodeLanguage;
     value: string;
     onSave: (newValue: string) => void;
+    explorerContext?: CodeModalExplorerContext;
   }): void {
     const existing = document.getElementById('codeEditorCanvasModalBackdrop');
     existing?.remove();
@@ -119,16 +153,21 @@ export class CodeEditorComponent {
     backdrop.id = 'codeEditorCanvasModalBackdrop';
     backdrop.className = 'flow-modal-backdrop';
 
+    const context = params.explorerContext || CodeEditorComponent.defaultContextResolver?.();
+    const hasContext = !!(context && context.graph);
+
     const langName = {
       javascript: 'JavaScript',
       html: 'HTML',
       css: 'CSS',
+      svg: 'SVG',
     }[params.language];
 
     const langColor = {
       javascript: '#f59e0b',
       html: '#ec4899',
       css: '#06b6d4',
+      svg: '#10b981',
     }[params.language];
 
     backdrop.innerHTML = `
@@ -143,25 +182,35 @@ export class CodeEditorComponent {
                 <h3 style="font-size: 15px; font-weight: 700; color: #f8fafc; margin: 0;">${params.title}</h3>
                 <span style="font-size: 10px; background: #1e293b; color: ${langColor}; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase;">${langName}</span>
               </div>
-              <p style="font-size: 11px; color: #94a3b8; margin: 2px 0 0 0;">Editor de código sobre o canvas com destaque e auto-indentação</p>
+              <p style="font-size: 11px; color: #94a3b8; margin: 2px 0 0 0;">Editor de código com suporte completo a variáveis e dados de blocos anteriores</p>
             </div>
           </div>
-          <button id="btnCloseCodeModal" class="sidebar-toggle-btn" title="Fechar editor (Esc)">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          </button>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            ${hasContext ? `
+              <button type="button" id="btnToggleCodeExplorer" style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.4); color: #c7d2fe; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;" title="Alternar painel de dados anteriores e variáveis">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                <span id="txtToggleCodeExplorer">Ocultar Dados & Variáveis</span>
+              </button>
+            ` : ''}
+            <button id="btnCloseCodeModal" class="sidebar-toggle-btn" title="Fechar editor (Esc)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
         </div>
-        <div class="code-modal-body">
-          <!-- Editor montado aqui -->
+        <div class="code-modal-body" style="display: flex; flex-direction: row; height: 100%; overflow: hidden; position: relative;">
+          ${hasContext ? `
+            <div id="codeModalExplorerPane" style="width: 340px; min-width: 270px; max-width: 440px; border-right: 1px solid #1e293b; background: #0c121e; display: flex; flex-direction: column; overflow: hidden; padding: 12px;"></div>
+          ` : ''}
+          <div id="codeModalEditorPane" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;"></div>
         </div>
         <div class="code-modal-footer">
-          <span style="font-size: 11px; color: #64748b; margin-right: auto;">Pressione <strong>Tab</strong> para indentar • <strong>Esc</strong> para fechar</span>
+          <span style="font-size: 11px; color: #64748b; margin-right: auto;">Pressione <strong>Tab</strong> para indentar • Arraste ou clique em <strong>+ Inserir</strong> para adicionar tags • <strong>Esc</strong> para fechar</span>
           <button id="btnCancelCodeModal" class="btn btn-secondary">Cancelar</button>
           <button id="btnSaveCodeModal" class="btn btn-primary">Salvar Código</button>
         </div>
       </div>
     `;
 
-    const bodyEl = backdrop.querySelector('.code-modal-body') as HTMLElement;
     let localValue = params.value || '';
 
     const editor = new CodeEditorComponent({
@@ -174,7 +223,35 @@ export class CodeEditorComponent {
       },
     });
 
-    bodyEl.appendChild(editor.getElement());
+    const editorPane = (backdrop.querySelector('#codeModalEditorPane') || backdrop.querySelector('.code-modal-body')) as HTMLElement;
+    editorPane.appendChild(editor.getElement());
+
+    if (hasContext && context) {
+      const explorerPane = backdrop.querySelector('#codeModalExplorerPane') as HTMLElement;
+      if (explorerPane) {
+        N8NDataExplorer.render(explorerPane, {
+          graph: context.graph,
+          currentNode: context.currentNode || { id: '__current__', type: 'inject_javascript', data: {} } as any,
+          runtimeNodeOutputs: context.runtimeNodeOutputs || {},
+          onInsertExpression: (expr) => {
+            editor.insertTextAtCursor(expr);
+            context.onShowToast?.(`Inserido no código: ${expr}`, 'success');
+          },
+          onShowToast: (msg, type) => context.onShowToast?.(msg, type),
+        });
+
+        const btnToggle = backdrop.querySelector('#btnToggleCodeExplorer') as HTMLButtonElement;
+        const txtToggle = backdrop.querySelector('#txtToggleCodeExplorer') as HTMLElement;
+        let isVisible = true;
+        btnToggle?.addEventListener('click', () => {
+          isVisible = !isVisible;
+          explorerPane.style.display = isVisible ? 'flex' : 'none';
+          if (txtToggle) txtToggle.textContent = isVisible ? 'Ocultar Dados & Variáveis' : 'Mostrar Dados & Variáveis';
+          btnToggle.style.background = isVisible ? 'rgba(99, 102, 241, 0.15)' : 'rgba(30, 41, 59, 0.6)';
+          btnToggle.style.borderColor = isVisible ? 'rgba(99, 102, 241, 0.4)' : '#334155';
+        });
+      }
+    }
 
     const close = () => {
       window.removeEventListener('keydown', onKeyDown);
@@ -212,6 +289,7 @@ export class CodeEditorComponent {
       javascript: 'JavaScript',
       html: 'HTML',
       css: 'CSS',
+      svg: 'SVG',
     }[this.currentLanguage];
 
     this.container.innerHTML = `
@@ -330,6 +408,26 @@ export class CodeEditorComponent {
     });
 
     this.textarea.addEventListener('focus', () => this.updateCursorStatus());
+
+    // Suporte a arrastar e soltar variáveis/dados anteriores diretamente no editor
+    this.textarea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      this.textarea.classList.add('drag-over-input');
+    });
+
+    this.textarea.addEventListener('dragleave', () => {
+      this.textarea.classList.remove('drag-over-input');
+    });
+
+    this.textarea.addEventListener('drop', (e) => {
+      const expr = e.dataTransfer?.getData('application/x-n8n-tag') || e.dataTransfer?.getData('text/plain');
+      this.textarea.classList.remove('drag-over-input');
+      if (expr) {
+        e.preventDefault();
+        this.insertTextAtCursor(expr);
+      }
+    });
 
     // Botões de ação da Toolbar
     this.btnUndo?.addEventListener('click', () => {
@@ -772,6 +870,8 @@ export class CodeEditorComponent {
       return cssCombined;
     } else if (lang === 'html') {
       return HTML_SUGGESTIONS;
+    } else if (lang === 'svg') {
+      return SVG_SUGGESTIONS;
     }
     return [];
   }

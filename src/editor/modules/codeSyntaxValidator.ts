@@ -16,7 +16,7 @@ export class CodeSyntaxValidator {
 
     if (lang === 'javascript') {
       return this.validateJavaScript(code);
-    } else if (lang === 'html') {
+    } else if (lang === 'html' || lang === 'svg') {
       return this.validateHTML(code);
     } else if (lang === 'css') {
       return this.validateCSS(code);

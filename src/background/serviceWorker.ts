@@ -436,6 +436,8 @@ class ExtensionController {
           success: true,
           status: ctx.status,
           variables: ctx.state.getAll(),
+          nodeOutputs: ctx.state.getNodeOutputs(),
+          readonlyVariables: ctx.state.getReadonlyVariables(),
           logs: ctx.logs,
         };
       }
@@ -514,8 +516,15 @@ class ExtensionController {
         this.broadcastToUI({ type: 'NODE_START', automationId: autoId, nodeId: node.id });
       },
       onNodeComplete: (node, result) => {
-        onProgress?.('node_complete', { automationId: autoId, nodeId: node.id, result });
-        this.broadcastToUI({ type: 'NODE_COMPLETE', automationId: autoId, nodeId: node.id, result });
+        onProgress?.('node_complete', { automationId: autoId, nodeId: node.id, nodeLabel: (node.data as any)?.label, result });
+        this.broadcastToUI({
+          type: 'NODE_COMPLETE',
+          automationId: autoId,
+          nodeId: node.id,
+          nodeLabel: (node.data as any)?.label,
+          result,
+          nodeOutputs: ctx.state.getNodeOutputs(),
+        });
       },
       onNodeError: (node, error) => {
         onProgress?.('node_error', { automationId: autoId, nodeId: node.id, error: error.message });
