@@ -124,54 +124,6 @@ class ExtensionController {
           });
         }
       }
-
-      // 3. Atualizar imediatamente os botões flutuantes em todas as abas abertas que correspondam às URLs
-      if (chrome.tabs) {
-        chrome.tabs.query({}, (tabs) => {
-          for (const tab of tabs) {
-            if (!tab.id || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://')) continue;
-
-            // Envia sinal para o content script reavaliar e limpar/reaplicar botões flutuantes de acordo com o storage atualizado
-            chrome.tabs.sendMessage(tab.id, {
-              action: 'SYNC_FLOATING_TRIGGER_BUTTONS',
-            }).catch(() => {});
-
-            for (const auto of automations) {
-              const startNode = auto.nodes.find((n) => n.type === 'start');
-              if (!startNode) continue;
-              const triggers = getActiveTriggers(startNode.data as any);
-              const floatingTriggers = triggers.filter((t) => t.type === 'floating_button');
-
-              for (const trig of floatingTriggers) {
-                const patterns = trig.urlPatterns || (trig.urlPattern ? [trig.urlPattern] : ['*://*/*']);
-                const floatingPatterns = patterns.length > 0 ? patterns : ['*://*/*'];
-                const matches = floatingPatterns.some((p) => {
-                  if (!p || p === '*://*/*' || p === 'https://*/*' || p === '<all_urls>' || p === '.*') return true;
-                  try {
-                    const escaped = p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-                    return new RegExp(`^${escaped}$`, 'i').test(tab.url!);
-                  } catch {
-                    return false;
-                  }
-                });
-
-                if (matches && tab.id) {
-                  chrome.tabs.sendMessage(tab.id, {
-                    action: 'INJECT_FLOATING_TRIGGER_BUTTON',
-                    payload: {
-                      automationId: auto.metadata.id,
-                      automationName: auto.metadata.name,
-                      buttonConfig: trig.floatingButton,
-                    },
-                  }).catch(() => {
-                    // Silenciar caso a aba ainda não possua o script carregado
-                  });
-                }
-              }
-            }
-          }
-        });
-      }
     } catch (err) {
       console.warn('[WebAutomations] Erro ao sincronizar gatilhos:', err);
     }
@@ -296,32 +248,6 @@ class ExtensionController {
               this.executeAutomation(auto, driver);
             }
           }
-
-          // Gatilho por Botão Flutuante Personalizado
-          if (trigger.type === 'floating_button') {
-            const floatingPatterns = patterns.length > 0 ? patterns : ['*://*/*'];
-            const matches = floatingPatterns.some((p) => {
-              if (!p || p === '*://*/*' || p === 'https://*/*' || p === '<all_urls>' || p === '.*') return true;
-              try {
-                const escaped = p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-                return new RegExp(`^${escaped}$`, 'i').test(details.url);
-              } catch {
-                return false;
-              }
-            });
-            if (matches && details.tabId) {
-              chrome.tabs.sendMessage(details.tabId, {
-                action: 'INJECT_FLOATING_TRIGGER_BUTTON',
-                payload: {
-                  automationId: auto.metadata.id,
-                  automationName: auto.metadata.name,
-                  buttonConfig: trigger.floatingButton,
-                },
-              }).catch(() => {
-                // Silenciar se content script ainda não estiver ativo
-              });
-            }
-          }
         }
       }
     });
@@ -429,17 +355,73 @@ class ExtensionController {
     switch (action) {
       case 'EXECUTE_AUTOMATION': {
         const graph: WebAutomationGraph = payload.graph;
-        const targetTabId = payload.tabId || sender.tab?.id;
+        let targetTabId = payload.tabId;
+        const testPageUrl = chrome.runtime.getURL('test.html');
+
+        // Se solicitado abrir aba em branco para testes/debug da extensão
+        if (payload.openBlankTab) {
+          const tab = await chrome.tabs.create({
+            url: testPageUrl,
+            active: payload.active !== undefined ? payload.active : true,
+          });
+          targetTabId = tab.id;
+        } else if (!targetTabId) {
+          // Se não especificado tabId, evita utilizar abas internas de estúdio (editor/analyzer/settings)
+          const isStudioOrSettings = sender.tab?.url?.includes('editor.html') ||
+                                     sender.tab?.url?.includes('settings.html') ||
+                                     sender.tab?.url?.includes('analyzer.html');
+          if (sender.tab?.id && !isStudioOrSettings) {
+            targetTabId = sender.tab.id;
+          }
+        }
+
         const driver = new ChromeBrowserDriver(targetTabId);
         const ctx = await this.executeAutomation(graph, driver);
+        const nodeOutputs = (ctx as any).nodeOutputs ||
+          (typeof (ctx.state as any)?.getNodeOutputs === 'function' ? (ctx.state as any).getNodeOutputs() : {});
+        const readonlyVariables = typeof (ctx.state as any)?.getReadonlyVariables === 'function'
+          ? (ctx.state as any).getReadonlyVariables()
+          : (graph.variableDefinitions || []).filter((v: any) => v.readonly).map((v: any) => v.name);
+
         return {
-          success: true,
+          success: ctx.status !== 'failed' && ctx.status !== 'cancelled',
+          tabId: targetTabId,
           status: ctx.status,
           variables: ctx.state.getAll(),
-          nodeOutputs: ctx.state.getNodeOutputs(),
-          readonlyVariables: ctx.state.getReadonlyVariables(),
+          nodeOutputs,
+          readonlyVariables,
           logs: ctx.logs,
+          error: ctx.status === 'failed' ? (ctx.logs.filter((l) => l.level === 'error').pop()?.message || 'Falha durante a execução') : undefined,
         };
+      }
+
+      case 'OPEN_BLANK_TAB': {
+        const testPageUrl = chrome.runtime.getURL('test.html');
+        const tab = await chrome.tabs.create({
+          url: testPageUrl,
+          active: payload?.active !== false,
+        });
+        return {
+          success: true,
+          tabId: tab.id,
+          url: tab.url,
+        };
+      }
+
+      case 'FOCUS_TAB': {
+        if (payload?.tabId) {
+          try {
+            await chrome.tabs.update(payload.tabId, { active: true });
+            const tab = await chrome.tabs.get(payload.tabId);
+            if (tab?.windowId && chrome.windows?.update) {
+              await chrome.windows.update(tab.windowId, { focused: true });
+            }
+            return { success: true };
+          } catch (err: any) {
+            return { success: false, error: err.message };
+          }
+        }
+        return { success: false, error: 'tabId não especificado' };
       }
 
       case 'CANCEL_AUTOMATION': {
@@ -505,6 +487,7 @@ class ExtensionController {
     onProgress?: (event: string, data: any) => void
   ): Promise<ExecutionContext> {
     const autoId = graph.metadata.id;
+    const nodeOutputs: Record<string, any> = {};
 
     const ctx = await this.engine.runGraph(graph, driver, {
       onStatusChange: (status) => {
@@ -516,6 +499,8 @@ class ExtensionController {
         this.broadcastToUI({ type: 'NODE_START', automationId: autoId, nodeId: node.id });
       },
       onNodeComplete: (node, result) => {
+        const out = result?.output !== undefined ? result.output : (result?.data !== undefined ? result.data : result);
+        nodeOutputs[node.id] = out;
         onProgress?.('node_complete', { automationId: autoId, nodeId: node.id, nodeLabel: (node.data as any)?.label, result });
         this.broadcastToUI({
           type: 'NODE_COMPLETE',
@@ -523,7 +508,7 @@ class ExtensionController {
           nodeId: node.id,
           nodeLabel: (node.data as any)?.label,
           result,
-          nodeOutputs: ctx.state.getNodeOutputs(),
+          nodeOutputs: { ...nodeOutputs },
         });
       },
       onNodeError: (node, error) => {
@@ -535,6 +520,16 @@ class ExtensionController {
         this.broadcastToUI({ type: 'LOG', automationId: autoId, log });
       },
     });
+
+    (ctx as any).nodeOutputs = nodeOutputs;
+    if (ctx.state) {
+      (ctx.state as any).getNodeOutputs = () => nodeOutputs;
+      (ctx.state as any).getReadonlyVariables = () => {
+        return (graph.variableDefinitions || [])
+          .filter((v: any) => v.readonly)
+          .map((v: any) => v.name);
+      };
+    }
 
     this.activeContexts.set(autoId, ctx);
     return ctx;

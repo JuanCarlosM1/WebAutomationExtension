@@ -25,6 +25,7 @@ class VisualEditorApp {
   private currentView: 'dashboard' | 'studio' | 'settings' = 'dashboard';
   private graph: WebAutomationGraph;
   private selectedNodeId?: string;
+  private lastDebugTabId?: number;
 
   private colorPickerManager: ColorPickerManager;
   private inspectorManager: InspectorManager;
@@ -115,6 +116,7 @@ class VisualEditorApp {
       onOpenFlow: (flow) => this.openStudio(flow),
       onViewChange: (view) => this.switchView(view),
       onRunFlowDirectly: (flow) => this.runFlowDirectly(flow),
+      onDebugFlowDirectly: (flow) => this.runFlowDirectly(flow, true),
       showToast: (msg, type) => showToast(msg, type),
     });
 
@@ -168,8 +170,10 @@ class VisualEditorApp {
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
     const sidebarVariables = document.getElementById('sidebarVariables');
+    const sidebarDebug = document.getElementById('sidebarDebug');
     const resizerLeft = document.getElementById('resizerLeft');
     const btnActivityVariables = document.getElementById('btnActivityVariables');
+    const btnActivityDebug = document.getElementById('btnActivityDebug');
 
     if (view === 'settings') {
       mainWorkspace?.classList.add('settings-mode');
@@ -183,10 +187,12 @@ class VisualEditorApp {
       if (sidebarRight) sidebarRight.style.display = 'none';
       if (sidebarColors) sidebarColors.style.display = 'none';
       if (sidebarVariables) sidebarVariables.style.display = 'none';
+      if (sidebarDebug) sidebarDebug.style.display = 'none';
       if (resizerLeft) resizerLeft.style.display = 'none';
 
       btnActivitySettings?.classList.add('active');
       btnActivityVariables?.classList.remove('active');
+      btnActivityDebug?.classList.remove('active');
       this.loadSettingsUI();
       window.history.replaceState({}, '', `${window.location.pathname}?tab=settings`);
     } else {
@@ -201,6 +207,7 @@ class VisualEditorApp {
       if (sidebarRight) sidebarRight.style.display = '';
       if (sidebarColors) sidebarColors.style.display = '';
       if (sidebarVariables) sidebarVariables.style.display = '';
+      if (sidebarDebug) sidebarDebug.style.display = '';
       if (resizerLeft) resizerLeft.style.display = '';
 
       btnActivitySettings?.classList.remove('active');
@@ -321,14 +328,15 @@ class VisualEditorApp {
     showToast(`Automação "${this.graph.metadata.name}" salva com sucesso!`, 'success');
   }
 
-  private async runFlowDirectly(graph: WebAutomationGraph): Promise<void> {
-    showToast(`Executando "${graph.metadata?.name || 'Automação'}" no navegador...`, 'info');
+  private async runFlowDirectly(graph: WebAutomationGraph, inBlankTab: boolean = false): Promise<void> {
+    const isDebug = inBlankTab;
+    showToast(`${isDebug ? 'Depurando' : 'Executando'} "${graph.metadata?.name || 'Automação'}" ${isDebug ? 'em aba em branco' : 'no navegador'}...`, 'info');
 
     if (chrome.runtime?.sendMessage) {
       chrome.runtime.sendMessage(
         {
           action: 'EXECUTE_AUTOMATION',
-          payload: { graph },
+          payload: { graph, openBlankTab: inBlankTab },
         },
         (res) => {
           if (res?.success) {
@@ -343,18 +351,126 @@ class VisualEditorApp {
     }
   }
 
-  private async runCurrentFlow(): Promise<void> {
-    showToast('Iniciando execução do fluxo...', 'info');
+  public async openBlankTabForDebug(andRun: boolean = false): Promise<number | undefined> {
+    this.openDebugSidebar();
+
+    try {
+      let tabId: number | undefined;
+      const testPageUrl = chrome.runtime?.getURL ? chrome.runtime.getURL('test.html') : 'test.html';
+      if (chrome.tabs?.create) {
+        const tab = await chrome.tabs.create({ url: testPageUrl, active: true });
+        tabId = tab.id;
+      } else if (chrome.runtime?.sendMessage) {
+        const res = await new Promise<any>((resolve) => {
+          chrome.runtime.sendMessage({ action: 'OPEN_BLANK_TAB', payload: { active: true } }, resolve);
+        });
+        tabId = res?.tabId;
+      }
+
+      if (tabId) {
+        this.lastDebugTabId = tabId;
+        this.updateDebugTabUI(tabId);
+        this.appendLog({
+          timestamp: Date.now(),
+          level: 'info',
+          message: `Página de testes da extensão aberta com sucesso! (ID da Aba: ${tabId}, test.html)`,
+        });
+        showToast(`Aba de testes aberta (ID: ${tabId})`, 'success');
+
+        if (andRun) {
+          await this.runCurrentFlow(true, tabId);
+        }
+        return tabId;
+      }
+    } catch (err: any) {
+      this.appendLog({ timestamp: Date.now(), level: 'error', message: `Erro ao abrir página de testes: ${err.message}` });
+      showToast(`Erro ao abrir página de testes: ${err.message}`, 'error');
+    }
+    return undefined;
+  }
+
+  public updateDebugTabUI(tabId?: number): void {
+    const badge = document.getElementById('debugTabBadge');
+    const btnFocus = document.getElementById('btnDebugFocusTab');
+    if (tabId) {
+      if (badge) {
+        badge.textContent = `Aba #${tabId} (test.html)`;
+        badge.style.background = 'rgba(56, 189, 248, 0.2)';
+        badge.style.color = '#38bdf8';
+        badge.style.borderColor = '#0284c7';
+      }
+      if (btnFocus) btnFocus.style.display = 'inline-flex';
+    } else {
+      if (badge) {
+        badge.textContent = 'Nenhuma';
+        badge.style.background = 'rgba(100, 116, 139, 0.2)';
+        badge.style.color = '#94a3b8';
+        badge.style.borderColor = '#334155';
+      }
+      if (btnFocus) btnFocus.style.display = 'none';
+    }
+  }
+
+  public async focusDebugTab(): Promise<void> {
+    if (!this.lastDebugTabId) {
+      showToast('Nenhuma aba de debug registrada no momento.', 'warning');
+      return;
+    }
+    if (chrome.tabs?.update) {
+      try {
+        await chrome.tabs.update(this.lastDebugTabId, { active: true });
+        const tab = await chrome.tabs.get(this.lastDebugTabId);
+        if (tab?.windowId && chrome.windows?.update) {
+          await chrome.windows.update(tab.windowId, { focused: true });
+        }
+      } catch {
+        showToast('A aba de teste foi fechada ou não existe mais.', 'error');
+        this.lastDebugTabId = undefined;
+        this.updateDebugTabUI();
+      }
+    } else if (chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ action: 'FOCUS_TAB', payload: { tabId: this.lastDebugTabId } });
+    }
+  }
+
+  public clearLogs(): void {
+    const consoleEl = document.getElementById('logsConsole');
+    if (consoleEl) {
+      consoleEl.innerHTML = '<div class="log-entry debug">[SISTEMA] Console limpo.</div>';
+    }
+  }
+
+  private async runCurrentFlow(inBlankTab: boolean = false, explicitTabId?: number): Promise<void> {
+    const isDebug = inBlankTab || explicitTabId !== undefined;
+    if (isDebug) {
+      this.openDebugSidebar();
+      this.appendLog({
+        timestamp: Date.now(),
+        level: 'info',
+        message: `Iniciando depuração em aba em branco do fluxo "${this.cleanFlowName(this.graph.metadata?.name)}"...`,
+      });
+      showToast('Iniciando depuração em aba em branco...', 'info');
+    } else {
+      showToast('Iniciando execução do fluxo...', 'info');
+    }
 
     if (chrome.runtime?.sendMessage) {
       chrome.runtime.sendMessage(
         {
           action: 'EXECUTE_AUTOMATION',
-          payload: { graph: this.graph },
+          payload: {
+            graph: this.graph,
+            openBlankTab: inBlankTab && !explicitTabId,
+            tabId: explicitTabId || (inBlankTab ? this.lastDebugTabId : undefined),
+          },
         },
         (res) => {
+          if (res?.tabId) {
+            this.lastDebugTabId = res.tabId;
+            this.updateDebugTabUI(res.tabId);
+          }
           if (res?.success) {
-            this.appendLog({ timestamp: Date.now(), level: 'info', message: 'Execução concluída com sucesso!' });
+            this.appendLog({ timestamp: Date.now(), level: 'info', message: 'Execução/Depuração concluída com sucesso!' });
             this.renderVariables(res.variables || {});
             if (res.nodeOutputs) {
               this.inspectorManager.setRuntimeNodeOutputs(res.nodeOutputs);
@@ -598,15 +714,18 @@ class VisualEditorApp {
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
     const sidebarVariables = document.getElementById('sidebarVariables');
+    const sidebarDebug = document.getElementById('sidebarDebug');
     const resizerLeft = document.getElementById('resizerLeft');
     const btnToggleLeft = document.getElementById('btnToggleSidebarLeft');
     const btnToggleRight = document.getElementById('btnToggleSidebarRight');
     const btnToggleColors = document.getElementById('btnToggleSidebarColors');
     const btnToggleVariables = document.getElementById('btnToggleSidebarVariables');
+    const btnToggleDebug = document.getElementById('btnToggleSidebarDebug');
     const btnActivityBlocks = document.getElementById('btnActivityBlocks');
     const btnActivityInspector = document.getElementById('btnActivityInspector');
     const btnActivityColors = document.getElementById('btnActivityColors');
     const btnActivityVariables = document.getElementById('btnActivityVariables');
+    const btnActivityDebug = document.getElementById('btnActivityDebug');
     const btnActivityAnalyzer = document.getElementById('btnActivityAnalyzer');
     const btnActivitySettings = document.getElementById('btnActivitySettings');
     const btnDashboardSettings = document.getElementById('btnDashboardSettings');
@@ -631,14 +750,24 @@ class VisualEditorApp {
     btnActivityInspector?.addEventListener('click', () => this.openInspectorSidebar());
     btnActivityColors?.addEventListener('click', () => this.openColorsSidebar());
     btnActivityVariables?.addEventListener('click', () => this.openVariablesSidebar());
+    btnActivityDebug?.addEventListener('click', () => this.openDebugSidebar());
     btnToggleLeft?.addEventListener('click', () => this.openBlocksSidebar());
     btnToggleColors?.addEventListener('click', () => this.openBlocksSidebar());
     btnToggleVariables?.addEventListener('click', () => this.openBlocksSidebar());
+    btnToggleDebug?.addEventListener('click', () => this.openBlocksSidebar());
     btnToggleRight?.addEventListener('click', () => {
       this.selectedNodeId = undefined;
       document.querySelectorAll('.graph-node').forEach((el) => el.classList.remove('selected'));
       this.openBlocksSidebar();
     });
+
+    // Ações de Depuração e Aba em Branco
+    document.getElementById('btnDebugFlow')?.addEventListener('click', () => this.runCurrentFlow(true));
+    document.getElementById('btnOpenBlankTabHeader')?.addEventListener('click', () => this.openBlankTabForDebug(false));
+    document.getElementById('btnDebugOpenBlankTab')?.addEventListener('click', () => this.openBlankTabForDebug(false));
+    document.getElementById('btnDebugRunInTab')?.addEventListener('click', () => this.runCurrentFlow(true, this.lastDebugTabId));
+    document.getElementById('btnDebugFocusTab')?.addEventListener('click', () => this.focusDebugTab());
+    document.getElementById('btnClearLogs')?.addEventListener('click', () => this.clearLogs());
 
     document.getElementById('btnExpandInspectorModal')?.addEventListener('click', () => {
       if (this.selectedNodeId) {
@@ -662,6 +791,8 @@ class VisualEditorApp {
           ? sidebarVariables
           : (sidebarRight && !sidebarRight.classList.contains('collapsed'))
           ? sidebarRight
+          : (sidebarDebug && !sidebarDebug.classList.contains('collapsed'))
+          ? sidebarDebug
           : sidebarLeft;
 
         const onMouseMove = (moveEvent: MouseEvent) => {
@@ -675,6 +806,7 @@ class VisualEditorApp {
           if (sidebarRight) sidebarRight.style.width = wStr;
           if (sidebarColors) sidebarColors.style.width = wStr;
           if (sidebarVariables) sidebarVariables.style.width = wStr;
+          if (sidebarDebug) sidebarDebug.style.width = wStr;
         };
 
         const onMouseUp = (upEvent: MouseEvent) => {
@@ -722,11 +854,13 @@ class VisualEditorApp {
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
     const sidebarVariables = document.getElementById('sidebarVariables');
+    const sidebarDebug = document.getElementById('sidebarDebug');
     const resizerLeft = document.getElementById('resizerLeft');
     const btnActivityBlocks = document.getElementById('btnActivityBlocks');
     const btnActivityInspector = document.getElementById('btnActivityInspector');
     const btnActivityColors = document.getElementById('btnActivityColors');
     const btnActivityVariables = document.getElementById('btnActivityVariables');
+    const btnActivityDebug = document.getElementById('btnActivityDebug');
 
     sidebarLeft?.classList.remove('collapsed');
     btnActivityBlocks?.classList.add('active');
@@ -740,6 +874,9 @@ class VisualEditorApp {
     sidebarVariables?.classList.add('collapsed');
     btnActivityVariables?.classList.remove('active');
 
+    sidebarDebug?.classList.add('collapsed');
+    btnActivityDebug?.classList.remove('active');
+
     if (resizerLeft) resizerLeft.style.display = 'block';
   }
 
@@ -749,11 +886,13 @@ class VisualEditorApp {
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
     const sidebarVariables = document.getElementById('sidebarVariables');
+    const sidebarDebug = document.getElementById('sidebarDebug');
     const resizerLeft = document.getElementById('resizerLeft');
     const btnActivityBlocks = document.getElementById('btnActivityBlocks');
     const btnActivityInspector = document.getElementById('btnActivityInspector');
     const btnActivityColors = document.getElementById('btnActivityColors');
     const btnActivityVariables = document.getElementById('btnActivityVariables');
+    const btnActivityDebug = document.getElementById('btnActivityDebug');
 
     sidebarRight?.classList.remove('collapsed');
     btnActivityInspector?.classList.add('active');
@@ -767,6 +906,9 @@ class VisualEditorApp {
     sidebarVariables?.classList.add('collapsed');
     btnActivityVariables?.classList.remove('active');
 
+    sidebarDebug?.classList.add('collapsed');
+    btnActivityDebug?.classList.remove('active');
+
     this.inspectorManager.renderInspector();
     if (resizerLeft) resizerLeft.style.display = 'block';
   }
@@ -777,11 +919,13 @@ class VisualEditorApp {
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
     const sidebarVariables = document.getElementById('sidebarVariables');
+    const sidebarDebug = document.getElementById('sidebarDebug');
     const resizerLeft = document.getElementById('resizerLeft');
     const btnActivityBlocks = document.getElementById('btnActivityBlocks');
     const btnActivityInspector = document.getElementById('btnActivityInspector');
     const btnActivityColors = document.getElementById('btnActivityColors');
     const btnActivityVariables = document.getElementById('btnActivityVariables');
+    const btnActivityDebug = document.getElementById('btnActivityDebug');
 
     sidebarColors?.classList.remove('collapsed');
     btnActivityColors?.classList.add('active');
@@ -795,6 +939,9 @@ class VisualEditorApp {
     sidebarVariables?.classList.add('collapsed');
     btnActivityVariables?.classList.remove('active');
 
+    sidebarDebug?.classList.add('collapsed');
+    btnActivityDebug?.classList.remove('active');
+
     this.colorPickerManager.renderColorsSidebar();
     if (resizerLeft) resizerLeft.style.display = 'block';
   }
@@ -805,11 +952,13 @@ class VisualEditorApp {
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
     const sidebarVariables = document.getElementById('sidebarVariables');
+    const sidebarDebug = document.getElementById('sidebarDebug');
     const resizerLeft = document.getElementById('resizerLeft');
     const btnActivityBlocks = document.getElementById('btnActivityBlocks');
     const btnActivityInspector = document.getElementById('btnActivityInspector');
     const btnActivityColors = document.getElementById('btnActivityColors');
     const btnActivityVariables = document.getElementById('btnActivityVariables');
+    const btnActivityDebug = document.getElementById('btnActivityDebug');
 
     sidebarVariables?.classList.remove('collapsed');
     btnActivityVariables?.classList.add('active');
@@ -823,7 +972,42 @@ class VisualEditorApp {
     sidebarColors?.classList.add('collapsed');
     btnActivityColors?.classList.remove('active');
 
+    sidebarDebug?.classList.add('collapsed');
+    btnActivityDebug?.classList.remove('active');
+
     this.variablesManager.renderVariablesSidebar();
+    if (resizerLeft) resizerLeft.style.display = 'block';
+  }
+
+  public openDebugSidebar(): void {
+    if (this.currentView === 'settings') return;
+    const sidebarLeft = document.getElementById('sidebarLibrary');
+    const sidebarRight = document.getElementById('sidebarInspector');
+    const sidebarColors = document.getElementById('sidebarColors');
+    const sidebarVariables = document.getElementById('sidebarVariables');
+    const sidebarDebug = document.getElementById('sidebarDebug');
+    const resizerLeft = document.getElementById('resizerLeft');
+    const btnActivityBlocks = document.getElementById('btnActivityBlocks');
+    const btnActivityInspector = document.getElementById('btnActivityInspector');
+    const btnActivityColors = document.getElementById('btnActivityColors');
+    const btnActivityVariables = document.getElementById('btnActivityVariables');
+    const btnActivityDebug = document.getElementById('btnActivityDebug');
+
+    sidebarDebug?.classList.remove('collapsed');
+    btnActivityDebug?.classList.add('active');
+
+    sidebarLeft?.classList.add('collapsed');
+    btnActivityBlocks?.classList.remove('active');
+
+    sidebarRight?.classList.add('collapsed');
+    btnActivityInspector?.classList.remove('active');
+
+    sidebarColors?.classList.add('collapsed');
+    btnActivityColors?.classList.remove('active');
+
+    sidebarVariables?.classList.add('collapsed');
+    btnActivityVariables?.classList.remove('active');
+
     if (resizerLeft) resizerLeft.style.display = 'block';
   }
 
@@ -833,13 +1017,15 @@ class VisualEditorApp {
     const sidebarRight = document.getElementById('sidebarInspector');
     const sidebarColors = document.getElementById('sidebarColors');
     const sidebarVariables = document.getElementById('sidebarVariables');
+    const sidebarDebug = document.getElementById('sidebarDebug');
 
     const isLeftOpen = sidebarLeft && !sidebarLeft.classList.contains('collapsed');
     const isRightOpen = sidebarRight && !sidebarRight.classList.contains('collapsed');
     const isColorsOpen = sidebarColors && !sidebarColors.classList.contains('collapsed');
     const isVariablesOpen = sidebarVariables && !sidebarVariables.classList.contains('collapsed');
+    const isDebugOpen = sidebarDebug && !sidebarDebug.classList.contains('collapsed');
 
-    if (!isLeftOpen && !isRightOpen && !isColorsOpen && !isVariablesOpen) {
+    if (!isLeftOpen && !isRightOpen && !isColorsOpen && !isVariablesOpen && !isDebugOpen) {
       this.openBlocksSidebar();
     }
   }

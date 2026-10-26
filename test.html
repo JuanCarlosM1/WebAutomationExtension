@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Página de Testes & Debug - WebAutomations</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="src/editor/editor.css" />
+  <style>
+    body {
+      background-color: #0b0f19;
+      color: #f8fafc;
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow-y: auto;
+      min-height: 100vh;
+    }
+
+    .test-page-container {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 24px 20px 80px;
+    }
+
+    .test-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 18px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .test-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .test-icon-badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(99, 102, 241, 0.25));
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #38bdf8;
+    }
+
+    .test-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin: 0;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .test-desc {
+      font-size: 12px;
+      color: #94a3b8;
+      margin: 3px 0 0;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .test-controls-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .test-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .test-card {
+      background: #111827;
+      border: 1px solid #1f293d;
+      border-radius: 12px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    .test-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 10px;
+      margin-bottom: 4px;
+    }
+
+    .test-card-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .test-card-badge {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      background: #1e293b;
+      color: #94a3b8;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .test-field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .test-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #cbd5e1;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .test-label code {
+      font-family: var(--font-mono);
+      color: #818cf8;
+      font-size: 10px;
+    }
+
+    .test-input, .test-select, .test-textarea {
+      background: #090d16;
+      border: 1px solid #243049;
+      border-radius: 6px;
+      padding: 7px 10px;
+      color: #f8fafc;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      transition: all 0.15s ease;
+    }
+
+    .test-input:focus, .test-select:focus, .test-textarea:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+
+    .test-textarea {
+      min-height: 56px;
+      resize: vertical;
+    }
+
+    .test-data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      text-align: left;
+    }
+
+    .test-data-table th, .test-data-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    .test-data-table th {
+      color: #94a3b8;
+      font-weight: 600;
+      background: #090d16;
+    }
+
+    .test-data-table tr:hover {
+      background: rgba(99, 102, 241, 0.05);
+    }
+
+    .test-scroll-box {
+      max-height: 120px;
+      overflow-y: auto;
+      border: 1px solid #243049;
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: #090d16;
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    .test-log-terminal {
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      max-height: 180px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .test-log-entry {
+      line-height: 1.4;
+      word-break: break-all;
+    }
+    .test-log-entry .time { color: #64748b; }
+    .test-log-entry .action { font-weight: 700; }
+    .test-log-entry.info { color: #38bdf8; }
+    .test-log-entry.success { color: #34d399; }
+    .test-log-entry.warn { color: #fbbf24; }
+
+    .blank-mode-overlay {
+      display: none;
+      min-height: 400px;
+      border: 2px dashed #1e293b;
+      border-radius: 12px;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+      color: #64748b;
+      text-align: center;
+      padding: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-page-container">
+    <!-- Header da Página de Teste -->
+    <header class="test-header">
+      <div class="test-brand">
+        <div class="test-icon-badge">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </div>
+        <div>
+          <h1 class="test-title">
+            Página de Testes de Automação
+            <span class="status-pill">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981;"></span>
+              contentDriver Ativo
+            </span>
+          </h1>
+          <p class="test-desc">Ambiente de teste oficial da extensão para desenvolvimento e validação de blocos e fluxos.</p>
+        </div>
+      </div>
+
+      <div class="test-controls-bar">
+        <button id="btnToggleBlankMode" class="btn btn-secondary" style="font-size: 11px; padding: 7px 12px;">Modo Totalmente em Branco</button>
+        <button id="btnCreateDelayedElement" class="btn btn-secondary" style="font-size: 11px; padding: 7px 12px;" title="Cria um elemento no DOM após 3 segundos (para testar espera)">Criar Elemento (+3s)</button>
+        <button id="btnClearInputs" class="btn btn-secondary" style="font-size: 11px; padding: 7px 12px;">Limpar Campos</button>
+        <button id="btnOpenStudio" class="btn btn-primary" style="font-size: 11px; padding: 7px 12px;">Abrir Estúdio</button>
+      </div>
+    </header>
+
+    <!-- Overlay quando em Modo Totalmente em Branco -->
+    <div id="blankModeWatermark" class="blank-mode-overlay">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+      <div>
+        <h3 style="margin: 0; color: #94a3b8; font-size: 16px;">Modo Página em Branco Limpa</h3>
+        <p style="margin: 4px 0 0; font-size: 12px;">O DOM está vazio e pronto para a automação injetar código, navegar ou manipular elementos livremente.</p>
+      </div>
+    </div>
+
+    <!-- Grid de Elementos de Teste (Inputs, Botões, Dados, Scroll) -->
+    <div class="test-grid" id="testElementsContainer">
+      <!-- 1. Card Formulários e Inputs -->
+      <section class="test-card" id="cardInputs">
+        <div class="test-card-header">
+          <h2 class="test-card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6" y2="8"/><line x1="10" y1="8" x2="10" y2="8"/></svg>
+            Campos de Formulário
+          </h2>
+          <span class="test-card-badge">type_input</span>
+        </div>
+
+        <form id="testForm" onsubmit="return false;" style="display: flex; flex-direction: column; gap: 10px;">
+          <div class="test-field-group">
+            <label class="test-label" for="inputName">Nome Completo <code>#inputName</code></label>
+            <input type="text" id="inputName" name="name" class="test-input" placeholder="Digite seu nome..." />
+          </div>
+
+          <div class="test-field-group">
+            <label class="test-label" for="inputEmail">Email <code>#inputEmail</code></label>
+            <input type="email" id="inputEmail" name="email" class="test-input" placeholder="usuario@exemplo.com" />
+          </div>
+
+          <div class="test-field-group">
+            <label class="test-label" for="inputAge">Quantidade / Número <code>#inputAge</code></label>
+            <input type="number" id="inputAge" name="age" class="test-input" value="1" min="1" max="100" />
+          </div>
+
+          <div class="test-field-group">
+            <label class="test-label" for="selectCategory">Categoria <code>#selectCategory</code></label>
+            <select id="selectCategory" name="category" class="test-select">
+              <option value="tecnologia">Tecnologia</option>
+              <option value="automacao">Automação Web</option>
+              <option value="desenvolvimento">Desenvolvimento</option>
+            </select>
+          </div>
+
+          <div class="test-field-group">
+            <label class="test-label" for="textareaNotes">Observações <code>#textareaNotes</code></label>
+            <textarea id="textareaNotes" name="notes" class="test-textarea" placeholder="Texto livre para teste de digitação..."></textarea>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 16px; margin-top: 4px;">
+            <label style="font-size: 11px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="checkbox" id="checkTerms" name="terms" style="accent-color: #6366f1;" />
+              Aceitar Termos <code>#checkTerms</code>
+            </label>
+            <label style="font-size: 11px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="checkbox" id="checkNotify" name="notify" style="accent-color: #6366f1;" />
+              Notificações <code>#checkNotify</code>
+            </label>
+          </div>
+        </form>
+      </section>
+
+      <!-- 2. Card Ações de Clique e Botões -->
+      <section class="test-card" id="cardButtons">
+        <div class="test-card-header">
+          <h2 class="test-card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M15 15l5 5"/><circle cx="9" cy="9" r="7"/></svg>
+            Ações de Clique
+          </h2>
+          <span class="test-card-badge">click_element</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <button id="btnTestSimple" class="btn btn-primary" style="font-size: 11px; padding: 9px 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Clique Simples (#btnTestSimple)
+          </button>
+
+          <button id="btnTestDouble" class="btn btn-secondary" style="font-size: 11px; padding: 9px 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="3"/></svg>
+            Duplo Clique (#btnTestDouble)
+          </button>
+
+          <button id="btnTestRight" class="btn btn-secondary" style="font-size: 11px; padding: 9px 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/></svg>
+            Clique Direito (#btnTestRight)
+          </button>
+
+          <button id="btnTestSubmit" class="btn btn-secondary" style="font-size: 11px; padding: 9px 12px; display: flex; align-items: center; justify-content: center; gap: 6px; border-color: #059669; color: #34d399;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            Submeter Formulário (#btnTestSubmit)
+          </button>
+
+          <div id="clickFeedback" style="padding: 8px 10px; background: #090d16; border: 1px solid #1e293b; border-radius: 6px; font-size: 11px; color: #94a3b8; font-family: var(--font-mono);">
+            Nenhum botão clicado ainda.
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Card Espera Dinâmica e Verificação -->
+      <section class="test-card" id="cardDynamic">
+        <div class="test-card-header">
+          <h2 class="test-card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Espera & Existência
+          </h2>
+          <span class="test-card-badge">wait_for_element</span>
+        </div>
+
+        <p style="font-size: 11px; color: #94a3b8; margin: 0 0 6px;">
+          Teste blocos de <code>wait_for_element</code> e <code>if_element_exists</code> disparando elementos com atraso programado.
+        </p>
+
+        <div id="dynamicElementSlot" style="min-height: 48px; display: flex; align-items: center; justify-content: center; background: #090d16; border: 1px dashed #243049; border-radius: 8px; padding: 10px;">
+          <span style="font-size: 11px; color: #64748b;">Slot vazio. Clique em "Criar Elemento (+3s)" no topo.</span>
+        </div>
+
+        <div style="margin-top: 8px;">
+          <div class="test-label" style="margin-bottom: 4px;">Elemento com classe alvo:</div>
+          <div id="staticTargetItem" class="wa-target-box" data-wa-role="target" style="padding: 8px 10px; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; font-size: 11px; color: #a5b4fc;">
+            <code>.wa-target-box</code> | <code>[data-wa-role="target"]</code>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Card Extração de Dados e Tabelas -->
+      <section class="test-card" id="cardData" style="grid-column: 1 / -1;">
+        <div class="test-card-header">
+          <h2 class="test-card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            Tabela de Dados (Extração)
+          </h2>
+          <span class="test-card-badge">extract_data</span>
+        </div>
+
+        <div style="overflow-x: auto;">
+          <table class="test-data-table" id="testTableUsers">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nome</th>
+                <th>Cargo</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr id="row-user-1">
+                <td>#101</td>
+                <td class="user-name">Carlos Oliveira</td>
+                <td class="user-role">Engenheiro QA</td>
+                <td class="user-email">carlos.qa@teste.local</td>
+                <td><span style="color: #34d399; font-weight: 600;">Ativo</span></td>
+                <td class="user-price">R$ 1.500,00</td>
+              </tr>
+              <tr id="row-user-2">
+                <td>#102</td>
+                <td class="user-name">Mariana Souza</td>
+                <td class="user-role">Desenvolvedora Web</td>
+                <td class="user-email">mariana.dev@teste.local</td>
+                <td><span style="color: #34d399; font-weight: 600;">Ativo</span></td>
+                <td class="user-price">R$ 3.200,00</td>
+              </tr>
+              <tr id="row-user-3">
+                <td>#103</td>
+                <td class="user-name">Rodrigo Lima</td>
+                <td class="user-role">DevOps Architect</td>
+                <td class="user-email">rodrigo.ops@teste.local</td>
+                <td><span style="color: #fbbf24; font-weight: 600;">Pendente</span></td>
+                <td class="user-price">R$ 4.800,00</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 5. Card Rolagem de Página (Scroll) -->
+      <section class="test-card" id="cardScroll">
+        <div class="test-card-header">
+          <h2 class="test-card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+            Rolagem (Scroll)
+          </h2>
+          <span class="test-card-badge">scroll</span>
+        </div>
+
+        <p style="font-size: 11px; color: #94a3b8; margin: 0 0 6px;">
+          Container com rolagem interna para testar rolar até elemento ou final.
+        </p>
+
+        <div class="test-scroll-box" id="testScrollContainer">
+          <p>Item 1 - Início do container de rolagem</p>
+          <p>Item 2 - Parágrafo intermediário</p>
+          <p>Item 3 - Texto explicativo sobre automação</p>
+          <p>Item 4 - Rolando para encontrar o alvo</p>
+          <p>Item 5 - Quase chegando ao alvo</p>
+          <div id="testScrollTarget" style="padding: 6px; background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; border-radius: 4px; color: #d8b4fe; font-weight: 700; text-align: center;">
+            🎯 Alvo do Scroll (#testScrollTarget)
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Card Console de Eventos DOM da Página -->
+      <section class="test-card" id="cardLogs">
+        <div class="test-card-header">
+          <h2 class="test-card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            Eventos DOM da Página (Tempo Real)
+          </h2>
+          <button id="btnClearTestLogs" class="btn-xs" style="background: #1e293b; border: 1px solid #334155; color: #94a3b8; padding: 2px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;">Limpar</button>
+        </div>
+
+        <div class="test-log-terminal" id="eventLogsContainer">
+          <!-- Logs de cliques, digitação e foco injetados via JavaScript -->
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Content Driver da Extensão injetado diretamente na página de teste -->
+  <script src="dist/contentDriver.js"></script>
+  <!-- Lógica da interface de testes -->
+  <script type="module" src="dist/testApp.js"></script>
+</body>
+</html>

@@ -98,6 +98,26 @@
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             Exportar
           </button>
+          <button id="btnOpenBlankTabHeader" class="btn btn-secondary" title="Abrir página de testes da extensão (test.html)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            <span>Página de Testes</span>
+          </button>
+          <button id="btnDebugFlow" class="btn btn-secondary" title="Depurar na Página de Testes da Extensão (test.html)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m8 2 1.88 1.88"></path>
+              <path d="M14.12 3.88 16 2"></path>
+              <path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"></path>
+              <path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"></path>
+              <path d="M12 20v-9"></path>
+              <path d="M6.53 9C4.6 8.8 3 7.1 3 5"></path>
+              <path d="M6 13H2"></path>
+              <path d="M3 21c0-2.1 1.7-3.9 3.8-4"></path>
+              <path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"></path>
+              <path d="M22 13h-4"></path>
+              <path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"></path>
+            </svg>
+            <span>Depurar (Aba em Branco)</span>
+          </button>
           <button id="btnRunFlow" class="btn btn-primary" title="Executar este fluxo no navegador">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             Executar Fluxo
@@ -139,6 +159,22 @@
               <line x1="7" y1="16" x2="13" y2="16"></line>
             </svg>
             <span class="activity-tooltip">Variáveis do Fluxo</span>
+          </button>
+          <button id="btnActivityDebug" class="activity-btn" title="Depuração e Console (Aba de Testes & Logs)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m8 2 1.88 1.88"></path>
+              <path d="M14.12 3.88 16 2"></path>
+              <path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"></path>
+              <path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"></path>
+              <path d="M12 20v-9"></path>
+              <path d="M6.53 9C4.6 8.8 3 7.1 3 5"></path>
+              <path d="M6 13H2"></path>
+              <path d="M3 21c0-2.1 1.7-3.9 3.8-4"></path>
+              <path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"></path>
+              <path d="M22 13h-4"></path>
+              <path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"></path>
+            </svg>
+            <span class="activity-tooltip">Debug & Console</span>
           </button>
           <button id="btnActivityAnalyzer" class="activity-btn" title="Analisador de Elementos HTML (Menu Compacto na Página)">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -209,6 +245,80 @@
           </div>
           <div class="variables-sidebar-content" id="variablesSidebarContent" style="padding: 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 12px;">
             <!-- Painel gerenciado pelo VariablesManager -->
+          </div>
+        </aside>
+
+        <!-- Left Sidebar: Debug & Console (Depuração com Aba em Branco) -->
+        <aside class="sidebar-debug collapsed" id="sidebarDebug">
+          <div class="sidebar-header">
+            <div>
+              <h3>Depuração & Console</h3>
+              <p>Ambiente de teste com aba em branco</p>
+            </div>
+            <button id="btnToggleSidebarDebug" class="sidebar-toggle-btn" title="Fechar Depuração">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+
+          <div class="debug-sidebar-content" style="padding: 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 14px;">
+            <!-- Painel da Aba de Teste em Branco -->
+            <div class="debug-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 14px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <span style="font-size: 12px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+                  Página de Testes (test.html)
+                </span>
+                <span id="debugTabBadge" class="flow-badge" style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid #334155; font-size: 10px; padding: 2px 6px;">Nenhuma</span>
+              </div>
+              <p style="font-size: 11px; color: #94a3b8; margin: 0 0 12px; line-height: 1.4;">
+                Página em branco e isolada da extensão (<code>test.html</code>) contendo o <code>contentDriver</code> ativo para testar e validar os blocos de automação sem interferir em sites reais.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; gap: 8px;">
+                  <button id="btnDebugOpenBlankTab" class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px 10px; display: flex; align-items: center; justify-content: center; gap: 6px;" title="Abrir a página de testes da extensão">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                    Abrir Página de Teste
+                  </button>
+                  <button id="btnDebugFocusTab" class="btn btn-secondary" style="font-size: 11px; padding: 8px 10px; display: none;" title="Focar na aba aberta">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Focar
+                  </button>
+                </div>
+                <button id="btnDebugRunInTab" class="btn btn-primary" style="width: 100%; font-size: 11px; padding: 8px 10px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  Executar Fluxo na Página de Testes
+                </button>
+              </div>
+            </div>
+
+            <!-- Console de Logs em Tempo Real -->
+            <div class="debug-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; flex: 1; min-height: 240px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 12px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                  Console de Execução
+                </span>
+                <button id="btnClearLogs" class="btn-xs" style="background: #1e293b; border: 1px solid #334155; color: #94a3b8; padding: 3px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;">
+                  Limpar Logs
+                </button>
+              </div>
+              <div id="logsConsole" class="console-output" style="flex: 1; min-height: 180px; max-height: 320px; overflow-y: auto;">
+                <div class="log-entry debug">[SISTEMA] Console pronto. Clique em "Depurar (Aba em Branco)" para testar.</div>
+              </div>
+            </div>
+
+            <!-- Variáveis de Execução (JSON) -->
+            <div class="debug-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 14px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 12px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                  Estado das Variáveis
+                </span>
+              </div>
+              <div id="variablesList" style="background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; max-height: 160px; overflow-y: auto;">
+                <span style="font-size: 11px; color: #64748b; font-family: var(--font-mono);">Nenhuma variável registrada ainda.</span>
+              </div>
+            </div>
           </div>
         </aside>
 

@@ -87,6 +87,17 @@ async function build() {
   });
   console.log('✓ dist/pageScriptBridge.js gerado');
 
+  // 8. Test Page App (Página em branco para testes da extensão)
+  await esbuild.build({
+    entryPoints: ['src/test/testApp.ts'],
+    outfile: 'dist/testApp.js',
+    bundle: true,
+    format: 'esm',
+    target: 'chrome110',
+    sourcemap: true,
+  });
+  console.log('✓ dist/testApp.js gerado');
+
   console.log('🎉 Compilação da extensão concluída com sucesso!');
 }
 

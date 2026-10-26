@@ -20,13 +20,6 @@
     "service_worker": "dist/background.js",
     "type": "module"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["dist/contentDriver.js"],
-      "run_at": "document_start"
-    }
-  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "WebAutomations Control"
@@ -43,11 +36,5 @@
       },
       "description": "Disparar automação configurada"
     }
-  },
-  "web_accessible_resources": [
-    {
-      "resources": ["dist/pageScriptBridge.js"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }

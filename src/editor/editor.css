@@ -384,6 +384,27 @@ body {
   background: #283652;
 }
 
+.btn-card-debug {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-card-debug:hover {
+  background: rgba(99, 102, 241, 0.3);
+  color: #ffffff;
+  border-color: #6366f1;
+}
+
 .flow-title-edit {
   background: transparent;
   border: 1px solid transparent;
@@ -1257,7 +1278,8 @@ body {
 .sidebar-inspector,
 .sidebar-library,
 .sidebar-colors,
-.sidebar-variables {
+.sidebar-variables,
+.sidebar-debug {
   width: 320px;
   min-width: 240px;
   max-width: 600px;
@@ -1277,12 +1299,14 @@ body {
 #viewStudio:has(#viewSettings.active) .sidebar-inspector,
 #viewStudio:has(#viewSettings.active) .sidebar-colors,
 #viewStudio:has(#viewSettings.active) .sidebar-variables,
+#viewStudio:has(#viewSettings.active) .sidebar-debug,
 #viewStudio:has(#viewSettings.active) .sidebar-resizer,
 .workspace.settings-mode .activity-bar-left,
 .workspace.settings-mode .sidebar-library,
 .workspace.settings-mode .sidebar-inspector,
 .workspace.settings-mode .sidebar-colors,
 .workspace.settings-mode .sidebar-variables,
+.workspace.settings-mode .sidebar-debug,
 .workspace.settings-mode .sidebar-resizer {
   display: none !important;
   pointer-events: none !important;
@@ -1295,7 +1319,8 @@ body {
 body:not(.is-resizing-active) .sidebar-inspector,
 body:not(.is-resizing-active) .sidebar-library,
 body:not(.is-resizing-active) .sidebar-colors,
-body:not(.is-resizing-active) .sidebar-variables {
+body:not(.is-resizing-active) .sidebar-variables,
+body:not(.is-resizing-active) .sidebar-debug {
   transition: width 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -1314,7 +1339,8 @@ body.is-resizing-active * {
 .sidebar-library.collapsed,
 .sidebar-inspector.collapsed,
 .sidebar-colors.collapsed,
-.sidebar-variables.collapsed {
+.sidebar-variables.collapsed,
+.sidebar-debug.collapsed {
   width: 0 !important;
   min-width: 0 !important;
   padding: 0 !important;

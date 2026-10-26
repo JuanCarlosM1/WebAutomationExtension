@@ -113,6 +113,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  document.getElementById('btnOpenBlankTabPopup')?.addEventListener('click', () => {
+    const testPageUrl = chrome.runtime?.getURL ? chrome.runtime.getURL('test.html') : 'test.html';
+    if (chrome.tabs?.create) {
+      chrome.tabs.create({ url: testPageUrl, active: true }, () => window.close());
+    } else {
+      window.open(testPageUrl, '_blank');
+      window.close();
+    }
+  });
+
   // Consultar estado atual do MCP
   if (chrome.runtime?.sendMessage && mcpToggle && mcpStatusText) {
     chrome.runtime.sendMessage({ action: 'GET_MCP_STATUS' }, (res) => {
