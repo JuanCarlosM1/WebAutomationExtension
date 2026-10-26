@@ -39,11 +39,6 @@ export class ChromeBrowserDriver implements IBrowserDriver {
 
     if (chrome.tabs?.query) {
       const allTabs = await chrome.tabs.query({});
-      const testTab = allTabs.find((t) => t.id && t.url?.includes('test.html'));
-      if (testTab?.id) {
-        this.activeTabId = testTab.id;
-        return testTab.id;
-      }
 
       const otherActiveTabs = allTabs.filter((t) => t.id && t.active && !this.isStudioPage(t.url));
       if (otherActiveTabs.length > 0 && otherActiveTabs[0].id) {
@@ -103,7 +98,7 @@ export class ChromeBrowserDriver implements IBrowserDriver {
   }
 
   public async createTab(url?: string, active: boolean = true): Promise<{ tabId: number; url?: string }> {
-    const defaultUrl = chrome.runtime?.getURL ? chrome.runtime.getURL('test.html') : 'test.html';
+    const defaultUrl = 'about:blank';
     const tab = await chrome.tabs.create({ url: url || defaultUrl, active });
     if (tab.id && active) {
       this.activeTabId = tab.id;

@@ -65,6 +65,32 @@ export class CanvasManager {
   private statusIndicatorEl?: HTMLElement;
   private isShiftKeyDown: boolean = false;
 
+  // Modo Fantasma (Auditoria e Inspeção Somente Leitura)
+  private isReadOnly: boolean = false;
+  private ghostRunItem?: any;
+
+  public setGhostMode(enabled: boolean, runItem?: any): void {
+    this.isReadOnly = enabled;
+    this.ghostRunItem = runItem;
+    const container = document.getElementById('canvasContainer');
+    if (container) {
+      if (enabled) {
+        container.classList.add('ghost-mode');
+      } else {
+        container.classList.remove('ghost-mode');
+      }
+    }
+    this.render();
+  }
+
+  public isGhostMode(): boolean {
+    return this.isReadOnly;
+  }
+
+  public getGhostRunItem(): any {
+    return this.ghostRunItem;
+  }
+
   constructor(private callbacks: CanvasManagerCallbacks) {
     const initialId = this.callbacks.getSelectedNodeId();
     if (initialId) {
@@ -99,6 +125,7 @@ export class CanvasManager {
   }
 
   public deleteEdge(edgeId: string): void {
+    if (this.isReadOnly) return;
     const graph = this.callbacks.getGraph();
     const edgeExists = graph.edges.some((ed) => ed.id === edgeId);
     if (!edgeExists) return;
@@ -175,6 +202,7 @@ export class CanvasManager {
   }
 
   public deleteSelectedNodes(): void {
+    if (this.isReadOnly) return;
     const graph = this.callbacks.getGraph();
     const idsToDelete = Array.from(this.selectedNodeIds);
     if (idsToDelete.length === 0) return;
@@ -231,6 +259,7 @@ export class CanvasManager {
   }
 
   public addNodeToCanvas(item: any, clientX?: number, clientY?: number): void {
+    if (this.isReadOnly) return;
     const graph = this.callbacks.getGraph();
     const canvas = document.getElementById('canvasContainer')!;
     const rect = canvas.getBoundingClientRect();
@@ -367,7 +396,25 @@ export class CanvasManager {
       }
 
       const isSelected = this.selectedNodeIds.has(node.id) || selectedNodeId === node.id;
-      nodeEl.className = `graph-node ${catClass} ${isSelected ? 'selected' : ''}`;
+      let ghostStatusClass = '';
+      let ghostBadgeHtml = '';
+
+      if (this.isReadOnly && this.ghostRunItem) {
+        const snap = this.ghostRunItem.blockSnapshots?.[node.id];
+        if (snap?.status === 'completed') {
+          ghostStatusClass = 'ghost-success';
+          const dur = snap.durationMs !== undefined ? `${snap.durationMs}ms` : 'OK';
+          ghostBadgeHtml = `<span class="ghost-node-badge success">✓ ${dur}</span>`;
+        } else if (snap?.status === 'failed') {
+          ghostStatusClass = 'ghost-failed';
+          ghostBadgeHtml = `<span class="ghost-node-badge failed">✕ Falha</span>`;
+        } else {
+          ghostStatusClass = 'ghost-skipped';
+          ghostBadgeHtml = `<span class="ghost-node-badge skipped">⚪ Não Exec</span>`;
+        }
+      }
+
+      nodeEl.className = `graph-node ${catClass} ${ghostStatusClass} ${isSelected ? 'selected' : ''}`;
 
       // Botão ou prévia de código no corpo do nó se for bloco com código JS, HTML ou CSS
       let codeBadgeHtml = '';
@@ -398,6 +445,7 @@ export class CanvasManager {
       }
 
       nodeEl.innerHTML = `
+        ${ghostBadgeHtml}
         <div class="node-handle node-handle-input" data-node-id="${node.id}" data-handle-type="input" title="Conectar entrada aqui"></div>
         <div class="graph-node-header">
           <div class="graph-node-title">
@@ -408,7 +456,7 @@ export class CanvasManager {
             <button class="btn-xs expand-node-btn" data-id="${node.id}" title="Expandir configurações deste bloco em tela cheia" style="padding: 2px 5px; font-size: 10px; display: inline-flex; align-items: center; justify-content: center;">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
             </button>
-            <button class="btn-xs delete-node-btn" data-id="${node.id}" title="Excluir bloco">✕</button>
+            <button class="btn-xs delete-node-btn" data-id="${node.id}" title="Excluir bloco" style="${this.isReadOnly ? 'display: none;' : ''}">✕</button>
           </div>
         </div>
         <div class="graph-node-body">
@@ -430,6 +478,17 @@ export class CanvasManager {
         if (e.button !== 0) return;
 
         e.stopPropagation();
+
+        if (this.isReadOnly) {
+          // No modo fantasma, permite selecionar para inspecionar saídas/entradas, mas não permite arrastar
+          this.selectedNodeIds.clear();
+          this.selectedNodeIds.add(node.id);
+          this.lastSelectedNodeId = node.id;
+          this.callbacks.setSelectedNodeId(node.id);
+          this.updateSelectionVisuals();
+          this.callbacks.onNodeSelect(node.id);
+          return;
+        }
 
         // Verifica se a ação é uma alternância de multi-seleção (Ctrl ou Sticky)
         const isHoldAllowed = this.multiSelectMode === 'hold' || this.multiSelectMode === 'both';
@@ -540,6 +599,7 @@ export class CanvasManager {
       const outHandles = nodeEl.querySelectorAll('.node-handle-output, .port-handle');
       outHandles.forEach((handleEl) => {
         handleEl.addEventListener('mousedown', (e: MouseEvent) => {
+          if (this.isReadOnly) return;
           e.stopPropagation();
           const targetHandle = (handleEl as HTMLElement).dataset.handle || 'default';
 
@@ -947,11 +1007,13 @@ export class CanvasManager {
       edgeGroup.appendChild(path);
       svgEdges.appendChild(edgeGroup);
 
-      // svgControls recebe o badge de deletar (z-index 25, acima dos blocos para fácil exclusão)
-      if (svgControls) {
-        svgControls.appendChild(deleteBadge);
-      } else {
-        svgEdges.appendChild(deleteBadge);
+      // svgControls recebe o badge de deletar (apenas fora do modo fantasma)
+      if (!this.isReadOnly) {
+        if (svgControls) {
+          svgControls.appendChild(deleteBadge);
+        } else {
+          svgEdges.appendChild(deleteBadge);
+        }
       }
     });
   }

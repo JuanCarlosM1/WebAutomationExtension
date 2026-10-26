@@ -27278,6 +27278,13 @@ var InspectorManager = class {
   pendingScrollSelector;
   disableSidebarEditing = false;
   runtimeNodeOutputs = {};
+  isGhostMode = false;
+  ghostRunItem;
+  setGhostMode(enabled, runItem) {
+    this.isGhostMode = enabled;
+    this.ghostRunItem = runItem;
+    this.renderInspector();
+  }
   setDisableSidebarEditing(disabled) {
     this.disableSidebarEditing = disabled;
     this.renderInspector();
@@ -27341,6 +27348,10 @@ var InspectorManager = class {
       resizerLeft.style.display = "block";
     noSelect.classList.add("hidden");
     form.classList.remove("hidden");
+    if (this.isGhostMode) {
+      this.renderGhostInspector(node, form);
+      return;
+    }
     if (this.disableSidebarEditing) {
       form.innerHTML = `
         <div style="background: #090e18; border: 1px solid #1e293b; border-left: 3px solid #6366f1; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
@@ -28183,6 +28194,78 @@ var InspectorManager = class {
       this.callbacks.onClearSelection?.();
     });
   }
+  renderGhostInspector(node, form) {
+    const snap = this.ghostRunItem?.blockSnapshots?.[node.id];
+    const status = snap?.status || "skipped";
+    const durationText = snap?.durationMs !== void 0 ? `${snap.durationMs}ms` : "N\xE3o registrado";
+    const statusLabel = status === "completed" ? "\u2713 Conclu\xEDdo com Sucesso" : status === "failed" ? "\u2715 Falha / Erro" : "\u26AA N\xE3o Executado";
+    const statusColor = status === "completed" ? "#10b981" : status === "failed" ? "#ef4444" : "#64748b";
+    const inputDataStr = snap?.inputData !== void 0 && snap?.inputData !== null ? JSON.stringify(snap.inputData, null, 2) : "(Nenhum dado de entrada registrado para este bloco)";
+    const outputDataStr = snap?.outputData !== void 0 && snap?.outputData !== null ? JSON.stringify(snap.outputData, null, 2) : "(Nenhum dado de sa\xEDda gerado por este bloco)";
+    const configDataStr = JSON.stringify(snap?.config || node.data || {}, null, 2);
+    form.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 14px; animation: fadeIn 0.15s ease;">
+        <!-- Header Fantasma -->
+        <div style="background: #090d16; border: 1px solid #1e293b; border-left: 3px solid #818cf8; border-radius: 8px; padding: 12px 14px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: #818cf8; display: flex; align-items: center; gap: 4px;">
+              \u{1F47B} Modo Fantasma \u2022 Leitura
+            </span>
+            <span style="font-size: 10px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; border: 1px solid ${statusColor}44; padding: 2px 7px; border-radius: 4px;">
+              ${statusLabel}
+            </span>
+          </div>
+          <div style="font-size: 13px; font-weight: 700; color: #f8fafc;">${node.data?.label || node.type}</div>
+          <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">
+            Dura\xE7\xE3o: <strong style="color: #f1f5f9;">${durationText}</strong> \u2022 Tipo: <span style="font-family: monospace;">${node.type}</span>
+          </div>
+        </div>
+
+        ${snap?.error ? `
+          <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 12px;">
+            <div style="font-size: 11px; font-weight: 700; color: #fca5a5; display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+              Mensagem de Erro da Execu\xE7\xE3o
+            </div>
+            <div style="font-size: 11px; color: #fee2e2; font-family: monospace; white-space: pre-wrap; word-break: break-all;">${snap.error}</div>
+          </div>
+        ` : ""}
+
+        <!-- Entradas (Input Data) -->
+        <div style="background: #111827; border: 1px solid #1f293d; border-radius: 8px; padding: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              Entradas Recebidas (Inputs)
+            </span>
+          </div>
+          <pre style="background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; font-size: 10px; color: #cbd5e1; font-family: monospace; max-height: 140px; overflow: auto; margin: 0; white-space: pre-wrap;">${inputDataStr}</pre>
+        </div>
+
+        <!-- Sa\xEDdas (Output Data) -->
+        <div style="background: #111827; border: 1px solid #1f293d; border-radius: 8px; padding: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: #34d399; display: flex; align-items: center; gap: 6px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></svg>
+              Sa\xEDdas Geradas (Outputs)
+            </span>
+          </div>
+          <pre style="background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; font-size: 10px; color: #cbd5e1; font-family: monospace; max-height: 160px; overflow: auto; margin: 0; white-space: pre-wrap;">${outputDataStr}</pre>
+        </div>
+
+        <!-- Configura\xE7\xE3o Hist\xF3rica do Bloco (Read-Only) -->
+        <div style="background: #111827; border: 1px solid #1f293d; border-radius: 8px; padding: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: #f59e0b; display: flex; align-items: center; gap: 6px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              Configura\xE7\xE3o do Bloco na Execu\xE7\xE3o
+            </span>
+          </div>
+          <pre style="background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; font-size: 10px; color: #cbd5e1; font-family: monospace; max-height: 180px; overflow: auto; margin: 0; white-space: pre-wrap;">${configDataStr}</pre>
+        </div>
+      </div>
+    `;
+  }
 };
 
 // src/editor/modules/canvasPathUtils.ts
@@ -28622,6 +28705,28 @@ var CanvasManager = class {
   marqueeStart = { x: 0, y: 0 };
   statusIndicatorEl;
   isShiftKeyDown = false;
+  // Modo Fantasma (Auditoria e Inspeção Somente Leitura)
+  isReadOnly = false;
+  ghostRunItem;
+  setGhostMode(enabled, runItem) {
+    this.isReadOnly = enabled;
+    this.ghostRunItem = runItem;
+    const container = document.getElementById("canvasContainer");
+    if (container) {
+      if (enabled) {
+        container.classList.add("ghost-mode");
+      } else {
+        container.classList.remove("ghost-mode");
+      }
+    }
+    this.render();
+  }
+  isGhostMode() {
+    return this.isReadOnly;
+  }
+  getGhostRunItem() {
+    return this.ghostRunItem;
+  }
   getSelectedEdgeId() {
     return this.selectedEdgeId;
   }
@@ -28630,6 +28735,8 @@ var CanvasManager = class {
     this.highlightSelectedEdge();
   }
   deleteEdge(edgeId) {
+    if (this.isReadOnly)
+      return;
     const graph = this.callbacks.getGraph();
     const edgeExists = graph.edges.some((ed) => ed.id === edgeId);
     if (!edgeExists)
@@ -28698,6 +28805,8 @@ var CanvasManager = class {
     this.renderMinimap();
   }
   deleteSelectedNodes() {
+    if (this.isReadOnly)
+      return;
     const graph = this.callbacks.getGraph();
     const idsToDelete = Array.from(this.selectedNodeIds);
     if (idsToDelete.length === 0)
@@ -28744,6 +28853,8 @@ var CanvasManager = class {
     this.updateCanvasTransform();
   }
   addNodeToCanvas(item, clientX, clientY) {
+    if (this.isReadOnly)
+      return;
     const graph = this.callbacks.getGraph();
     const canvas = document.getElementById("canvasContainer");
     const rect = canvas.getBoundingClientRect();
@@ -28867,7 +28978,23 @@ var CanvasManager = class {
         }
       }
       const isSelected = this.selectedNodeIds.has(node.id) || selectedNodeId === node.id;
-      nodeEl.className = `graph-node ${catClass} ${isSelected ? "selected" : ""}`;
+      let ghostStatusClass = "";
+      let ghostBadgeHtml = "";
+      if (this.isReadOnly && this.ghostRunItem) {
+        const snap = this.ghostRunItem.blockSnapshots?.[node.id];
+        if (snap?.status === "completed") {
+          ghostStatusClass = "ghost-success";
+          const dur = snap.durationMs !== void 0 ? `${snap.durationMs}ms` : "OK";
+          ghostBadgeHtml = `<span class="ghost-node-badge success">\u2713 ${dur}</span>`;
+        } else if (snap?.status === "failed") {
+          ghostStatusClass = "ghost-failed";
+          ghostBadgeHtml = `<span class="ghost-node-badge failed">\u2715 Falha</span>`;
+        } else {
+          ghostStatusClass = "ghost-skipped";
+          ghostBadgeHtml = `<span class="ghost-node-badge skipped">\u26AA N\xE3o Exec</span>`;
+        }
+      }
+      nodeEl.className = `graph-node ${catClass} ${ghostStatusClass} ${isSelected ? "selected" : ""}`;
       let codeBadgeHtml = "";
       const hasJsRule = (rules) => Array.isArray(rules) && rules.some((r) => r.evaluationMode === "js_eval");
       const hasJsInGroups = (groups) => Array.isArray(groups) && groups.some((g) => hasJsRule(g.rules));
@@ -28891,6 +29018,7 @@ var CanvasManager = class {
         `;
       }
       nodeEl.innerHTML = `
+        ${ghostBadgeHtml}
         <div class="node-handle node-handle-input" data-node-id="${node.id}" data-handle-type="input" title="Conectar entrada aqui"></div>
         <div class="graph-node-header">
           <div class="graph-node-title">
@@ -28901,7 +29029,7 @@ var CanvasManager = class {
             <button class="btn-xs expand-node-btn" data-id="${node.id}" title="Expandir configura\xE7\xF5es deste bloco em tela cheia" style="padding: 2px 5px; font-size: 10px; display: inline-flex; align-items: center; justify-content: center;">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
             </button>
-            <button class="btn-xs delete-node-btn" data-id="${node.id}" title="Excluir bloco">\u2715</button>
+            <button class="btn-xs delete-node-btn" data-id="${node.id}" title="Excluir bloco" style="${this.isReadOnly ? "display: none;" : ""}">\u2715</button>
           </div>
         </div>
         <div class="graph-node-body">
@@ -28926,6 +29054,15 @@ var CanvasManager = class {
         if (e.button !== 0)
           return;
         e.stopPropagation();
+        if (this.isReadOnly) {
+          this.selectedNodeIds.clear();
+          this.selectedNodeIds.add(node.id);
+          this.lastSelectedNodeId = node.id;
+          this.callbacks.setSelectedNodeId(node.id);
+          this.updateSelectionVisuals();
+          this.callbacks.onNodeSelect(node.id);
+          return;
+        }
         const isHoldAllowed = this.multiSelectMode === "hold" || this.multiSelectMode === "both";
         const isToggleAllowed = this.multiSelectMode === "toggle" || this.multiSelectMode === "both";
         const isMultiSelectClick = isHoldAllowed && (e.ctrlKey || e.metaKey) || isToggleAllowed && this.isCtrlStickyActive;
@@ -29015,6 +29152,8 @@ var CanvasManager = class {
       const outHandles = nodeEl.querySelectorAll(".node-handle-output, .port-handle");
       outHandles.forEach((handleEl) => {
         handleEl.addEventListener("mousedown", (e) => {
+          if (this.isReadOnly)
+            return;
           e.stopPropagation();
           const targetHandle = handleEl.dataset.handle || "default";
           this.cancelConnection();
@@ -29339,10 +29478,12 @@ var CanvasManager = class {
       edgeGroup.appendChild(hitPath);
       edgeGroup.appendChild(path);
       svgEdges.appendChild(edgeGroup);
-      if (svgControls) {
-        svgControls.appendChild(deleteBadge);
-      } else {
-        svgEdges.appendChild(deleteBadge);
+      if (!this.isReadOnly) {
+        if (svgControls) {
+          svgControls.appendChild(deleteBadge);
+        } else {
+          svgEdges.appendChild(deleteBadge);
+        }
       }
     });
   }
@@ -30510,6 +30651,119 @@ function sanitizeGraph(graph) {
   return clone4;
 }
 
+// src/editor/modules/executionHistoryManager.ts
+var STORAGE_KEY = "web_automations_history";
+var MAX_HISTORY_ITEMS = 100;
+var ExecutionHistoryManager = class {
+  /**
+   * Obtém todo o histórico de execuções armazenado localmente
+   */
+  static async getAll() {
+    if (!chrome.storage?.local)
+      return [];
+    return new Promise((resolve) => {
+      chrome.storage.local.get(STORAGE_KEY, (res2) => {
+        const list = res2?.[STORAGE_KEY] || [];
+        list.sort((a, b) => b.timestamp - a.timestamp);
+        resolve(list);
+      });
+    });
+  }
+  /**
+   * Obtém execuções filtradas
+   */
+  static async getFiltered(filters) {
+    const all = await this.getAll();
+    return this.applyFilters(all, filters);
+  }
+  /**
+   * Aplica filtros em uma lista de execuções em memória
+   */
+  static applyFilters(items, filters) {
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1e3;
+    return items.filter((item) => {
+      if (filters.automationId && item.automationId !== filters.automationId) {
+        return false;
+      }
+      if (filters.status && filters.status !== "all") {
+        if (item.status !== filters.status)
+          return false;
+      }
+      if (filters.dateRange && filters.dateRange !== "all") {
+        if (filters.dateRange === "today") {
+          const itemDate = new Date(item.timestamp).toDateString();
+          const todayDate = (/* @__PURE__ */ new Date()).toDateString();
+          if (itemDate !== todayDate)
+            return false;
+        } else if (filters.dateRange === "last7days") {
+          if (now - item.timestamp > 7 * oneDayMs)
+            return false;
+        } else if (filters.dateRange === "last30days") {
+          if (now - item.timestamp > 30 * oneDayMs)
+            return false;
+        }
+      }
+      if (filters.query && filters.query.trim()) {
+        const q = filters.query.toLowerCase().trim();
+        const matchName = (item.automationName || "").toLowerCase().includes(q);
+        const matchError = (item.error || "").toLowerCase().includes(q);
+        const matchTrigger = (item.triggerType || "").toLowerCase().includes(q);
+        const matchTab = (item.targetTabTitle || item.targetTabUrl || "").toLowerCase().includes(q);
+        if (!matchName && !matchError && !matchTrigger && !matchTab) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+  /**
+   * Busca uma execução específica pelo seu ID único
+   */
+  static async getById(id) {
+    const all = await this.getAll();
+    return all.find((item) => item.id === id);
+  }
+  /**
+   * Salva um novo registro de execução
+   */
+  static async save(item) {
+    if (!chrome.storage?.local)
+      return;
+    const all = await this.getAll();
+    const updated = [item, ...all.filter((i) => i.id !== item.id)].slice(0, MAX_HISTORY_ITEMS);
+    await chrome.storage.local.set({ [STORAGE_KEY]: updated });
+  }
+  /**
+   * Remove uma execução pelo ID
+   */
+  static async delete(id) {
+    if (!chrome.storage?.local)
+      return;
+    const all = await this.getAll();
+    const updated = all.filter((i) => i.id !== id);
+    await chrome.storage.local.set({ [STORAGE_KEY]: updated });
+  }
+  /**
+   * Limpa todo o histórico de execuções
+   */
+  static async clearAll() {
+    if (!chrome.storage?.local)
+      return;
+    await chrome.storage.local.remove(STORAGE_KEY);
+  }
+  /**
+   * Limpa o histórico de execuções de uma automação específica
+   */
+  static async clearForAutomation(automationId) {
+    if (!chrome.storage?.local)
+      return;
+    const all = await this.getAll();
+    const updated = all.filter((i) => i.automationId !== automationId);
+    await chrome.storage.local.set({ [STORAGE_KEY]: updated });
+  }
+};
+
 // src/editor/editorApp.ts
 StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars);
 var VisualEditorApp = class {
@@ -30517,6 +30771,10 @@ var VisualEditorApp = class {
   graph;
   selectedNodeId;
   lastDebugTabId;
+  isGhostMode = false;
+  ghostHistoricalRun;
+  originalEditableGraph;
+  activeWebTabInfo;
   colorPickerManager;
   inspectorManager;
   canvasManager;
@@ -30706,10 +30964,14 @@ var VisualEditorApp = class {
         window.history.replaceState({}, "", window.location.pathname);
       }
       this.tabManager.loadFromStorage(false);
+      this.renderGlobalHistory();
     }
     this.tabManager.renderTabs();
   }
   openStudio(graph) {
+    if (this.isGhostMode) {
+      this.exitGhostMode();
+    }
     this.graph = JSON.parse(JSON.stringify(graph));
     if (this.graph.metadata?.name) {
       this.graph.metadata.name = this.cleanFlowName(this.graph.metadata.name);
@@ -30731,6 +30993,8 @@ var VisualEditorApp = class {
     }
     this.inspectorManager.renderInspector();
     this.tabManager.renderTabs();
+    this.loadScopedHistory();
+    this.detectActiveWebTab();
   }
   createNewFlow() {
     const savedList = this.tabManager.getSavedAutomations();
@@ -30766,6 +31030,10 @@ var VisualEditorApp = class {
     showToast("Novo fluxo criado!", "info");
   }
   async saveCurrentFlow() {
+    if (this.isGhostMode) {
+      showToast("Modo Fantasma \xE9 somente leitura! Modifica\xE7\xF5es n\xE3o podem ser salvas.", "warning");
+      return;
+    }
     const titleInput = document.getElementById("flowTitleInput");
     if (titleInput && titleInput.value.trim()) {
       this.graph.metadata.name = this.cleanFlowName(titleInput.value.trim());
@@ -30796,14 +31064,13 @@ var VisualEditorApp = class {
     this.inspectorManager.renderInspector();
     showToast(`Automa\xE7\xE3o "${this.graph.metadata.name}" salva com sucesso!`, "success");
   }
-  async runFlowDirectly(graph, inBlankTab = false) {
-    const isDebug = inBlankTab;
-    showToast(`${isDebug ? "Depurando" : "Executando"} "${graph.metadata?.name || "Automa\xE7\xE3o"}" ${isDebug ? "em aba em branco" : "no navegador"}...`, "info");
+  async runFlowDirectly(graph, isDebug = false) {
+    showToast(`${isDebug ? "Depurando" : "Executando"} "${graph.metadata?.name || "Automa\xE7\xE3o"}" na p\xE1gina web ativa...`, "info");
     if (chrome.runtime?.sendMessage) {
       chrome.runtime.sendMessage(
         {
           action: "EXECUTE_AUTOMATION",
-          payload: { graph, openBlankTab: inBlankTab }
+          payload: { graph, isDebug, triggerType: isDebug ? "debug" : "manual" }
         },
         (res2) => {
           if (res2?.success) {
@@ -30811,88 +31078,75 @@ var VisualEditorApp = class {
           } else if (res2?.error) {
             showToast(`Erro ao executar: ${res2.error}`, "error");
           }
+          this.loadScopedHistory();
+          this.renderGlobalHistory();
         }
       );
     } else {
       showToast("Ambiente sem suporte a runtime.sendMessage.", "error");
     }
   }
-  async openBlankTabForDebug(andRun = false) {
-    this.openDebugSidebar();
-    try {
-      let tabId;
-      const testPageUrl = chrome.runtime?.getURL ? chrome.runtime.getURL("test.html") : "test.html";
-      if (chrome.tabs?.create) {
-        const tab = await chrome.tabs.create({ url: testPageUrl, active: true });
-        tabId = tab.id;
-      } else if (chrome.runtime?.sendMessage) {
-        const res2 = await new Promise((resolve) => {
-          chrome.runtime.sendMessage({ action: "OPEN_BLANK_TAB", payload: { active: true } }, resolve);
+  async detectActiveWebTab() {
+    const badge = document.getElementById("debugTargetTabBadge");
+    const info = document.getElementById("debugTargetTabInfo");
+    const btnFocus = document.getElementById("btnFocusTargetTab");
+    if (badge)
+      badge.textContent = "Detectando...";
+    return new Promise((resolve) => {
+      if (chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ action: "GET_ACTIVE_WEB_TAB" }, (res2) => {
+          if (res2?.success && res2.tabId) {
+            this.activeWebTabInfo = {
+              tabId: res2.tabId,
+              title: res2.title || "Aba Sem T\xEDtulo",
+              url: res2.url || ""
+            };
+            this.lastDebugTabId = res2.tabId;
+            if (badge) {
+              badge.textContent = `Aba #${res2.tabId}`;
+              badge.style.background = "rgba(56, 189, 248, 0.2)";
+              badge.style.color = "#38bdf8";
+              badge.style.borderColor = "#0284c7";
+            }
+            if (info) {
+              info.innerHTML = `<strong>${res2.title || "P\xE1gina Web"}</strong><br/><span style="color: #64748b; font-size: 10px;">${res2.url || ""}</span>`;
+            }
+            if (btnFocus)
+              btnFocus.style.display = "inline-flex";
+            resolve(this.activeWebTabInfo);
+          } else {
+            this.activeWebTabInfo = void 0;
+            if (badge) {
+              badge.textContent = "Nenhuma aba ativa";
+              badge.style.background = "rgba(239, 68, 68, 0.2)";
+              badge.style.color = "#f87171";
+              badge.style.borderColor = "#dc2626";
+            }
+            if (info) {
+              info.textContent = "Abra ou clique em uma aba de p\xE1gina web para depurar.";
+            }
+            if (btnFocus)
+              btnFocus.style.display = "none";
+            resolve({});
+          }
         });
-        tabId = res2?.tabId;
+      } else {
+        if (badge)
+          badge.textContent = "Sem suporte Chrome";
+        if (info)
+          info.textContent = "Ambiente de desenvolvimento sem runtime do Chrome.";
+        resolve({});
       }
-      if (tabId) {
-        this.lastDebugTabId = tabId;
-        this.updateDebugTabUI(tabId);
-        this.appendLog({
-          timestamp: Date.now(),
-          level: "info",
-          message: `P\xE1gina de testes da extens\xE3o aberta com sucesso! (ID da Aba: ${tabId}, test.html)`
-        });
-        showToast(`Aba de testes aberta (ID: ${tabId})`, "success");
-        if (andRun) {
-          await this.runCurrentFlow(true, tabId);
-        }
-        return tabId;
-      }
-    } catch (err) {
-      this.appendLog({ timestamp: Date.now(), level: "error", message: `Erro ao abrir p\xE1gina de testes: ${err.message}` });
-      showToast(`Erro ao abrir p\xE1gina de testes: ${err.message}`, "error");
-    }
-    return void 0;
+    });
   }
-  updateDebugTabUI(tabId) {
-    const badge = document.getElementById("debugTabBadge");
-    const btnFocus = document.getElementById("btnDebugFocusTab");
-    if (tabId) {
-      if (badge) {
-        badge.textContent = `Aba #${tabId} (test.html)`;
-        badge.style.background = "rgba(56, 189, 248, 0.2)";
-        badge.style.color = "#38bdf8";
-        badge.style.borderColor = "#0284c7";
-      }
-      if (btnFocus)
-        btnFocus.style.display = "inline-flex";
-    } else {
-      if (badge) {
-        badge.textContent = "Nenhuma";
-        badge.style.background = "rgba(100, 116, 139, 0.2)";
-        badge.style.color = "#94a3b8";
-        badge.style.borderColor = "#334155";
-      }
-      if (btnFocus)
-        btnFocus.style.display = "none";
-    }
-  }
-  async focusDebugTab() {
-    if (!this.lastDebugTabId) {
-      showToast("Nenhuma aba de debug registrada no momento.", "warning");
+  async focusTargetTab() {
+    const targetId = this.activeWebTabInfo?.tabId || this.lastDebugTabId;
+    if (!targetId) {
+      showToast("Nenhuma aba web ativa detectada.", "warning");
       return;
     }
-    if (chrome.tabs?.update) {
-      try {
-        await chrome.tabs.update(this.lastDebugTabId, { active: true });
-        const tab = await chrome.tabs.get(this.lastDebugTabId);
-        if (tab?.windowId && chrome.windows?.update) {
-          await chrome.windows.update(tab.windowId, { focused: true });
-        }
-      } catch {
-        showToast("A aba de teste foi fechada ou n\xE3o existe mais.", "error");
-        this.lastDebugTabId = void 0;
-        this.updateDebugTabUI();
-      }
-    } else if (chrome.runtime?.sendMessage) {
-      chrome.runtime.sendMessage({ action: "FOCUS_TAB", payload: { tabId: this.lastDebugTabId } });
+    if (chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ action: "FOCUS_TAB", payload: { tabId: targetId } });
     }
   }
   clearLogs() {
@@ -30901,16 +31155,21 @@ var VisualEditorApp = class {
       consoleEl.innerHTML = '<div class="log-entry debug">[SISTEMA] Console limpo.</div>';
     }
   }
-  async runCurrentFlow(inBlankTab = false, explicitTabId) {
-    const isDebug = inBlankTab || explicitTabId !== void 0;
+  async runCurrentFlow(isDebug = false, explicitTabId) {
+    if (this.isGhostMode) {
+      showToast("A automa\xE7\xE3o est\xE1 em Modo Fantasma (Somente Leitura). Saia do modo fantasma para executar.", "warning");
+      return;
+    }
     if (isDebug) {
       this.openDebugSidebar();
+      await this.detectActiveWebTab();
+      const targetLabel = this.activeWebTabInfo?.title ? `na aba "${this.activeWebTabInfo.title}"` : "na aba web ativa";
       this.appendLog({
         timestamp: Date.now(),
         level: "info",
-        message: `Iniciando depura\xE7\xE3o em aba em branco do fluxo "${this.cleanFlowName(this.graph.metadata?.name)}"...`
+        message: `Iniciando depura\xE7\xE3o do fluxo "${this.cleanFlowName(this.graph.metadata?.name)}" ${targetLabel}...`
       });
-      showToast("Iniciando depura\xE7\xE3o em aba em branco...", "info");
+      showToast("Iniciando depura\xE7\xE3o na p\xE1gina ativa...", "info");
     } else {
       showToast("Iniciando execu\xE7\xE3o do fluxo...", "info");
     }
@@ -30920,17 +31179,22 @@ var VisualEditorApp = class {
           action: "EXECUTE_AUTOMATION",
           payload: {
             graph: this.graph,
-            openBlankTab: inBlankTab && !explicitTabId,
-            tabId: explicitTabId || (inBlankTab ? this.lastDebugTabId : void 0)
+            isDebug,
+            triggerType: isDebug ? "debug" : "manual",
+            tabId: explicitTabId || this.activeWebTabInfo?.tabId
           }
         },
         (res2) => {
           if (res2?.tabId) {
             this.lastDebugTabId = res2.tabId;
-            this.updateDebugTabUI(res2.tabId);
+            this.activeWebTabInfo = {
+              tabId: res2.tabId,
+              title: this.activeWebTabInfo?.title,
+              url: this.activeWebTabInfo?.url
+            };
           }
           if (res2?.success) {
-            this.appendLog({ timestamp: Date.now(), level: "info", message: "Execu\xE7\xE3o/Depura\xE7\xE3o conclu\xEDda com sucesso!" });
+            this.appendLog({ timestamp: Date.now(), level: "info", message: "Execu\xE7\xE3o conclu\xEDda com sucesso!" });
             this.renderVariables(res2.variables || {});
             if (res2.nodeOutputs) {
               this.inspectorManager.setRuntimeNodeOutputs(res2.nodeOutputs);
@@ -30944,11 +31208,300 @@ var VisualEditorApp = class {
             this.appendLog({ timestamp: Date.now(), level: "error", message: res2.error });
             showToast(`Erro na execu\xE7\xE3o: ${res2.error}`, "error");
           }
+          this.loadScopedHistory();
+          this.renderGlobalHistory();
         }
       );
     } else {
       this.appendLog({ timestamp: Date.now(), level: "warn", message: "Ambiente de desenvolvimento (API Chrome mockada)." });
     }
+  }
+  enterGhostMode(historyItem) {
+    if (!this.isGhostMode) {
+      this.originalEditableGraph = JSON.parse(JSON.stringify(this.graph));
+    }
+    this.isGhostMode = true;
+    this.ghostHistoricalRun = historyItem;
+    if (this.currentView !== "studio") {
+      this.switchView("studio");
+    }
+    this.graph = JSON.parse(JSON.stringify(historyItem.graphSnapshot));
+    this.canvasManager.setGhostMode(true, historyItem);
+    this.inspectorManager.setGhostMode(true, historyItem);
+    const banner = document.getElementById("ghostModeBanner");
+    const details = document.getElementById("ghostBannerDetails");
+    if (banner)
+      banner.style.display = "flex";
+    if (details) {
+      const execDate = new Date(historyItem.timestamp).toLocaleString();
+      const statusText = historyItem.status === "completed" ? "\u2713 Conclu\xEDdo" : historyItem.status === "failed" ? "\u2715 Falha" : "\u2298 Cancelado";
+      const statusColor = historyItem.status === "completed" ? "#34d399" : "#f87171";
+      details.innerHTML = `Fluxo: <strong style="color: #fff;">${historyItem.automationName}</strong> \u2022 Executado em: ${execDate} \u2022 Dura\xE7\xE3o: <strong>${historyItem.durationMs}ms</strong> \u2022 Status: <strong style="color: ${statusColor};">${statusText}</strong>`;
+    }
+    const titleInput = document.getElementById("flowTitleInput");
+    if (titleInput) {
+      titleInput.value = `\u{1F47B} [FANTASMA] ${this.cleanFlowName(historyItem.automationName)}`;
+      titleInput.readOnly = true;
+    }
+    this.setEditorActionsReadOnly(true);
+    if (historyItem.finalVariables) {
+      this.renderVariables(historyItem.finalVariables);
+    }
+    const failedNodeId = Object.keys(historyItem.blockSnapshots).find(
+      (id) => historyItem.blockSnapshots[id]?.status === "failed"
+    );
+    const firstExecNodeId = failedNodeId || Object.keys(historyItem.blockSnapshots).find(
+      (id) => historyItem.blockSnapshots[id]?.status === "completed"
+    );
+    if (firstExecNodeId) {
+      this.selectedNodeId = firstExecNodeId;
+      this.canvasManager.setSelectedNodeIds([firstExecNodeId]);
+      this.openInspectorSidebar();
+    } else {
+      this.canvasManager.render();
+      this.inspectorManager.renderInspector();
+    }
+    this.loadScopedHistory();
+    showToast("Modo Fantasma ativado! Inspe\xE7\xE3o hist\xF3rica somente leitura.", "info");
+  }
+  exitGhostMode() {
+    if (!this.isGhostMode)
+      return;
+    this.isGhostMode = false;
+    this.ghostHistoricalRun = void 0;
+    const banner = document.getElementById("ghostModeBanner");
+    if (banner)
+      banner.style.display = "none";
+    const titleInput = document.getElementById("flowTitleInput");
+    if (titleInput) {
+      titleInput.readOnly = false;
+    }
+    this.setEditorActionsReadOnly(false);
+    if (this.originalEditableGraph) {
+      this.graph = JSON.parse(JSON.stringify(this.originalEditableGraph));
+      this.originalEditableGraph = void 0;
+    }
+    this.canvasManager.setGhostMode(false);
+    this.inspectorManager.setGhostMode(false);
+    if (titleInput) {
+      titleInput.value = this.cleanFlowName(this.graph.metadata?.name);
+    }
+    this.canvasManager.render();
+    this.inspectorManager.renderInspector();
+    this.loadScopedHistory();
+    showToast("Saiu do Modo Fantasma. Editor liberado para modifica\xE7\xF5es.", "info");
+  }
+  setEditorActionsReadOnly(readOnly) {
+    const btnSave = document.getElementById("btnSaveFlow");
+    const btnRun = document.getElementById("btnRunFlow");
+    const btnClear = document.getElementById("btnClearCanvas");
+    const btnDebug = document.getElementById("btnDebugFlow");
+    const btnImport = document.getElementById("btnImportJson");
+    [btnSave, btnRun, btnClear, btnDebug, btnImport].forEach((btn) => {
+      if (btn) {
+        btn.disabled = readOnly;
+        btn.style.opacity = readOnly ? "0.4" : "1";
+        btn.style.pointerEvents = readOnly ? "none" : "auto";
+      }
+    });
+  }
+  async loadScopedHistory() {
+    const listEl = document.getElementById("scopedHistoryList");
+    const badgeEl = document.getElementById("scopedHistoryCountBadge");
+    if (!listEl)
+      return;
+    const currentFlowId = this.graph.metadata.id;
+    const history = await ExecutionHistoryManager.getFiltered({ automationId: currentFlowId });
+    if (badgeEl) {
+      badgeEl.textContent = `${history.length} execu\xE7\xF5es`;
+    }
+    if (history.length === 0) {
+      listEl.innerHTML = `<div style="font-size: 11px; color: #64748b; text-align: center; padding: 12px 6px;">Nenhuma execu\xE7\xE3o deste fluxo registrada ainda.</div>`;
+      return;
+    }
+    listEl.innerHTML = "";
+    history.slice(0, 20).forEach((item) => {
+      const itemEl = document.createElement("div");
+      itemEl.className = "scoped-history-item";
+      itemEl.style.cssText = `
+        background: #090d16;
+        border: 1px solid #1e293b;
+        border-radius: 6px;
+        padding: 8px 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        transition: border-color 0.15s ease;
+      `;
+      const statusColor = item.status === "completed" ? "#10b981" : item.status === "failed" ? "#ef4444" : "#64748b";
+      const statusIcon = item.status === "completed" ? "\u2713" : item.status === "failed" ? "\u2715" : "\u2298";
+      const timeStr = new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      const dateStr = new Date(item.timestamp).toLocaleDateString([], { day: "2-digit", month: "2-digit" });
+      itemEl.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+          <span style="font-size: 11px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; border: 1px solid ${statusColor}44; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            ${statusIcon}
+          </span>
+          <div style="min-width: 0;">
+            <div style="font-size: 11px; font-weight: 600; color: #f1f5f9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              ${dateStr} ${timeStr}
+            </div>
+            <div style="font-size: 10px; color: #64748b;">
+              ${item.durationMs}ms \u2022 <span style="text-transform: capitalize;">${item.triggerType}</span>
+            </div>
+          </div>
+        </div>
+        <button class="btn-xs btn-ghost-inspect" data-run-id="${item.id}" style="background: rgba(129, 140, 248, 0.15); border: 1px solid rgba(129, 140, 248, 0.4); color: #818cf8; font-size: 10px; padding: 3px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; gap: 3px;" title="Inspecionar no Modo Fantasma">
+          \u{1F47B} Fantasma
+        </button>
+      `;
+      itemEl.querySelector(".btn-ghost-inspect")?.addEventListener("click", () => {
+        this.enterGhostMode(item);
+      });
+      listEl.appendChild(itemEl);
+    });
+  }
+  switchDashboardTab(tab) {
+    const tabFlows = document.getElementById("dashTabFlows");
+    const tabHistory = document.getElementById("dashTabHistory");
+    const secFlows = document.getElementById("dashFlowsSection");
+    const secHistory = document.getElementById("dashHistorySection");
+    if (tab === "flows") {
+      tabFlows?.classList.add("active");
+      tabFlows?.setAttribute("style", "background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.4); color: #f8fafc; font-size: 13px; font-weight: 700; padding: 8px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s ease;");
+      tabHistory?.classList.remove("active");
+      tabHistory?.setAttribute("style", "background: #111827; border: 1px solid #1f293d; color: #94a3b8; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s ease;");
+      if (secFlows)
+        secFlows.style.display = "block";
+      if (secHistory)
+        secHistory.style.display = "none";
+      this.tabManager.renderDashboard();
+    } else {
+      tabHistory?.classList.add("active");
+      tabHistory?.setAttribute("style", "background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #f8fafc; font-size: 13px; font-weight: 700; padding: 8px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s ease;");
+      tabFlows?.classList.remove("active");
+      tabFlows?.setAttribute("style", "background: #111827; border: 1px solid #1f293d; color: #94a3b8; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s ease;");
+      if (secFlows)
+        secFlows.style.display = "none";
+      if (secHistory)
+        secHistory.style.display = "block";
+      this.populateAutomationFilterDropdown();
+      this.renderGlobalHistory();
+    }
+  }
+  populateAutomationFilterDropdown() {
+    const select = document.getElementById("historyFilterAutomation");
+    if (!select)
+      return;
+    const currentVal = select.value;
+    const automations = this.tabManager.getSavedAutomations();
+    let html = '<option value="">Todas as Automa\xE7\xF5es</option>';
+    automations.forEach((auto) => {
+      const id = auto.metadata?.id || "";
+      const name = this.cleanFlowName(auto.metadata?.name);
+      html += `<option value="${id}">${name}</option>`;
+    });
+    select.innerHTML = html;
+    if (currentVal) {
+      select.value = currentVal;
+    }
+  }
+  async renderGlobalHistory() {
+    const container = document.getElementById("globalHistoryListContainer");
+    const badge = document.getElementById("dashHistoryCountBadge");
+    if (!container)
+      return;
+    const automationSelect = document.getElementById("historyFilterAutomation");
+    const statusSelect = document.getElementById("historyFilterStatus");
+    const dateSelect = document.getElementById("historyFilterDate");
+    const queryInput = document.getElementById("historyFilterQuery");
+    const filters = {
+      automationId: automationSelect?.value || void 0,
+      status: statusSelect?.value || "all",
+      dateRange: dateSelect?.value || "all",
+      query: queryInput?.value || ""
+    };
+    const allHistory = await ExecutionHistoryManager.getAll();
+    if (badge) {
+      badge.textContent = String(allHistory.length);
+    }
+    const filtered = ExecutionHistoryManager.applyFilters(allHistory, filters);
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div style="background: #111827; border: 1px dashed #1f293d; border-radius: 12px; padding: 40px 20px; text-align: center; color: #64748b;">
+          <div style="font-size: 32px; margin-bottom: 8px;">\u{1F4CB}</div>
+          <div style="font-size: 14px; font-weight: 600; color: #94a3b8; margin-bottom: 4px;">Nenhuma execu\xE7\xE3o encontrada</div>
+          <div style="font-size: 12px;">Nenhum registro corresponde aos filtros selecionados.</div>
+        </div>
+      `;
+      return;
+    }
+    container.innerHTML = "";
+    filtered.forEach((item) => {
+      const card = document.createElement("div");
+      card.className = "history-card";
+      card.style.cssText = `
+        background: #111827;
+        border: 1px solid #1f293d;
+        border-radius: 10px;
+        padding: 14px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+      `;
+      const statusColor = item.status === "completed" ? "#10b981" : item.status === "failed" ? "#ef4444" : "#64748b";
+      const statusLabel = item.status === "completed" ? "\u2713 Conclu\xEDdo" : item.status === "failed" ? "\u2715 Falha" : "\u2298 Cancelado";
+      const fullDate = new Date(item.timestamp).toLocaleString();
+      card.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 11px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; border: 1px solid ${statusColor}44; padding: 3px 8px; border-radius: 6px;">
+              ${statusLabel}
+            </span>
+            <span style="font-size: 14px; font-weight: 700; color: #f8fafc;">
+              ${item.automationName}
+            </span>
+            <span style="font-size: 10px; color: #38bdf8; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); padding: 2px 7px; border-radius: 4px; text-transform: capitalize;">
+              Gatilho: ${item.triggerType}
+            </span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button class="btn btn-secondary btn-ghost-view" data-id="${item.id}" style="font-size: 11px; padding: 6px 12px; display: flex; align-items: center; gap: 6px; background: rgba(129, 140, 248, 0.15); border: 1px solid rgba(129, 140, 248, 0.4); color: #818cf8; cursor: pointer; border-radius: 6px;">
+              <span>\u{1F47B}</span>
+              <strong>Ver no Modo Fantasma</strong>
+            </button>
+            <button class="btn btn-danger btn-delete-exec" data-id="${item.id}" style="font-size: 11px; padding: 6px 10px; cursor: pointer; border-radius: 6px;" title="Excluir este registro">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; font-size: 11px; color: #94a3b8; flex-wrap: wrap;">
+          <div>Data/Hora: <strong style="color: #cbd5e1;">${fullDate}</strong></div>
+          <div>Dura\xE7\xE3o: <strong style="color: #cbd5e1;">${item.durationMs}ms</strong></div>
+          ${item.targetTabTitle ? `<div>P\xE1gina: <span style="color: #38bdf8;">${item.targetTabTitle}</span></div>` : ""}
+          ${item.targetTabUrl ? `<div style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #64748b;">${item.targetTabUrl}</div>` : ""}
+        </div>
+
+        ${item.error ? `
+          <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #fca5a5; font-family: monospace; word-break: break-all;">
+            \u2715 Erro: ${item.error}
+          </div>
+        ` : ""}
+      `;
+      card.querySelector(".btn-ghost-view")?.addEventListener("click", () => {
+        this.enterGhostMode(item);
+      });
+      card.querySelector(".btn-delete-exec")?.addEventListener("click", async () => {
+        await ExecutionHistoryManager.delete(item.id);
+        this.renderGlobalHistory();
+        showToast("Registro de execu\xE7\xE3o exclu\xEDdo.", "info");
+      });
+      container.appendChild(card);
+    });
   }
   exportJson() {
     const cleanGraph = sanitizeGraph(this.graph);
@@ -31041,7 +31594,7 @@ var VisualEditorApp = class {
     window.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        if (this.currentView === "studio") {
+        if (this.currentView === "studio" && !this.isGhostMode) {
           this.saveCurrentFlow();
         }
         return;
@@ -31049,7 +31602,7 @@ var VisualEditorApp = class {
       if (e.key === "Delete" || e.key === "Del" || e.key === "Backspace") {
         const target2 = e.target;
         const isEditingText = target2 && (target2.tagName === "INPUT" || target2.tagName === "TEXTAREA" || target2.isContentEditable);
-        if (!isEditingText && this.currentView === "studio") {
+        if (!isEditingText && this.currentView === "studio" && !this.isGhostMode) {
           const selectedEdge = this.canvasManager.getSelectedEdgeId();
           if (selectedEdge) {
             e.preventDefault();
@@ -31086,6 +31639,10 @@ var VisualEditorApp = class {
       }
     });
     document.getElementById("btnClearCanvas")?.addEventListener("click", async () => {
+      if (this.isGhostMode) {
+        showToast("Modo Fantasma \xE9 somente leitura! N\xE3o \xE9 poss\xEDvel limpar o canvas.", "warning");
+        return;
+      }
       const confirmed = await DialogMenu.confirm({
         title: "Limpar Canvas",
         message: "Deseja realmente limpar todos os n\xF3s e liga\xE7\xF5es deste fluxo? Esta a\xE7\xE3o n\xE3o pode ser desfeita.",
@@ -31188,11 +31745,32 @@ var VisualEditorApp = class {
       this.openBlocksSidebar();
     });
     document.getElementById("btnDebugFlow")?.addEventListener("click", () => this.runCurrentFlow(true));
-    document.getElementById("btnOpenBlankTabHeader")?.addEventListener("click", () => this.openBlankTabForDebug(false));
-    document.getElementById("btnDebugOpenBlankTab")?.addEventListener("click", () => this.openBlankTabForDebug(false));
-    document.getElementById("btnDebugRunInTab")?.addEventListener("click", () => this.runCurrentFlow(true, this.lastDebugTabId));
-    document.getElementById("btnDebugFocusTab")?.addEventListener("click", () => this.focusDebugTab());
+    document.getElementById("btnRunDebugActiveTab")?.addEventListener("click", () => this.runCurrentFlow(true));
+    document.getElementById("btnRefreshTargetTab")?.addEventListener("click", () => this.detectActiveWebTab());
+    document.getElementById("btnFocusTargetTab")?.addEventListener("click", () => this.focusTargetTab());
     document.getElementById("btnClearLogs")?.addEventListener("click", () => this.clearLogs());
+    document.getElementById("btnExitGhostMode")?.addEventListener("click", () => this.exitGhostMode());
+    document.getElementById("dashTabFlows")?.addEventListener("click", () => this.switchDashboardTab("flows"));
+    document.getElementById("dashTabHistory")?.addEventListener("click", () => this.switchDashboardTab("history"));
+    document.getElementById("btnRefreshGlobalHistory")?.addEventListener("click", () => this.renderGlobalHistory());
+    document.getElementById("btnClearGlobalHistory")?.addEventListener("click", async () => {
+      const confirmed = await DialogMenu.confirm({
+        title: "Limpar Todo o Hist\xF3rico?",
+        message: "Deseja realmente apagar todos os registros de execu\xE7\xF5es de todas as automa\xE7\xF5es? Esta a\xE7\xE3o n\xE3o pode ser desfeita.",
+        confirmText: "Limpar Hist\xF3rico",
+        isDanger: true
+      });
+      if (confirmed) {
+        await ExecutionHistoryManager.clearAll();
+        this.renderGlobalHistory();
+        this.loadScopedHistory();
+        showToast("Todo o hist\xF3rico de execu\xE7\xF5es foi apagado.", "info");
+      }
+    });
+    document.getElementById("historyFilterAutomation")?.addEventListener("change", () => this.renderGlobalHistory());
+    document.getElementById("historyFilterStatus")?.addEventListener("change", () => this.renderGlobalHistory());
+    document.getElementById("historyFilterDate")?.addEventListener("change", () => this.renderGlobalHistory());
+    document.getElementById("historyFilterQuery")?.addEventListener("input", () => this.renderGlobalHistory());
     document.getElementById("btnExpandInspectorModal")?.addEventListener("click", () => {
       if (this.selectedNodeId) {
         this.inspectorManager.openExpandedModal(this.selectedNodeId);
@@ -31259,6 +31837,9 @@ var VisualEditorApp = class {
         this.appendLog(msg.log);
       } else if (msg.type === "STATUS_CHANGE") {
         this.appendLog({ timestamp: Date.now(), level: "info", message: `Status alterado para: ${msg.status}` });
+      } else if (msg.type === "EXECUTION_RECORDED") {
+        this.loadScopedHistory();
+        this.renderGlobalHistory();
       }
     });
   }
@@ -31397,6 +31978,8 @@ var VisualEditorApp = class {
     btnActivityColors?.classList.remove("active");
     sidebarVariables?.classList.add("collapsed");
     btnActivityVariables?.classList.remove("active");
+    this.detectActiveWebTab();
+    this.loadScopedHistory();
     if (resizerLeft)
       resizerLeft.style.display = "block";
   }

@@ -15232,11 +15232,6 @@ var ChromeBrowserDriver = class {
     }
     if (chrome.tabs?.query) {
       const allTabs = await chrome.tabs.query({});
-      const testTab = allTabs.find((t) => t.id && t.url?.includes("test.html"));
-      if (testTab?.id) {
-        this.activeTabId = testTab.id;
-        return testTab.id;
-      }
       const otherActiveTabs = allTabs.filter((t) => t.id && t.active && !this.isStudioPage(t.url));
       if (otherActiveTabs.length > 0 && otherActiveTabs[0].id) {
         this.activeTabId = otherActiveTabs[0].id;
@@ -15284,7 +15279,7 @@ var ChromeBrowserDriver = class {
     });
   }
   async createTab(url, active = true) {
-    const defaultUrl = chrome.runtime?.getURL ? chrome.runtime.getURL("test.html") : "test.html";
+    const defaultUrl = "about:blank";
     const tab = await chrome.tabs.create({ url: url || defaultUrl, active });
     if (tab.id && active) {
       this.activeTabId = tab.id;
@@ -22602,6 +22597,119 @@ ${es5Code}
   }
 };
 
+// src/editor/modules/executionHistoryManager.ts
+var STORAGE_KEY = "web_automations_history";
+var MAX_HISTORY_ITEMS = 100;
+var ExecutionHistoryManager = class {
+  /**
+   * Obtém todo o histórico de execuções armazenado localmente
+   */
+  static async getAll() {
+    if (!chrome.storage?.local)
+      return [];
+    return new Promise((resolve) => {
+      chrome.storage.local.get(STORAGE_KEY, (res2) => {
+        const list = res2?.[STORAGE_KEY] || [];
+        list.sort((a, b) => b.timestamp - a.timestamp);
+        resolve(list);
+      });
+    });
+  }
+  /**
+   * Obtém execuções filtradas
+   */
+  static async getFiltered(filters) {
+    const all = await this.getAll();
+    return this.applyFilters(all, filters);
+  }
+  /**
+   * Aplica filtros em uma lista de execuções em memória
+   */
+  static applyFilters(items, filters) {
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1e3;
+    return items.filter((item) => {
+      if (filters.automationId && item.automationId !== filters.automationId) {
+        return false;
+      }
+      if (filters.status && filters.status !== "all") {
+        if (item.status !== filters.status)
+          return false;
+      }
+      if (filters.dateRange && filters.dateRange !== "all") {
+        if (filters.dateRange === "today") {
+          const itemDate = new Date(item.timestamp).toDateString();
+          const todayDate = (/* @__PURE__ */ new Date()).toDateString();
+          if (itemDate !== todayDate)
+            return false;
+        } else if (filters.dateRange === "last7days") {
+          if (now - item.timestamp > 7 * oneDayMs)
+            return false;
+        } else if (filters.dateRange === "last30days") {
+          if (now - item.timestamp > 30 * oneDayMs)
+            return false;
+        }
+      }
+      if (filters.query && filters.query.trim()) {
+        const q = filters.query.toLowerCase().trim();
+        const matchName = (item.automationName || "").toLowerCase().includes(q);
+        const matchError = (item.error || "").toLowerCase().includes(q);
+        const matchTrigger = (item.triggerType || "").toLowerCase().includes(q);
+        const matchTab = (item.targetTabTitle || item.targetTabUrl || "").toLowerCase().includes(q);
+        if (!matchName && !matchError && !matchTrigger && !matchTab) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+  /**
+   * Busca uma execução específica pelo seu ID único
+   */
+  static async getById(id) {
+    const all = await this.getAll();
+    return all.find((item) => item.id === id);
+  }
+  /**
+   * Salva um novo registro de execução
+   */
+  static async save(item) {
+    if (!chrome.storage?.local)
+      return;
+    const all = await this.getAll();
+    const updated = [item, ...all.filter((i) => i.id !== item.id)].slice(0, MAX_HISTORY_ITEMS);
+    await chrome.storage.local.set({ [STORAGE_KEY]: updated });
+  }
+  /**
+   * Remove uma execução pelo ID
+   */
+  static async delete(id) {
+    if (!chrome.storage?.local)
+      return;
+    const all = await this.getAll();
+    const updated = all.filter((i) => i.id !== id);
+    await chrome.storage.local.set({ [STORAGE_KEY]: updated });
+  }
+  /**
+   * Limpa todo o histórico de execuções
+   */
+  static async clearAll() {
+    if (!chrome.storage?.local)
+      return;
+    await chrome.storage.local.remove(STORAGE_KEY);
+  }
+  /**
+   * Limpa o histórico de execuções de uma automação específica
+   */
+  static async clearForAutomation(automationId) {
+    if (!chrome.storage?.local)
+      return;
+    const all = await this.getAll();
+    const updated = all.filter((i) => i.automationId !== automationId);
+    await chrome.storage.local.set({ [STORAGE_KEY]: updated });
+  }
+};
+
 // src/background/serviceWorker.ts
 StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars);
 var ExtensionController = class {
@@ -22725,7 +22833,7 @@ var ExtensionController = class {
           continue;
         const triggers = getActiveTriggers(startNode.data);
         if (triggers.some((t) => t.type === "shortcut" && t.shortcutKey === command)) {
-          this.executeAutomation(auto);
+          this.executeAutomation(auto, void 0, void 0, "shortcut");
         }
       }
     });
@@ -22738,7 +22846,7 @@ var ExtensionController = class {
         if (targetAuto) {
           const driver = tab?.id ? new ChromeBrowserDriver(tab.id) : new ChromeBrowserDriver();
           console.log(`[WebAutomations] Disparando fluxo pelo menu de contexto: ${targetAuto.metadata.name}`);
-          this.executeAutomation(targetAuto, driver);
+          this.executeAutomation(targetAuto, driver, void 0, "context_menu");
         }
       }
     });
@@ -22750,7 +22858,7 @@ var ExtensionController = class {
         const targetAuto = automations.find((a) => a.metadata.id === flowId || a.metadata.id === alarm.name.replace("alarm_flow_", ""));
         if (targetAuto) {
           console.log(`[WebAutomations] Disparando fluxo por intervalo agendado: ${targetAuto.metadata.name}`);
-          this.executeAutomation(targetAuto);
+          this.executeAutomation(targetAuto, void 0, void 0, "schedule");
         }
       } else if (alarm.name.startsWith("date_alarm_flow_")) {
         const parts = alarm.name.replace("date_alarm_flow_", "").split("_");
@@ -22791,7 +22899,7 @@ var ExtensionController = class {
         }
         if (isDateMatched) {
           console.log(`[WebAutomations] Disparando fluxo por data agendada (${ds.mode}): ${targetAuto.metadata.name}`);
-          this.executeAutomation(targetAuto);
+          this.executeAutomation(targetAuto, void 0, void 0, "date_schedule");
         }
       }
     });
@@ -22813,7 +22921,7 @@ var ExtensionController = class {
             });
             if (matches) {
               const driver = new ChromeBrowserDriver(details.tabId);
-              this.executeAutomation(auto, driver);
+              this.executeAutomation(auto, driver, void 0, "on_url_load");
             }
           }
         }
@@ -22907,27 +23015,70 @@ var ExtensionController = class {
       }));
     }
   }
+  async getActiveWebTab() {
+    const isExt = (url) => !url || url.includes("editor.html") || url.includes("settings.html") || url.includes("analyzer.html") || url.startsWith("chrome://") || url.startsWith("chrome-extension://");
+    if (chrome.tabs?.query) {
+      try {
+        const activeTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        const target2 = activeTabs.find((t) => t.id && !isExt(t.url));
+        if (target2?.id) {
+          return { tabId: target2.id, title: target2.title || "", url: target2.url || "" };
+        }
+        const allTabs = await chrome.tabs.query({});
+        const activeAnywhere = allTabs.find((t) => t.id && t.active && !isExt(t.url));
+        if (activeAnywhere?.id) {
+          return { tabId: activeAnywhere.id, title: activeAnywhere.title || "", url: activeAnywhere.url || "" };
+        }
+        const firstWeb = allTabs.find((t) => t.id && !isExt(t.url));
+        if (firstWeb?.id) {
+          return { tabId: firstWeb.id, title: firstWeb.title || "", url: firstWeb.url || "" };
+        }
+      } catch {
+      }
+    }
+    return {};
+  }
   async handleExtensionMessage(message, sender) {
     const { action, payload } = message;
     switch (action) {
+      case "GET_ACTIVE_WEB_TAB": {
+        const tabInfo = await this.getActiveWebTab();
+        return { success: true, ...tabInfo };
+      }
+      case "GET_EXECUTION_HISTORY": {
+        const history = await ExecutionHistoryManager.getAll();
+        return { success: true, history };
+      }
+      case "CLEAR_EXECUTION_HISTORY": {
+        if (payload?.automationId) {
+          await ExecutionHistoryManager.clearForAutomation(payload.automationId);
+        } else {
+          await ExecutionHistoryManager.clearAll();
+        }
+        return { success: true };
+      }
+      case "DELETE_EXECUTION": {
+        if (payload?.id) {
+          await ExecutionHistoryManager.delete(payload.id);
+          return { success: true };
+        }
+        return { success: false, error: "ID de execu\xE7\xE3o n\xE3o informado" };
+      }
       case "EXECUTE_AUTOMATION": {
         const graph = payload.graph;
         let targetTabId = payload.tabId;
-        const testPageUrl = chrome.runtime.getURL("test.html");
-        if (payload.openBlankTab) {
-          const tab = await chrome.tabs.create({
-            url: testPageUrl,
-            active: payload.active !== void 0 ? payload.active : true
-          });
-          targetTabId = tab.id;
-        } else if (!targetTabId) {
+        if (!targetTabId) {
           const isStudioOrSettings = sender.tab?.url?.includes("editor.html") || sender.tab?.url?.includes("settings.html") || sender.tab?.url?.includes("analyzer.html");
           if (sender.tab?.id && !isStudioOrSettings) {
             targetTabId = sender.tab.id;
+          } else {
+            const activeTab = await this.getActiveWebTab();
+            targetTabId = activeTab.tabId;
           }
         }
+        const triggerType = payload.triggerType || (payload.isDebug ? "debug" : sender.tab?.id ? "floating_button" : "manual");
         const driver = new ChromeBrowserDriver(targetTabId);
-        const ctx = await this.executeAutomation(graph, driver);
+        const ctx = await this.executeAutomation(graph, driver, void 0, triggerType);
         const nodeOutputs = ctx.nodeOutputs || (typeof ctx.state?.getNodeOutputs === "function" ? ctx.state.getNodeOutputs() : {});
         const readonlyVariables = typeof ctx.state?.getReadonlyVariables === "function" ? ctx.state.getReadonlyVariables() : (graph.variableDefinitions || []).filter((v) => v.readonly).map((v) => v.name);
         return {
@@ -22938,19 +23089,8 @@ var ExtensionController = class {
           nodeOutputs,
           readonlyVariables,
           logs: ctx.logs,
+          historyItem: ctx.historyItem,
           error: ctx.status === "failed" ? ctx.logs.filter((l) => l.level === "error").pop()?.message || "Falha durante a execu\xE7\xE3o" : void 0
-        };
-      }
-      case "OPEN_BLANK_TAB": {
-        const testPageUrl = chrome.runtime.getURL("test.html");
-        const tab = await chrome.tabs.create({
-          url: testPageUrl,
-          active: payload?.active !== false
-        });
-        return {
-          success: true,
-          tabId: tab.id,
-          url: tab.url
         };
       }
       case "FOCUS_TAB": {
@@ -23017,21 +23157,57 @@ var ExtensionController = class {
         return { success: false, error: `A\xE7\xE3o n\xE3o reconhecida: ${action}` };
     }
   }
-  async executeAutomation(graph, driver = new ChromeBrowserDriver(), onProgress) {
+  async executeAutomation(graph, driver = new ChromeBrowserDriver(), onProgress, triggerType = "manual") {
     const autoId = graph.metadata.id;
+    const startTime = Date.now();
     const nodeOutputs = {};
+    const graphSnapshot = JSON.parse(JSON.stringify(graph));
+    const initialVariables = (graph.variableDefinitions || []).reduce((acc, v) => {
+      acc[v.name] = v.defaultValue;
+      return acc;
+    }, {});
+    const blockSnapshots = {};
+    for (const node of graph.nodes || []) {
+      blockSnapshots[node.id] = {
+        nodeId: node.id,
+        nodeType: node.type,
+        nodeLabel: node.data?.label || node.type,
+        status: "skipped",
+        config: JSON.parse(JSON.stringify(node.data || {})),
+        executedAt: 0
+      };
+    }
     const ctx = await this.engine.runGraph(graph, driver, {
       onStatusChange: (status) => {
         onProgress?.("status_change", { automationId: autoId, status });
         this.broadcastToUI({ type: "STATUS_CHANGE", automationId: autoId, status });
       },
       onNodeStart: (node) => {
+        const snap = blockSnapshots[node.id];
+        if (snap) {
+          snap.status = "running";
+          snap.executedAt = Date.now();
+        }
         onProgress?.("node_start", { automationId: autoId, nodeId: node.id });
         this.broadcastToUI({ type: "NODE_START", automationId: autoId, nodeId: node.id });
       },
       onNodeComplete: (node, result) => {
         const out = result?.output !== void 0 ? result.output : result?.data !== void 0 ? result.data : result;
         nodeOutputs[node.id] = out;
+        const snap = blockSnapshots[node.id];
+        if (snap) {
+          snap.status = "completed";
+          snap.outputData = out;
+          snap.durationMs = Date.now() - (snap.executedAt || startTime);
+          const incomingEdges = (graph.edges || []).filter((e) => e.target === node.id);
+          const inputMap = {};
+          for (const edge of incomingEdges) {
+            if (nodeOutputs[edge.source] !== void 0) {
+              inputMap[edge.source] = nodeOutputs[edge.source];
+            }
+          }
+          snap.inputData = Object.keys(inputMap).length > 0 ? inputMap : result?.input || result?.inputData || null;
+        }
         onProgress?.("node_complete", { automationId: autoId, nodeId: node.id, nodeLabel: node.data?.label, result });
         this.broadcastToUI({
           type: "NODE_COMPLETE",
@@ -23043,6 +23219,12 @@ var ExtensionController = class {
         });
       },
       onNodeError: (node, error) => {
+        const snap = blockSnapshots[node.id];
+        if (snap) {
+          snap.status = "failed";
+          snap.error = error.message;
+          snap.durationMs = Date.now() - (snap.executedAt || startTime);
+        }
         onProgress?.("node_error", { automationId: autoId, nodeId: node.id, error: error.message });
         this.broadcastToUI({ type: "NODE_ERROR", automationId: autoId, nodeId: node.id, error: error.message });
       },
@@ -23058,6 +23240,38 @@ var ExtensionController = class {
         return (graph.variableDefinitions || []).filter((v) => v.readonly).map((v) => v.name);
       };
     }
+    const durationMs = Date.now() - startTime;
+    let targetTabUrl = "";
+    let targetTabTitle = "";
+    if (driver && driver.activeTabId) {
+      try {
+        const t = await chrome.tabs.get(driver.activeTabId);
+        targetTabUrl = t?.url || "";
+        targetTabTitle = t?.title || "";
+      } catch {
+      }
+    }
+    const historyItem = {
+      id: `run_${startTime}_${Math.random().toString(36).substring(2, 7)}`,
+      automationId: autoId,
+      automationName: graph.metadata?.name || "Automa\xE7\xE3o",
+      timestamp: startTime,
+      isoDate: new Date(startTime).toISOString(),
+      durationMs,
+      status: ctx.status,
+      error: ctx.status === "failed" ? ctx.logs.filter((l) => l.level === "error").pop()?.message || "Falha durante a execu\xE7\xE3o" : void 0,
+      triggerType,
+      targetTabUrl,
+      targetTabTitle,
+      graphSnapshot,
+      initialVariables,
+      finalVariables: ctx.state ? ctx.state.getAll() : {},
+      blockSnapshots,
+      logs: ctx.logs || []
+    };
+    await ExecutionHistoryManager.save(historyItem);
+    ctx.historyItem = historyItem;
+    this.broadcastToUI({ type: "EXECUTION_RECORDED", historyItem });
     this.activeContexts.set(autoId, ctx);
     return ctx;
   }
