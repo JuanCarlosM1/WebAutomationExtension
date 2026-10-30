@@ -9,7 +9,7 @@ export class SafeJsEvaluator {
   /**
    * Avalia uma expressão ou bloco de código JS arbitrário com o escopo de variáveis fornecido
    */
-  public static evaluate(expressionOrCode: string, vars: Record<string, any> = {}): any {
+  public static evaluate(expressionOrCode: string, vars: Record<string, any> = {}, throwOnError = false): any {
     if (!expressionOrCode || !expressionOrCode.trim()) return false;
 
     const trimmed = expressionOrCode.trim();
@@ -78,6 +78,11 @@ export class SafeJsEvaluator {
     // Injeta as variáveis do fluxo no escopo
     Object.assign(globalScope, vars);
 
+    // O JavaScript dos fluxos NÃO pode executar o mesmo que os códigos de uma extensão.
+    // Bloqueia categoricamente qualquer acesso a APIs privadas de extensão (chrome.* / browser.*)
+    globalScope.chrome = undefined;
+    globalScope.browser = undefined;
+
     try {
       const interpreter = new Interpreter(globalScope, {
         timeout: 10000,
@@ -98,6 +103,7 @@ export class SafeJsEvaluator {
 
       return result;
     } catch (err: any) {
+      if (throwOnError) throw err;
       console.warn(`[SafeJsEvaluator] Erro ao avaliar código JS:`, err?.message || err);
       return false;
     }

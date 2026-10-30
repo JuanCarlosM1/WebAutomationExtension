@@ -227,7 +227,7 @@ export const BLOCK_CATALOG: BlockCategory[] = [
       {
         type: 'inject_javascript',
         title: 'Injetar JavaScript',
-        desc: 'Roda no Content ou Background',
+        desc: 'Executa na página web',
         icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
         defaultData: { label: 'Injetar JS', code: 'console.log("Olá Mundo");', context: 'content_script' },
       },

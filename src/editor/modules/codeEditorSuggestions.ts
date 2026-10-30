@@ -51,6 +51,20 @@ export const JS_BUILTIN_SUGGESTIONS: AutocompleteItem[] = [
   { label: 'Array.find', type: 'function', insertText: 'find((item) => )', detail: 'find item', cursorOffset: 15 },
   { label: 'window.location.href', type: 'property', insertText: 'window.location.href', detail: 'current URL' },
   { label: 'window.localStorage', type: 'property', insertText: 'window.localStorage', detail: 'localStorage' },
+
+  // Utilitários WebAutomations fornecidos pela extensão para a página
+  { label: '$vars', type: 'variable', insertText: '$vars.', detail: 'Variáveis do fluxo' },
+  { label: '$node', type: 'variable', insertText: "$node['']", detail: 'Saídas de nós anteriores', cursorOffset: 7 },
+  { label: '$input', type: 'variable', insertText: '$input', detail: 'Dado de entrada do nó' },
+  { label: 'args', type: 'variable', insertText: 'args', detail: 'Argumentos passados ao script' },
+  { label: 'WebAutomations.sleep', type: 'function', insertText: 'await WebAutomations.sleep(1000);', detail: 'Pausa assíncrona (ms)' },
+  { label: 'WebAutomations.waitFor', type: 'function', insertText: "await WebAutomations.waitFor('');", detail: 'Aguardar elemento na página', cursorOffset: 25 },
+  { label: 'WebAutomations.get', type: 'function', insertText: "WebAutomations.get('')", detail: 'Buscar elemento (CSS/XPath)', cursorOffset: 20 },
+  { label: 'WebAutomations.getAll', type: 'function', insertText: "WebAutomations.getAll('')", detail: 'Buscar múltiplos elementos', cursorOffset: 23 },
+  { label: 'WebAutomations.click', type: 'function', insertText: "WebAutomations.click('')", detail: 'Clicar em elemento', cursorOffset: 22 },
+  { label: 'WebAutomations.type', type: 'function', insertText: "WebAutomations.type('', '')", detail: 'Digitar em elemento', cursorOffset: 21 },
+  { label: 'WebAutomations.log', type: 'function', insertText: "WebAutomations.log();", detail: 'Log formatado no console', cursorOffset: 19 },
+  { label: '$wa', type: 'variable', insertText: '$wa.', detail: 'Atalho WebAutomations' },
 ];
 
 export const CSS_SUGGESTIONS: AutocompleteItem[] = [

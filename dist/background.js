@@ -9778,7 +9778,7 @@ var StateManager = class _StateManager {
   /**
    * Avalia uma expressão ou script JS arbitrário no escopo atual das variáveis e variáveis do N8N
    */
-  evaluateJsExpression(expressionOrCode) {
+  evaluateJsExpression(expressionOrCode, throwOnError = false) {
     if (!expressionOrCode || !expressionOrCode.trim())
       return false;
     const trimmed = this.interpolate(expressionOrCode.trim());
@@ -9794,7 +9794,14 @@ var StateManager = class _StateManager {
     const keys2 = Object.keys(scopeData);
     const values = Object.values(scopeData);
     if (_StateManager.customEvaluator) {
-      return _StateManager.customEvaluator(trimmed, scopeData);
+      try {
+        return _StateManager.customEvaluator(trimmed, scopeData);
+      } catch (err) {
+        if (throwOnError)
+          throw err;
+        console.warn(`[StateManager] Erro ao avaliar express\xE3o JS: "${trimmed}":`, err.message);
+        return false;
+      }
     }
     try {
       if (trimmed.includes(";") || trimmed.includes("return ") || trimmed.includes("\n")) {
@@ -9805,6 +9812,8 @@ var StateManager = class _StateManager {
       const fn = new Function(...keys2, `return (${trimmed});`);
       return fn(...values);
     } catch (err) {
+      if (throwOnError)
+        throw err;
       console.warn(`[StateManager] Erro ao avaliar express\xE3o JS: "${trimmed}":`, err.message);
       return false;
     }
@@ -10268,7 +10277,11 @@ var ExecutionEngine = class {
       if (edge.source !== sourceNodeId)
         return false;
       if (outputHandle !== void 0) {
-        return !edge.sourceHandle || edge.sourceHandle === outputHandle;
+        if (!edge.sourceHandle || edge.sourceHandle === outputHandle)
+          return true;
+        if (outputHandle === "default" && (edge.sourceHandle === "output" || edge.sourceHandle === "out"))
+          return true;
+        return false;
       }
       return true;
     });
@@ -10659,20 +10672,7 @@ var SetVariableBlockHandler = class extends BaseBlockHandler {
     if (evaluationType === "template") {
       finalValue = context.state.interpolate(String(valueExpression));
     } else if (evaluationType === "js_eval") {
-      const interpolatedCode = context.state.interpolate(String(valueExpression));
-      const n8n = context.state.buildN8NContext();
-      const vars = {
-        ...context.state.getAll(),
-        $json: n8n.$json,
-        $input: n8n.$input,
-        $node: n8n.$node,
-        $vars: n8n.$vars
-      };
-      const keys2 = Object.keys(vars);
-      const values = Object.values(vars);
-      const body = interpolatedCode.includes("return ") ? interpolatedCode : `return (${interpolatedCode});`;
-      const fn = new Function(...keys2, body);
-      finalValue = fn(...values);
+      finalValue = context.state.evaluateJsExpression(String(valueExpression), true);
     } else {
       finalValue = valueExpression;
     }
@@ -22431,7 +22431,7 @@ var SafeJsEvaluator = class {
   /**
    * Avalia uma expressão ou bloco de código JS arbitrário com o escopo de variáveis fornecido
    */
-  static evaluate(expressionOrCode, vars = {}) {
+  static evaluate(expressionOrCode, vars = {}, throwOnError = false) {
     if (!expressionOrCode || !expressionOrCode.trim())
       return false;
     const trimmed = expressionOrCode.trim();
@@ -22516,6 +22516,8 @@ var SafeJsEvaluator = class {
       }
     }
     Object.assign(globalScope, vars);
+    globalScope.chrome = void 0;
+    globalScope.browser = void 0;
     try {
       const interpreter = new Interpreter(globalScope, {
         timeout: 1e4,
@@ -22534,6 +22536,8 @@ ${es5Code}
       }
       return result;
     } catch (err) {
+      if (throwOnError)
+        throw err;
       console.warn(`[SafeJsEvaluator] Erro ao avaliar c\xF3digo JS:`, err?.message || err);
       return false;
     }
@@ -22549,16 +22553,32 @@ var ChromeBrowserDriver = class {
   setActiveTab(tabId) {
     this.activeTabId = tabId;
   }
+  isRestrictedTab(tab) {
+    if (!tab?.url)
+      return false;
+    return tab.url.startsWith("chrome-extension://") || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://") || tab.url.startsWith("devtools://") || tab.url.startsWith("view-source:");
+  }
   async getTargetTabId() {
     if (this.activeTabId) {
-      return this.activeTabId;
+      const tab = await chrome.tabs.get(this.activeTabId).catch(() => null);
+      if (tab?.id && !this.isRestrictedTab(tab)) {
+        return this.activeTabId;
+      }
     }
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) {
-      throw new Error("Nenhuma aba ativa encontrada para executar a a\xE7\xE3o.");
+    const tabs = await chrome.tabs.query({});
+    const webTabs = tabs.filter(
+      (t) => t.id && t.url && (t.url.startsWith("http://") || t.url.startsWith("https://") || t.url.startsWith("file://"))
+    );
+    const currentWindowActive = webTabs.find((t) => t.active && t.windowId === chrome.windows?.WINDOW_ID_CURRENT);
+    const anyActive = webTabs.find((t) => t.active);
+    const target2 = currentWindowActive || anyActive || webTabs[webTabs.length - 1];
+    if (target2?.id) {
+      this.activeTabId = target2.id;
+      return target2.id;
     }
-    this.activeTabId = tab.id;
-    return tab.id;
+    const newTab = await chrome.tabs.create({ url: "about:blank", active: false });
+    this.activeTabId = newTab.id;
+    return newTab.id;
   }
   async sendToContentScript(action, payload) {
     const tabId = await this.getTargetTabId();
@@ -22587,28 +22607,47 @@ var ChromeBrowserDriver = class {
   // -------------------------------------------------------------
   async navigateTo(url, waitUntil = "load", timeoutMs = 3e4) {
     const tabId = await this.getTargetTabId();
-    await chrome.tabs.update(tabId, { url });
-    if (waitUntil === "none")
+    const tabInfo = await chrome.tabs.get(tabId).catch(() => null);
+    if (tabInfo && (tabInfo.url === "about:blank" || tabInfo.url === "")) {
+      chrome.tabs.update(tabId, { active: true }).catch(() => {
+      });
+    }
+    if (waitUntil === "none") {
+      await chrome.tabs.update(tabId, { url });
       return;
+    }
     return new Promise((resolve, reject) => {
+      let isResolved = false;
       const timer = setTimeout(() => {
-        chrome.tabs.onUpdated.removeListener(listener);
-        reject(new Error(`Timeout (${timeoutMs}ms) aguardando carregamento da URL: ${url}`));
+        if (!isResolved) {
+          isResolved = true;
+          chrome.tabs.onUpdated.removeListener(listener);
+          reject(new Error(`Timeout (${timeoutMs}ms) aguardando carregamento da URL: ${url}`));
+        }
       }, timeoutMs);
       const listener = (updatedTabId, changeInfo) => {
-        if (updatedTabId === tabId) {
-          if (waitUntil === "load" && changeInfo.status === "complete") {
+        if (updatedTabId === tabId && !isResolved) {
+          if (changeInfo.status === "complete") {
+            isResolved = true;
             clearTimeout(timer);
             chrome.tabs.onUpdated.removeListener(listener);
-            resolve();
-          } else if (waitUntil === "domcontentloaded" && changeInfo.status) {
-            clearTimeout(timer);
-            chrome.tabs.onUpdated.removeListener(listener);
-            resolve();
+            if (waitUntil === "networkidle") {
+              setTimeout(resolve, 500);
+            } else {
+              setTimeout(resolve, 100);
+            }
           }
         }
       };
       chrome.tabs.onUpdated.addListener(listener);
+      chrome.tabs.update(tabId, { url }).catch((err) => {
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timer);
+          chrome.tabs.onUpdated.removeListener(listener);
+          reject(err);
+        }
+      });
     });
   }
   async createTab(url, active = true) {
@@ -22724,23 +22763,26 @@ var ChromeBrowserDriver = class {
       timeoutMs
     });
   }
-  async injectScript(code, context, _args = []) {
-    if (context === "background") {
-      SafeJsEvaluator.evaluate(`(function() {
-${code}
-})()`, {});
-      return { success: true, executed: true };
-    }
+  async injectScript(code, _context, args = []) {
     const tabId = await this.getTargetTabId();
     const tab = await chrome.tabs.get(tabId).catch(() => null);
     const isExtensionPage = !tab?.url || tab.url.startsWith("chrome-extension://") || tab.url.startsWith("chrome://");
     if (isExtensionPage) {
-      SafeJsEvaluator.evaluate(`(function() {
+      const evalRes = SafeJsEvaluator.evaluate(`(function(args, $args) {
 ${code}
-})()`, {});
-      return { success: true, executed: true };
+})(args, args)`, {
+        args,
+        $args: args,
+        chrome: void 0,
+        browser: void 0
+      });
+      return evalRes !== void 0 ? evalRes : { success: true, executed: true };
     }
-    return await this.sendToContentScript("INJECT_SCRIPT", { code });
+    const response = await this.sendToContentScript("INJECT_SCRIPT", { code, args });
+    if (response && response.data && response.data.result !== void 0) {
+      return response.data.result;
+    }
+    return response?.data ?? response;
   }
   async injectHtml(html, targetSelector, position, selectorType) {
     await this.sendToContentScript("INJECT_HTML", { html, targetSelector, position, selectorType });
@@ -22874,7 +22916,7 @@ var DEFAULT_AUTOMATION = {
 };
 
 // src/background/serviceWorker.ts
-StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars);
+StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars, true);
 var ExtensionController = class {
   engine;
   activeContexts = /* @__PURE__ */ new Map();
@@ -23251,16 +23293,20 @@ var ExtensionController = class {
     switch (action) {
       case "EXECUTE_AUTOMATION": {
         const graph = payload.graph;
-        const targetTabId = payload.tabId || sender.tab?.id;
+        const isSenderExtension = sender.tab?.url?.startsWith("chrome-extension://") || !sender.tab;
+        const targetTabId = payload.tabId || (isSenderExtension ? void 0 : sender.tab?.id);
         const driver = new ChromeBrowserDriver(targetTabId);
         const ctx = await this.executeAutomation(graph, driver);
+        const isSuccess = ctx.status === "completed";
+        const errorMsg = !isSuccess ? ctx.logs.find((l) => l.level === "error")?.message || "Falha na execu\xE7\xE3o do fluxo" : void 0;
         return {
-          success: true,
+          success: isSuccess,
           status: ctx.status,
           variables: ctx.state.getAll(),
           nodeOutputs: ctx.state.getNodeOutputs(),
           readonlyVariables: ctx.state.getReadonlyVariables(),
-          logs: ctx.logs
+          logs: ctx.logs,
+          error: errorMsg
         };
       }
       case "CANCEL_AUTOMATION": {
@@ -23314,6 +23360,7 @@ var ExtensionController = class {
   }
   async executeAutomation(graph, driver = new ChromeBrowserDriver(), onProgress) {
     const autoId = graph.metadata.id;
+    const runtimeOutputs = {};
     const ctx = await this.engine.runGraph(graph, driver, {
       onStatusChange: (status) => {
         onProgress?.("status_change", { automationId: autoId, status });
@@ -23324,6 +23371,9 @@ var ExtensionController = class {
         this.broadcastToUI({ type: "NODE_START", automationId: autoId, nodeId: node.id });
       },
       onNodeComplete: (node, result) => {
+        if (result.outputData !== void 0) {
+          runtimeOutputs[node.id] = result.outputData;
+        }
         onProgress?.("node_complete", { automationId: autoId, nodeId: node.id, nodeLabel: node.data?.label, result });
         this.broadcastToUI({
           type: "NODE_COMPLETE",
@@ -23331,7 +23381,7 @@ var ExtensionController = class {
           nodeId: node.id,
           nodeLabel: node.data?.label,
           result,
-          nodeOutputs: ctx.state.getNodeOutputs()
+          nodeOutputs: runtimeOutputs
         });
       },
       onNodeError: (node, error) => {

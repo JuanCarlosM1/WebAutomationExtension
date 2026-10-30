@@ -44,7 +44,7 @@ function computeScriptChecksum(content: string): string {
   return `wa_${h1}${h2}_len${content.length}`;
 }
 
-async function executeScriptInPageContext(code: string): Promise<DomActionResult> {
+async function executeScriptInPageContext(code: string, args: any[] = []): Promise<DomActionResult> {
   return new Promise<DomActionResult>((resolve) => {
     const scriptId = getNextScriptId();
     const checksum = computeScriptChecksum(code);
@@ -62,8 +62,14 @@ async function executeScriptInPageContext(code: string): Promise<DomActionResult
       cleanup();
       const detail = e.detail || {};
       if (detail.success) {
-        // Sucesso na execução isolada (sem retornar dados/variáveis do usuário ao fluxo)
-        resolve({ success: true, data: { scriptId, executed: true } });
+        resolve({
+          success: true,
+          data: {
+            scriptId,
+            executed: true,
+            result: detail.result,
+          },
+        });
       } else {
         resolve({ success: false, error: detail.error });
       }
@@ -135,13 +141,12 @@ async function executeScriptInPageContext(code: string): Promise<DomActionResult
         }
       }
 
-      // 3. TERCEIRO: Executar o código de forma que ele não seja capaz de se comunicar com o resto do fluxo
-      // O código roda sem receber variáveis, contexto ou argumentos do fluxo, e nenhum valor retornado é enviado de volta
+      // 3. TERCEIRO: Executar o código no contexto da página web, passando argumentos e ferramentas da extensão
       const dispatchExecution = () => {
         if (finished) return;
         window.dispatchEvent(
           new CustomEvent('__WA_EXECUTE_PAGE_SCRIPT__', {
-            detail: { scriptId, eventId, checksum, expectedCode: code },
+            detail: { scriptId, eventId, checksum, expectedCode: code, args },
           })
         );
       };
@@ -173,10 +178,15 @@ async function executeScriptInPageContext(code: string): Promise<DomActionResult
           }
 
           targetScript.setAttribute('data-wa-stage', 'executing');
-          // Executa com escopo totalmente isolado ({}) - sem repassar vars e sem retornar dados ao fluxo
-          SafeJsEvaluator.evaluate(`(function() {\n${currentDomCode}\n})()`, {});
+          // Executa com escopo isolado sem privilégios de extensão (chrome: undefined)
+          const evalRes = SafeJsEvaluator.evaluate(`(function(args, $args) {\n${currentDomCode}\n})(args, args)`, {
+            args: args || [],
+            $args: args || [],
+            chrome: undefined,
+            browser: undefined,
+          });
           targetScript.setAttribute('data-wa-stage', 'executed');
-          resolve({ success: true, data: { scriptId, executed: true } });
+          resolve({ success: true, data: { scriptId, executed: true, result: evalRes } });
         } catch (err: any) {
           resolve({ success: false, error: err?.message || String(err) });
         }
@@ -463,8 +473,8 @@ async function handleDomAction(message: DomActionMessage): Promise<DomActionResu
     }
 
     case 'INJECT_SCRIPT': {
-      const { code } = payload;
-      return await executeScriptInPageContext(code);
+      const { code, args } = payload;
+      return await executeScriptInPageContext(code, args || []);
     }
 
     default:

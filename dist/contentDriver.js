@@ -20880,7 +20880,7 @@
     /**
      * Avalia uma expressão ou bloco de código JS arbitrário com o escopo de variáveis fornecido
      */
-    static evaluate(expressionOrCode, vars = {}) {
+    static evaluate(expressionOrCode, vars = {}, throwOnError = false) {
       if (!expressionOrCode || !expressionOrCode.trim())
         return false;
       const trimmed = expressionOrCode.trim();
@@ -20965,6 +20965,8 @@
         }
       }
       Object.assign(globalScope, vars);
+      globalScope.chrome = void 0;
+      globalScope.browser = void 0;
       try {
         const interpreter = new Interpreter(globalScope, {
           timeout: 1e4,
@@ -20983,6 +20985,8 @@ ${es5Code}
         }
         return result;
       } catch (err) {
+        if (throwOnError)
+          throw err;
         console.warn(`[SafeJsEvaluator] Erro ao avaliar c\xF3digo JS:`, err?.message || err);
         return false;
       }
@@ -21011,7 +21015,7 @@ ${es5Code}
     const h2 = (hash2 >>> 0).toString(16).padStart(8, "0");
     return `wa_${h1}${h2}_len${content.length}`;
   }
-  async function executeScriptInPageContext(code) {
+  async function executeScriptInPageContext(code, args = []) {
     return new Promise((resolve) => {
       const scriptId = getNextScriptId();
       const checksum = computeScriptChecksum(code);
@@ -21027,7 +21031,14 @@ ${es5Code}
         cleanup();
         const detail = e.detail || {};
         if (detail.success) {
-          resolve({ success: true, data: { scriptId, executed: true } });
+          resolve({
+            success: true,
+            data: {
+              scriptId,
+              executed: true,
+              result: detail.result
+            }
+          });
         } else {
           resolve({ success: false, error: detail.error });
         }
@@ -21085,7 +21096,7 @@ ${es5Code}
             return;
           window.dispatchEvent(
             new CustomEvent("__WA_EXECUTE_PAGE_SCRIPT__", {
-              detail: { scriptId, eventId, checksum, expectedCode: code }
+              detail: { scriptId, eventId, checksum, expectedCode: code, args }
             })
           );
         };
@@ -21112,11 +21123,16 @@ ${es5Code}
               return;
             }
             targetScript.setAttribute("data-wa-stage", "executing");
-            SafeJsEvaluator.evaluate(`(function() {
+            const evalRes = SafeJsEvaluator.evaluate(`(function(args, $args) {
 ${currentDomCode}
-})()`, {});
+})(args, args)`, {
+              args: args || [],
+              $args: args || [],
+              chrome: void 0,
+              browser: void 0
+            });
             targetScript.setAttribute("data-wa-stage", "executed");
-            resolve({ success: true, data: { scriptId, executed: true } });
+            resolve({ success: true, data: { scriptId, executed: true, result: evalRes } });
           } catch (err) {
             resolve({ success: false, error: err?.message || String(err) });
           }
@@ -21374,8 +21390,8 @@ ${currentDomCode}
         return { success: true };
       }
       case "INJECT_SCRIPT": {
-        const { code } = payload;
-        return await executeScriptInPageContext(code);
+        const { code, args } = payload;
+        return await executeScriptInPageContext(code, args || []);
       }
       default:
         throw new Error(`A\xE7\xE3o de DOM desconhecida: ${action}`);

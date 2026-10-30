@@ -68,7 +68,7 @@ const BLOCK_CATALOG: Array<{
     categoryLabel: 'E. Injeção e Customização',
     categoryClass: 'cat-inject',
     items: [
-      { type: 'inject_javascript', title: 'Injetar JavaScript', desc: 'Roda no Content ou Background', icon: '⚡', defaultData: { label: 'Injetar JS', code: 'console.log("Olá Mundo");', context: 'content_script' } },
+      { type: 'inject_javascript', title: 'Injetar JavaScript', desc: 'Executa na página web', icon: '⚡', defaultData: { label: 'Injetar JS', code: 'console.log("Olá Mundo");', context: 'content_script' } },
       { type: 'inject_html', title: 'Injetar HTML', desc: 'Insere elementos na página', icon: '🧩', defaultData: { label: 'Injetar HTML', html: '<div class="banner">Aviso</div>', targetSelector: 'body', position: 'beforeend' } },
       { type: 'inject_css', title: 'Injetar CSS', desc: 'Aplica estilos customizados', icon: '🎨', defaultData: { label: 'Injetar CSS', css: 'body { background: #000 !important; }', target: 'page' } },
       { type: 'web_component', title: 'Elementos Web', desc: 'HTML + CSS + JS unificados', icon: '📦', defaultData: { label: 'Web Component', html: '<button id="btn">Ok</button>', css: 'button { color: red; }', js: '', containerId: 'custom-widget', mode: 'shadow_dom' } },

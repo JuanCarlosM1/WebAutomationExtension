@@ -18,8 +18,8 @@ import { FlowSettingsModal } from './modules/flowSettingsModal';
 import { HtmlElementAnalyzer } from './modules/htmlElementAnalyzer';
 import { CodeEditorComponent } from './modules/codeEditorComponent';
 
-// Registrar avaliador JS em conformidade com a CSP do Manifest V3 (sem 'unsafe-eval')
-StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars);
+// Registrar avaliador JS em conformidade com a CSP do Manifest V3 (sem 'unsafe-eval' e sem acesso a privilégios de extensão)
+StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars, true);
 
 class VisualEditorApp {
   private currentView: 'dashboard' | 'studio' | 'settings' = 'dashboard';
@@ -708,6 +708,10 @@ class VisualEditorApp {
             timestamp: Date.now(),
           };
         }
+      } else if (msg.type === 'NODE_ERROR') {
+        this.unhighlightActiveNode(msg.nodeId);
+        this.appendLog({ timestamp: Date.now(), level: 'error', message: `Erro no bloco [${msg.nodeId}]: ${msg.error}` });
+        showToast(`Erro no bloco: ${msg.error}`, 'error');
       } else if (msg.type === 'LOG') {
         this.appendLog(msg.log);
       } else if (msg.type === 'STATUS_CHANGE') {

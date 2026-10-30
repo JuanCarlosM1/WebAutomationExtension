@@ -16,16 +16,45 @@ export class ChromeBrowserDriver implements IBrowserDriver {
     this.activeTabId = tabId;
   }
 
+  private isRestrictedTab(tab?: chrome.tabs.Tab | null): boolean {
+    if (!tab?.url) return false;
+    return (
+      tab.url.startsWith('chrome-extension://') ||
+      tab.url.startsWith('chrome://') ||
+      tab.url.startsWith('edge://') ||
+      tab.url.startsWith('devtools://') ||
+      tab.url.startsWith('view-source:')
+    );
+  }
+
   private async getTargetTabId(): Promise<number> {
     if (this.activeTabId) {
-      return this.activeTabId;
+      const tab = await chrome.tabs.get(this.activeTabId).catch(() => null);
+      if (tab?.id && !this.isRestrictedTab(tab)) {
+        return this.activeTabId;
+      }
     }
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) {
-      throw new Error('Nenhuma aba ativa encontrada para executar a ação.');
+
+    // Busca abas normais (páginas web) abertas no navegador
+    const tabs = await chrome.tabs.query({});
+    const webTabs = tabs.filter(
+      (t) => t.id && t.url && (t.url.startsWith('http://') || t.url.startsWith('https://') || t.url.startsWith('file://'))
+    );
+
+    // Prioriza aba ativa na janela atual se for web, ou qualquer aba web ativa, ou a mais recente
+    const currentWindowActive = webTabs.find((t) => t.active && t.windowId === chrome.windows?.WINDOW_ID_CURRENT);
+    const anyActive = webTabs.find((t) => t.active);
+    const target = currentWindowActive || anyActive || webTabs[webTabs.length - 1];
+
+    if (target?.id) {
+      this.activeTabId = target.id;
+      return target.id;
     }
-    this.activeTabId = tab.id;
-    return tab.id;
+
+    // Se nenhuma aba web existir, cria uma nova aba para a automação rodar sem interferir no editor
+    const newTab = await chrome.tabs.create({ url: 'about:blank', active: false });
+    this.activeTabId = newTab.id!;
+    return newTab.id!;
   }
 
   private async sendToContentScript(action: string, payload: any): Promise<any> {
@@ -57,31 +86,52 @@ export class ChromeBrowserDriver implements IBrowserDriver {
 
   public async navigateTo(url: string, waitUntil: string = 'load', timeoutMs: number = 30000): Promise<void> {
     const tabId = await this.getTargetTabId();
-    await chrome.tabs.update(tabId, { url });
 
-    if (waitUntil === 'none') return;
+    // Se a aba foi criada como about:blank ou vazia, podemos ativá-la para o usuário acompanhar a automação
+    const tabInfo = await chrome.tabs.get(tabId).catch(() => null);
+    if (tabInfo && (tabInfo.url === 'about:blank' || tabInfo.url === '')) {
+      chrome.tabs.update(tabId, { active: true }).catch(() => {});
+    }
+
+    if (waitUntil === 'none') {
+      await chrome.tabs.update(tabId, { url });
+      return;
+    }
 
     return new Promise((resolve, reject) => {
+      let isResolved = false;
       const timer = setTimeout(() => {
-        chrome.tabs.onUpdated.removeListener(listener);
-        reject(new Error(`Timeout (${timeoutMs}ms) aguardando carregamento da URL: ${url}`));
+        if (!isResolved) {
+          isResolved = true;
+          chrome.tabs.onUpdated.removeListener(listener);
+          reject(new Error(`Timeout (${timeoutMs}ms) aguardando carregamento da URL: ${url}`));
+        }
       }, timeoutMs);
 
       const listener = (updatedTabId: number, changeInfo: chrome.tabs.TabChangeInfo) => {
-        if (updatedTabId === tabId) {
-          if (waitUntil === 'load' && changeInfo.status === 'complete') {
+        if (updatedTabId === tabId && !isResolved) {
+          if (changeInfo.status === 'complete') {
+            isResolved = true;
             clearTimeout(timer);
             chrome.tabs.onUpdated.removeListener(listener);
-            resolve();
-          } else if (waitUntil === 'domcontentloaded' && changeInfo.status) {
-            clearTimeout(timer);
-            chrome.tabs.onUpdated.removeListener(listener);
-            resolve();
+            if (waitUntil === 'networkidle') {
+              setTimeout(resolve, 500);
+            } else {
+              setTimeout(resolve, 100);
+            }
           }
         }
       };
 
       chrome.tabs.onUpdated.addListener(listener);
+      chrome.tabs.update(tabId, { url }).catch((err) => {
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timer);
+          chrome.tabs.onUpdated.removeListener(listener);
+          reject(err);
+        }
+      });
     });
   }
 
@@ -262,23 +312,28 @@ export class ChromeBrowserDriver implements IBrowserDriver {
     });
   }
 
-  public async injectScript(code: string, context: 'content_script' | 'background', _args: any[] = []): Promise<any> {
-    // Executa de forma isolada, sem passar variáveis ou expor comunicação direta com o resto do fluxo
-    if (context === 'background') {
-      SafeJsEvaluator.evaluate(`(function() {\n${code}\n})()`, {});
-      return { success: true, executed: true };
-    }
-
+  public async injectScript(code: string, _context: 'content_script' | 'background', args: any[] = []): Promise<any> {
+    // O JavaScript do fluxo roda estritamente no contexto da página web e não possui privilégios de extensão (chrome.*).
     const tabId = await this.getTargetTabId();
     const tab = await chrome.tabs.get(tabId).catch(() => null);
     const isExtensionPage = !tab?.url || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('chrome://');
 
     if (isExtensionPage) {
-      SafeJsEvaluator.evaluate(`(function() {\n${code}\n})()`, {});
-      return { success: true, executed: true };
+      // Se for executado sem uma página web real aberta, avalia com SafeJsEvaluator mantendo bloqueio de APIs chrome.*
+      const evalRes = SafeJsEvaluator.evaluate(`(function(args, $args) {\n${code}\n})(args, args)`, {
+        args,
+        $args: args,
+        chrome: undefined,
+        browser: undefined,
+      });
+      return evalRes !== undefined ? evalRes : { success: true, executed: true };
     }
 
-    return await this.sendToContentScript('INJECT_SCRIPT', { code });
+    const response = await this.sendToContentScript('INJECT_SCRIPT', { code, args });
+    if (response && response.data && response.data.result !== undefined) {
+      return response.data.result;
+    }
+    return response?.data ?? response;
   }
 
   public async injectHtml(html: string, targetSelector: string, position: string, selectorType?: 'css' | 'xpath'): Promise<void> {

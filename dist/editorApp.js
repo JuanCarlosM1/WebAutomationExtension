@@ -9778,7 +9778,7 @@ var StateManager = class _StateManager {
   /**
    * Avalia uma expressão ou script JS arbitrário no escopo atual das variáveis e variáveis do N8N
    */
-  evaluateJsExpression(expressionOrCode) {
+  evaluateJsExpression(expressionOrCode, throwOnError = false) {
     if (!expressionOrCode || !expressionOrCode.trim())
       return false;
     const trimmed = this.interpolate(expressionOrCode.trim());
@@ -9794,7 +9794,14 @@ var StateManager = class _StateManager {
     const keys2 = Object.keys(scopeData);
     const values = Object.values(scopeData);
     if (_StateManager.customEvaluator) {
-      return _StateManager.customEvaluator(trimmed, scopeData);
+      try {
+        return _StateManager.customEvaluator(trimmed, scopeData);
+      } catch (err) {
+        if (throwOnError)
+          throw err;
+        console.warn(`[StateManager] Erro ao avaliar express\xE3o JS: "${trimmed}":`, err.message);
+        return false;
+      }
     }
     try {
       if (trimmed.includes(";") || trimmed.includes("return ") || trimmed.includes("\n")) {
@@ -9805,6 +9812,8 @@ var StateManager = class _StateManager {
       const fn = new Function(...keys2, `return (${trimmed});`);
       return fn(...values);
     } catch (err) {
+      if (throwOnError)
+        throw err;
       console.warn(`[StateManager] Erro ao avaliar express\xE3o JS: "${trimmed}":`, err.message);
       return false;
     }
@@ -21366,7 +21375,7 @@ var SafeJsEvaluator = class {
   /**
    * Avalia uma expressão ou bloco de código JS arbitrário com o escopo de variáveis fornecido
    */
-  static evaluate(expressionOrCode, vars = {}) {
+  static evaluate(expressionOrCode, vars = {}, throwOnError = false) {
     if (!expressionOrCode || !expressionOrCode.trim())
       return false;
     const trimmed = expressionOrCode.trim();
@@ -21451,6 +21460,8 @@ var SafeJsEvaluator = class {
       }
     }
     Object.assign(globalScope, vars);
+    globalScope.chrome = void 0;
+    globalScope.browser = void 0;
     try {
       const interpreter = new Interpreter(globalScope, {
         timeout: 1e4,
@@ -21469,6 +21480,8 @@ ${es5Code}
       }
       return result;
     } catch (err) {
+      if (throwOnError)
+        throw err;
       console.warn(`[SafeJsEvaluator] Erro ao avaliar c\xF3digo JS:`, err?.message || err);
       return false;
     }
@@ -21684,7 +21697,7 @@ var BLOCK_CATALOG = [
       {
         type: "inject_javascript",
         title: "Injetar JavaScript",
-        desc: "Roda no Content ou Background",
+        desc: "Executa na p\xE1gina web",
         icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
         defaultData: { label: "Injetar JS", code: 'console.log("Ol\xE1 Mundo");', context: "content_script" }
       },
@@ -22243,7 +22256,20 @@ var JS_BUILTIN_SUGGESTIONS = [
   { label: "Array.forEach", type: "function", insertText: "forEach((item) => {\n  \n})", detail: "iterate array", cursorOffset: 20 },
   { label: "Array.find", type: "function", insertText: "find((item) => )", detail: "find item", cursorOffset: 15 },
   { label: "window.location.href", type: "property", insertText: "window.location.href", detail: "current URL" },
-  { label: "window.localStorage", type: "property", insertText: "window.localStorage", detail: "localStorage" }
+  { label: "window.localStorage", type: "property", insertText: "window.localStorage", detail: "localStorage" },
+  // Utilitários WebAutomations fornecidos pela extensão para a página
+  { label: "$vars", type: "variable", insertText: "$vars.", detail: "Vari\xE1veis do fluxo" },
+  { label: "$node", type: "variable", insertText: "$node['']", detail: "Sa\xEDdas de n\xF3s anteriores", cursorOffset: 7 },
+  { label: "$input", type: "variable", insertText: "$input", detail: "Dado de entrada do n\xF3" },
+  { label: "args", type: "variable", insertText: "args", detail: "Argumentos passados ao script" },
+  { label: "WebAutomations.sleep", type: "function", insertText: "await WebAutomations.sleep(1000);", detail: "Pausa ass\xEDncrona (ms)" },
+  { label: "WebAutomations.waitFor", type: "function", insertText: "await WebAutomations.waitFor('');", detail: "Aguardar elemento na p\xE1gina", cursorOffset: 25 },
+  { label: "WebAutomations.get", type: "function", insertText: "WebAutomations.get('')", detail: "Buscar elemento (CSS/XPath)", cursorOffset: 20 },
+  { label: "WebAutomations.getAll", type: "function", insertText: "WebAutomations.getAll('')", detail: "Buscar m\xFAltiplos elementos", cursorOffset: 23 },
+  { label: "WebAutomations.click", type: "function", insertText: "WebAutomations.click('')", detail: "Clicar em elemento", cursorOffset: 22 },
+  { label: "WebAutomations.type", type: "function", insertText: "WebAutomations.type('', '')", detail: "Digitar em elemento", cursorOffset: 21 },
+  { label: "WebAutomations.log", type: "function", insertText: "WebAutomations.log();", detail: "Log formatado no console", cursorOffset: 19 },
+  { label: "$wa", type: "variable", insertText: "$wa.", detail: "Atalho WebAutomations" }
 ];
 var CSS_SUGGESTIONS = [
   { label: "display", type: "property", insertText: "display: flex;", detail: "layout" },
@@ -23094,6 +23120,7 @@ var N8NDataExplorer = class _N8NDataExplorer {
       expandedNodeIds.add(allPredecessors[0].id);
     }
     const renderContent = () => {
+      const prevScrollTop = contentList.scrollTop;
       contentList.innerHTML = "";
       const query = searchQuery.toLowerCase().trim();
       if (activeTab === "predecessors") {
@@ -23371,6 +23398,7 @@ var N8NDataExplorer = class _N8NDataExplorer {
           contentList.appendChild(varCard);
         });
       }
+      contentList.scrollTop = prevScrollTop;
     };
     const tabPreds = headerEl.querySelector("#tabPredecessorsBtn");
     const tabVars = headerEl.querySelector("#tabVarsBtn");
@@ -27396,6 +27424,7 @@ var InspectorManager = class {
   pendingScrollSelector;
   disableSidebarEditing = false;
   runtimeNodeOutputs = {};
+  activeExpandedNodeId;
   setDisableSidebarEditing(disabled) {
     this.disableSidebarEditing = disabled;
     this.renderInspector();
@@ -27419,6 +27448,32 @@ var InspectorManager = class {
     const form = document.getElementById("nodePropertiesForm");
     const selectedIds = this.callbacks.getSelectedNodeIds ? this.callbacks.getSelectedNodeIds() : [];
     const selectedId = this.callbacks.getSelectedNodeId();
+    const graph = this.callbacks.getGraph();
+    const modalForm = document.getElementById("expandedNodeModalForm");
+    if (modalForm) {
+      const modalNodeId = this.activeExpandedNodeId || selectedId;
+      const modalNode = modalNodeId ? graph.nodes.find((n2) => n2.id === modalNodeId) : void 0;
+      if (modalNode) {
+        const configContainer = document.getElementById("expandedTabContentConfig");
+        const prevScrollTop = configContainer ? configContainer.scrollTop : 0;
+        this.populatePropertiesForm(modalForm, modalNode);
+        if (configContainer && !this.pendingScrollSelector) {
+          configContainer.scrollTop = prevScrollTop;
+        }
+        const modalTitle = document.getElementById("expandedModalNodeTitle");
+        if (modalTitle) {
+          modalTitle.textContent = modalNode.data.label || modalNode.type;
+        }
+      }
+    }
+    if (!form || !noSelect) {
+      if (this.pendingScrollSelector) {
+        const sel = this.pendingScrollSelector;
+        this.pendingScrollSelector = void 0;
+        this.scrollTargetIntoInspectorView(sel);
+      }
+      return;
+    }
     if (selectedIds.length > 1) {
       if (sidebarRight)
         sidebarRight.classList.remove("collapsed");
@@ -27431,6 +27486,11 @@ var InspectorManager = class {
       noSelect.classList.add("hidden");
       form.classList.remove("hidden");
       this.renderMultiSelectionInspector(form, selectedIds);
+      if (this.pendingScrollSelector) {
+        const sel = this.pendingScrollSelector;
+        this.pendingScrollSelector = void 0;
+        this.scrollTargetIntoInspectorView(sel);
+      }
       return;
     }
     if (!selectedId) {
@@ -27438,15 +27498,24 @@ var InspectorManager = class {
       form.classList.add("hidden");
       if (resizerLeft)
         resizerLeft.style.display = "block";
+      if (this.pendingScrollSelector) {
+        const sel = this.pendingScrollSelector;
+        this.pendingScrollSelector = void 0;
+        this.scrollTargetIntoInspectorView(sel);
+      }
       return;
     }
-    const graph = this.callbacks.getGraph();
     const node = graph.nodes.find((n2) => n2.id === selectedId);
     if (!node) {
       noSelect.classList.remove("hidden");
       form.classList.add("hidden");
       if (resizerLeft)
         resizerLeft.style.display = "block";
+      if (this.pendingScrollSelector) {
+        const sel = this.pendingScrollSelector;
+        this.pendingScrollSelector = void 0;
+        this.scrollTargetIntoInspectorView(sel);
+      }
       return;
     }
     if (sidebarRight)
@@ -27490,13 +27559,14 @@ var InspectorManager = class {
       form.querySelector("#btnSidebarOpenExpanded")?.addEventListener("click", () => {
         this.openExpandedModal(node.id);
       });
+      if (this.pendingScrollSelector) {
+        const sel = this.pendingScrollSelector;
+        this.pendingScrollSelector = void 0;
+        this.scrollTargetIntoInspectorView(sel);
+      }
       return;
     }
     this.populatePropertiesForm(form, node);
-    const modalForm = document.getElementById("expandedNodeModalForm");
-    if (modalForm) {
-      this.populatePropertiesForm(modalForm, node);
-    }
     if (this.pendingScrollSelector) {
       const sel = this.pendingScrollSelector;
       this.pendingScrollSelector = void 0;
@@ -27711,15 +27781,21 @@ var InspectorManager = class {
         }
         break;
       case "inject_javascript":
-        this.addSelectInput(form, "Ambiente de Execu\xE7\xE3o", data2.context || "content_script", [
-          { value: "content_script", label: "Na P\xE1gina Aberta (Content Script)" },
-          { value: "background", label: "No Background da Extens\xE3o" }
-        ], (val) => data2.context = val);
+        data2.context = "content_script";
         this.addCodeEditorInput(form, "C\xF3digo JavaScript", "javascript", data2.code || 'console.log("Ol\xE1");', (val) => data2.code = val, "220px");
+        this.addTextInput(form, "Salvar Retorno na Vari\xE1vel (Opcional)", data2.saveResultToVar || "", (val) => data2.saveResultToVar = val);
         {
           const noticeGroup = document.createElement("div");
-          noticeGroup.style.cssText = "background: rgba(99, 102, 241, 0.08); border: 1px dashed rgba(99, 102, 241, 0.3); border-radius: 6px; padding: 8px 10px; margin-top: 6px; font-size: 11px; color: #94a3b8; line-height: 1.4;";
-          noticeGroup.innerHTML = "\u{1F512} <strong>Execu\xE7\xE3o Isolada:</strong> O c\xF3digo \xE9 injetado e executado sem comunica\xE7\xE3o direta com o fluxo. Ferramentas de comunica\xE7\xE3o da extens\xE3o ser\xE3o integradas posteriormente.";
+          noticeGroup.style.cssText = "background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 6px; padding: 10px 12px; margin-top: 8px; font-size: 11px; color: #cbd5e1; line-height: 1.5;";
+          noticeGroup.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 6px; font-weight: 600; color: #818cf8; margin-bottom: 4px;">
+              <span>\u{1F310}</span> Contexto da P\xE1gina Web
+            </div>
+            <div>O script roda com as capacidades de uma p\xE1gina web padr\xE3o (DOM, <code>window</code>, <code>fetch</code>, eventos) e n\xE3o possui acesso a privil\xE9gios de extens\xE3o (<code>chrome.*</code>).</div>
+            <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); color: #94a3b8;">
+              <strong>Recursos fornecidos pela extens\xE3o:</strong> <code>args</code> (argumentos do n\xF3), <code>$vars</code>, <code>$node</code>, <code>$input</code> e utilit\xE1rios <code>WebAutomations</code> (ou <code>$wa.sleep()</code>, <code>$wa.waitFor()</code>, <code>$wa.get()</code>).
+            </div>
+          `;
           form.appendChild(noticeGroup);
         }
         break;
@@ -27773,7 +27849,12 @@ var InspectorManager = class {
     const node = graph.nodes.find((n2) => n2.id === targetNodeId);
     if (!node)
       return;
+    if (this.activeExpandedNodeId !== targetNodeId) {
+      this.expandedTriggerIndices = /* @__PURE__ */ new Set([0]);
+      this.expandedCaseIndices = /* @__PURE__ */ new Set([0]);
+    }
     this.closeExpandedModal();
+    this.activeExpandedNodeId = targetNodeId;
     const backdrop = document.createElement("div");
     backdrop.id = "expandedNodeModalBackdrop";
     backdrop.className = "flow-modal-backdrop";
@@ -27981,6 +28062,7 @@ var InspectorManager = class {
    * Fecha o modal expandido se estiver aberto
    */
   closeExpandedModal() {
+    this.activeExpandedNodeId = void 0;
     const existing = document.getElementById("expandedNodeModalBackdrop");
     existing?.remove();
   }
@@ -28231,11 +28313,13 @@ var InspectorManager = class {
     );
   }
   /**
-   * Garante que o elemento recém expandido na barra lateral direita fique visível rolando a barra
+   * Garante que o elemento recém expandido (no modal ou na barra lateral) fique visível rolando o container
    */
   scrollTargetIntoInspectorView(elementOrSelector) {
     requestAnimationFrame(() => {
-      const container = document.getElementById("tabProperties");
+      const modalConfigContainer = document.getElementById("expandedTabContentConfig");
+      const isModalOpen = !!(modalConfigContainer && modalConfigContainer.offsetParent !== null);
+      const container = isModalOpen ? modalConfigContainer : document.getElementById("tabProperties");
       if (!container)
         return;
       const el = typeof elementOrSelector === "string" ? container.querySelector(elementOrSelector) : elementOrSelector;
@@ -30622,7 +30706,7 @@ function sanitizeGraph(graph) {
 }
 
 // src/editor/editorApp.ts
-StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars);
+StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars, true);
 var VisualEditorApp = class {
   currentView = "dashboard";
   graph;
@@ -31240,6 +31324,10 @@ var VisualEditorApp = class {
             timestamp: Date.now()
           };
         }
+      } else if (msg.type === "NODE_ERROR") {
+        this.unhighlightActiveNode(msg.nodeId);
+        this.appendLog({ timestamp: Date.now(), level: "error", message: `Erro no bloco [${msg.nodeId}]: ${msg.error}` });
+        showToast(`Erro no bloco: ${msg.error}`, "error");
       } else if (msg.type === "LOG") {
         this.appendLog(msg.log);
       } else if (msg.type === "STATUS_CHANGE") {

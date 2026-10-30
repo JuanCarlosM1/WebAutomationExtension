@@ -12,8 +12,8 @@ import { StateManager } from '../../../BibliotecaDeDev/src/engine/StateManager';
 import { DEFAULT_AUTOMATION } from '../defaultAutomation';
 import { SafeJsEvaluator } from '../utils/safeJsEvaluator';
 
-// Registrar avaliador JS em conformidade com a CSP do Manifest V3 (sem 'unsafe-eval')
-StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars);
+// Registrar avaliador JS em conformidade com a CSP do Manifest V3 (sem 'unsafe-eval' e sem acesso a privilégios de extensão)
+StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars, true);
 
 class ExtensionController {
   private engine: ExecutionEngine;
@@ -429,16 +429,21 @@ class ExtensionController {
     switch (action) {
       case 'EXECUTE_AUTOMATION': {
         const graph: WebAutomationGraph = payload.graph;
-        const targetTabId = payload.tabId || sender.tab?.id;
+        const isSenderExtension = sender.tab?.url?.startsWith('chrome-extension://') || !sender.tab;
+        const targetTabId = payload.tabId || (isSenderExtension ? undefined : sender.tab?.id);
         const driver = new ChromeBrowserDriver(targetTabId);
         const ctx = await this.executeAutomation(graph, driver);
+        const isSuccess = ctx.status === 'completed';
+        const errorMsg = !isSuccess ? ctx.logs.find((l) => l.level === 'error')?.message || 'Falha na execução do fluxo' : undefined;
+
         return {
-          success: true,
+          success: isSuccess,
           status: ctx.status,
           variables: ctx.state.getAll(),
           nodeOutputs: ctx.state.getNodeOutputs(),
           readonlyVariables: ctx.state.getReadonlyVariables(),
           logs: ctx.logs,
+          error: errorMsg,
         };
       }
 
@@ -505,6 +510,7 @@ class ExtensionController {
     onProgress?: (event: string, data: any) => void
   ): Promise<ExecutionContext> {
     const autoId = graph.metadata.id;
+    const runtimeOutputs: Record<string, any> = {};
 
     const ctx = await this.engine.runGraph(graph, driver, {
       onStatusChange: (status) => {
@@ -516,6 +522,9 @@ class ExtensionController {
         this.broadcastToUI({ type: 'NODE_START', automationId: autoId, nodeId: node.id });
       },
       onNodeComplete: (node, result) => {
+        if (result.outputData !== undefined) {
+          runtimeOutputs[node.id] = result.outputData;
+        }
         onProgress?.('node_complete', { automationId: autoId, nodeId: node.id, nodeLabel: (node.data as any)?.label, result });
         this.broadcastToUI({
           type: 'NODE_COMPLETE',
@@ -523,7 +532,7 @@ class ExtensionController {
           nodeId: node.id,
           nodeLabel: (node.data as any)?.label,
           result,
-          nodeOutputs: ctx.state.getNodeOutputs(),
+          nodeOutputs: runtimeOutputs,
         });
       },
       onNodeError: (node, error) => {

@@ -482,6 +482,7 @@ export class N8NDataExplorer {
     }
 
     const renderContent = () => {
+      const prevScrollTop = contentList.scrollTop;
       contentList.innerHTML = '';
       const query = searchQuery.toLowerCase().trim();
 
@@ -804,6 +805,8 @@ export class N8NDataExplorer {
           contentList.appendChild(varCard);
         });
       }
+
+      contentList.scrollTop = prevScrollTop;
     };
 
 

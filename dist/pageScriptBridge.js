@@ -20880,7 +20880,7 @@
     /**
      * Avalia uma expressão ou bloco de código JS arbitrário com o escopo de variáveis fornecido
      */
-    static evaluate(expressionOrCode, vars = {}) {
+    static evaluate(expressionOrCode, vars = {}, throwOnError = false) {
       if (!expressionOrCode || !expressionOrCode.trim())
         return false;
       const trimmed = expressionOrCode.trim();
@@ -20965,6 +20965,8 @@
         }
       }
       Object.assign(globalScope, vars);
+      globalScope.chrome = void 0;
+      globalScope.browser = void 0;
       try {
         const interpreter = new Interpreter(globalScope, {
           timeout: 1e4,
@@ -20983,6 +20985,8 @@ ${es5Code}
         }
         return result;
       } catch (err) {
+        if (throwOnError)
+          throw err;
         console.warn(`[SafeJsEvaluator] Erro ao avaliar c\xF3digo JS:`, err?.message || err);
         return false;
       }
@@ -20995,9 +20999,71 @@ ${es5Code}
     if (win.__webautomations_page_bridge_installed)
       return;
     win.__webautomations_page_bridge_installed = true;
-    window.addEventListener("__WA_EXECUTE_PAGE_SCRIPT__", (e) => {
+    const WebAutomationsHelper = {
+      version: "1.0.0",
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      get: (selector, type = "css") => {
+        if (type === "xpath") {
+          const res2 = document.evaluate(selector, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+          return res2.singleNodeValue;
+        }
+        return document.querySelector(selector);
+      },
+      getAll: (selector, type = "css") => {
+        if (type === "xpath") {
+          const res2 = document.evaluate(selector, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+          const list = [];
+          for (let i = 0; i < res2.snapshotLength; i++) {
+            list.push(res2.snapshotItem(i));
+          }
+          return list;
+        }
+        return Array.from(document.querySelectorAll(selector));
+      },
+      waitFor: (selector, timeoutMs = 1e4, type = "css") => {
+        return new Promise((resolve, reject) => {
+          const existing = WebAutomationsHelper.get(selector, type);
+          if (existing)
+            return resolve(existing);
+          const startTime = Date.now();
+          const interval = setInterval(() => {
+            const el = WebAutomationsHelper.get(selector, type);
+            if (el) {
+              clearInterval(interval);
+              resolve(el);
+            } else if (Date.now() - startTime > timeoutMs) {
+              clearInterval(interval);
+              reject(new Error(`Timeout aguardando elemento: ${selector}`));
+            }
+          }, 100);
+        });
+      },
+      click: (selector, type = "css") => {
+        const el = WebAutomationsHelper.get(selector, type);
+        if (!el)
+          throw new Error(`Elemento n\xE3o encontrado para clique: ${selector}`);
+        el.click();
+        return true;
+      },
+      type: (selector, text, type = "css") => {
+        const el = WebAutomationsHelper.get(selector, type);
+        if (!el)
+          throw new Error(`Elemento n\xE3o encontrado para digita\xE7\xE3o: ${selector}`);
+        el.focus();
+        el.value = text;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      },
+      log: (...args) => {
+        console.log("%c[WebAutomations]", "color: #6366f1; font-weight: bold;", ...args);
+      }
+    };
+    win.WebAutomations = WebAutomationsHelper;
+    win.$wa = WebAutomationsHelper;
+    window.addEventListener("__WA_EXECUTE_PAGE_SCRIPT__", async (e) => {
       const detail = e.detail || {};
-      const { eventId, scriptId, checksum, expectedCode } = detail;
+      const { eventId, scriptId, checksum, expectedCode, args } = detail;
       if (!eventId)
         return;
       try {
@@ -21012,28 +21078,48 @@ ${es5Code}
           throw new Error(`[PageBridge Security] Integridade violada: O script #${scriptId} no DOM difere do c\xF3digo original configurado no fluxo!`);
         }
         scriptEl.setAttribute("data-wa-stage", "executing");
+        const safeArgs = Array.isArray(args) ? args : [];
         let executed = false;
+        let result = void 0;
         try {
-          const body = `"use strict"; (function() {
+          const body = `"use strict"; return (async function(args, $args, WebAutomations, $wa, chrome, browser) {
 ${injectedCode}
-})();`;
-          const fn = new Function(body);
-          fn.call(window);
+}).call(window, safeArgs, safeArgs, WebAutomationsHelper, WebAutomationsHelper, undefined, undefined);`;
+          const fn = new Function("safeArgs", "WebAutomationsHelper", body);
+          result = await fn(safeArgs, WebAutomationsHelper);
           executed = true;
         } catch (nativeErr) {
           if (nativeErr?.name === "EvalError" || nativeErr?.message?.includes("violates") || nativeErr?.message?.includes("CSP")) {
-            SafeJsEvaluator.evaluate(`(function() {
+            result = SafeJsEvaluator.evaluate(`(function(args, $args, WebAutomations, $wa) {
 ${injectedCode}
-})()`, {});
+})(args, args, WebAutomations, $wa)`, {
+              args: safeArgs,
+              $args: safeArgs,
+              WebAutomations: WebAutomationsHelper,
+              $wa: WebAutomationsHelper,
+              chrome: void 0,
+              browser: void 0
+            });
             executed = true;
           } else {
             throw nativeErr;
           }
         }
         scriptEl.setAttribute("data-wa-stage", "executed");
+        let sanitizedResult = result;
+        if (result instanceof Element) {
+          sanitizedResult = {
+            tagName: result.tagName,
+            id: result.id,
+            className: result.className,
+            textContent: result.textContent?.slice(0, 500) || ""
+          };
+        } else if (typeof result === "function") {
+          sanitizedResult = "[Function]";
+        }
         window.dispatchEvent(
           new CustomEvent(eventId, {
-            detail: { success: true, scriptId, executed }
+            detail: { success: true, scriptId, executed, result: sanitizedResult }
           })
         );
       } catch (err) {

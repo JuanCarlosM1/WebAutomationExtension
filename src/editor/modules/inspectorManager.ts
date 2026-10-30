@@ -28,6 +28,7 @@ export class InspectorManager {
   private pendingScrollSelector?: string;
   private disableSidebarEditing: boolean = false;
   private runtimeNodeOutputs: Record<string, any> = {};
+  private activeExpandedNodeId?: string;
 
   public setDisableSidebarEditing(disabled: boolean): void {
     this.disableSidebarEditing = disabled;
@@ -63,6 +64,41 @@ export class InspectorManager {
     const selectedIds = this.callbacks.getSelectedNodeIds ? this.callbacks.getSelectedNodeIds() : [];
     const selectedId = this.callbacks.getSelectedNodeId();
 
+    const graph = this.callbacks.getGraph();
+
+    // 1. Se o formulário do modal expandido estiver presente no DOM, sincroniza-o sempre,
+    // independentemente de seleções no canvas ou bloqueios de edição da barra lateral.
+    const modalForm = document.getElementById('expandedNodeModalForm') as HTMLFormElement;
+    if (modalForm) {
+      const modalNodeId = this.activeExpandedNodeId || selectedId;
+      const modalNode = modalNodeId ? graph.nodes.find((n) => n.id === modalNodeId) : undefined;
+      if (modalNode) {
+        const configContainer = document.getElementById('expandedTabContentConfig');
+        const prevScrollTop = configContainer ? configContainer.scrollTop : 0;
+
+        this.populatePropertiesForm(modalForm, modalNode);
+
+        if (configContainer && !this.pendingScrollSelector) {
+          configContainer.scrollTop = prevScrollTop;
+        }
+
+        const modalTitle = document.getElementById('expandedModalNodeTitle');
+        if (modalTitle) {
+          modalTitle.textContent = modalNode.data.label || modalNode.type;
+        }
+      }
+    }
+
+    // 2. Sincroniza a barra lateral (inspector do painel direito)
+    if (!form || !noSelect) {
+      if (this.pendingScrollSelector) {
+        const sel = this.pendingScrollSelector;
+        this.pendingScrollSelector = undefined;
+        this.scrollTargetIntoInspectorView(sel);
+      }
+      return;
+    }
+
     if (selectedIds.length > 1) {
       if (sidebarRight) sidebarRight.classList.remove('collapsed');
       if (sidebarLeft) sidebarLeft.classList.add('collapsed');
@@ -73,6 +109,12 @@ export class InspectorManager {
       noSelect.classList.add('hidden');
       form.classList.remove('hidden');
       this.renderMultiSelectionInspector(form, selectedIds);
+
+      if (this.pendingScrollSelector) {
+        const sel = this.pendingScrollSelector;
+        this.pendingScrollSelector = undefined;
+        this.scrollTargetIntoInspectorView(sel);
+      }
       return;
     }
 
@@ -80,15 +122,26 @@ export class InspectorManager {
       noSelect.classList.remove('hidden');
       form.classList.add('hidden');
       if (resizerLeft) resizerLeft.style.display = 'block';
+
+      if (this.pendingScrollSelector) {
+        const sel = this.pendingScrollSelector;
+        this.pendingScrollSelector = undefined;
+        this.scrollTargetIntoInspectorView(sel);
+      }
       return;
     }
 
-    const graph = this.callbacks.getGraph();
     const node = graph.nodes.find((n) => n.id === selectedId);
     if (!node) {
       noSelect.classList.remove('hidden');
       form.classList.add('hidden');
       if (resizerLeft) resizerLeft.style.display = 'block';
+
+      if (this.pendingScrollSelector) {
+        const sel = this.pendingScrollSelector;
+        this.pendingScrollSelector = undefined;
+        this.scrollTargetIntoInspectorView(sel);
+      }
       return;
     }
 
@@ -132,16 +185,16 @@ export class InspectorManager {
       form.querySelector('#btnSidebarOpenExpanded')?.addEventListener('click', () => {
         this.openExpandedModal(node.id);
       });
+
+      if (this.pendingScrollSelector) {
+        const sel = this.pendingScrollSelector;
+        this.pendingScrollSelector = undefined;
+        this.scrollTargetIntoInspectorView(sel);
+      }
       return;
     }
 
     this.populatePropertiesForm(form, node);
-
-    // Se o modal expandido estiver aberto, sincroniza seu formulário também
-    const modalForm = document.getElementById('expandedNodeModalForm') as HTMLFormElement;
-    if (modalForm) {
-      this.populatePropertiesForm(modalForm, node);
-    }
 
     if (this.pendingScrollSelector) {
       const sel = this.pendingScrollSelector;
@@ -353,15 +406,21 @@ export class InspectorManager {
         }
         break;
       case 'inject_javascript':
-        this.addSelectInput(form, 'Ambiente de Execução', data.context || 'content_script', [
-          { value: 'content_script', label: 'Na Página Aberta (Content Script)' },
-          { value: 'background', label: 'No Background da Extensão' },
-        ], (val) => data.context = val);
+        data.context = 'content_script';
         this.addCodeEditorInput(form, 'Código JavaScript', 'javascript', data.code || 'console.log("Olá");', (val) => data.code = val, '220px');
+        this.addTextInput(form, 'Salvar Retorno na Variável (Opcional)', data.saveResultToVar || '', (val) => data.saveResultToVar = val);
         {
           const noticeGroup = document.createElement('div');
-          noticeGroup.style.cssText = 'background: rgba(99, 102, 241, 0.08); border: 1px dashed rgba(99, 102, 241, 0.3); border-radius: 6px; padding: 8px 10px; margin-top: 6px; font-size: 11px; color: #94a3b8; line-height: 1.4;';
-          noticeGroup.innerHTML = '🔒 <strong>Execução Isolada:</strong> O código é injetado e executado sem comunicação direta com o fluxo. Ferramentas de comunicação da extensão serão integradas posteriormente.';
+          noticeGroup.style.cssText = 'background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 6px; padding: 10px 12px; margin-top: 8px; font-size: 11px; color: #cbd5e1; line-height: 1.5;';
+          noticeGroup.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 6px; font-weight: 600; color: #818cf8; margin-bottom: 4px;">
+              <span>🌐</span> Contexto da Página Web
+            </div>
+            <div>O script roda com as capacidades de uma página web padrão (DOM, <code>window</code>, <code>fetch</code>, eventos) e não possui acesso a privilégios de extensão (<code>chrome.*</code>).</div>
+            <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); color: #94a3b8;">
+              <strong>Recursos fornecidos pela extensão:</strong> <code>args</code> (argumentos do nó), <code>$vars</code>, <code>$node</code>, <code>$input</code> e utilitários <code>WebAutomations</code> (ou <code>$wa.sleep()</code>, <code>$wa.waitFor()</code>, <code>$wa.get()</code>).
+            </div>
+          `;
           form.appendChild(noticeGroup);
         }
         break;
@@ -417,7 +476,13 @@ export class InspectorManager {
     const node = graph.nodes.find((n) => n.id === targetNodeId);
     if (!node) return;
 
+    if (this.activeExpandedNodeId !== targetNodeId) {
+      this.expandedTriggerIndices = new Set([0]);
+      this.expandedCaseIndices = new Set([0]);
+    }
+
     this.closeExpandedModal();
+    this.activeExpandedNodeId = targetNodeId;
 
     const backdrop = document.createElement('div');
     backdrop.id = 'expandedNodeModalBackdrop';
@@ -657,6 +722,7 @@ export class InspectorManager {
      * Fecha o modal expandido se estiver aberto
      */
     public closeExpandedModal(): void {
+      this.activeExpandedNodeId = undefined;
       const existing = document.getElementById('expandedNodeModalBackdrop');
       existing?.remove();
     }
@@ -944,11 +1010,13 @@ export class InspectorManager {
   }
 
   /**
-   * Garante que o elemento recém expandido na barra lateral direita fique visível rolando a barra
+   * Garante que o elemento recém expandido (no modal ou na barra lateral) fique visível rolando o container
    */
   public scrollTargetIntoInspectorView(elementOrSelector: HTMLElement | string): void {
     requestAnimationFrame(() => {
-      const container = document.getElementById('tabProperties');
+      const modalConfigContainer = document.getElementById('expandedTabContentConfig');
+      const isModalOpen = !!(modalConfigContainer && modalConfigContainer.offsetParent !== null);
+      const container = isModalOpen ? modalConfigContainer : document.getElementById('tabProperties');
       if (!container) return;
 
       const el = typeof elementOrSelector === 'string'
