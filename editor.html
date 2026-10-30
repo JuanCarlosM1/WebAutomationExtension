@@ -54,19 +54,96 @@
       </header>
 
       <div class="dashboard-content">
-        <div class="dashboard-hero">
-          <div>
-            <h2>Meus Fluxos de Automação</h2>
-            <p>Gerencie, execute e edite suas automações web com facilidade.</p>
+        <!-- Sub-Navegação do Dashboard: Meus Fluxos vs Histórico Global de Execuções -->
+        <div class="dashboard-nav-tabs" style="display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid #1e293b; padding-bottom: 10px;">
+          <button id="dashTabFlows" class="dash-tab active" type="button" style="background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.4); color: #f8fafc; font-size: 13px; font-weight: 700; padding: 8px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s ease;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            <span>Meus Fluxos</span>
+            <span id="dashFlowsCountBadge" class="flow-badge" style="background: rgba(99, 102, 241, 0.3); color: #818cf8; font-size: 11px; padding: 2px 7px;">0</span>
+          </button>
+          <button id="dashTabHistory" class="dash-tab" type="button" style="background: #111827; border: 1px solid #1f293d; color: #94a3b8; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s ease;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>Histórico Global de Execuções</span>
+            <span id="dashHistoryCountBadge" class="flow-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 11px; padding: 2px 7px;">0</span>
+          </button>
+        </div>
+
+        <!-- Seção 1: Meus Fluxos -->
+        <div id="dashFlowsSection">
+          <div class="dashboard-hero">
+            <div>
+              <h2>Meus Fluxos de Automação</h2>
+              <p>Gerencie, execute e edite suas automações web com facilidade.</p>
+            </div>
+            <div class="search-box">
+              <input type="text" id="dashboardSearchInput" placeholder="Pesquisar automação..." />
+            </div>
           </div>
-          <div class="search-box">
-            <input type="text" id="dashboardSearchInput" placeholder="Pesquisar automação..." />
+
+          <!-- Grid de Cards de Automação -->
+          <div class="automations-grid" id="automationsGrid">
+            <!-- Cards injetados via JavaScript -->
           </div>
         </div>
 
-        <!-- Grid de Cards de Automação -->
-        <div class="automations-grid" id="automationsGrid">
-          <!-- Cards injetados via JavaScript -->
+        <!-- Seção 2: Histórico Global de Execuções -->
+        <div id="dashHistorySection" style="display: none;">
+          <div class="dashboard-hero" style="margin-bottom: 16px;">
+            <div>
+              <h2>Histórico Global de Execuções</h2>
+              <p>Audite todas as execuções, filtre por status, data, nome e inspecione em Modo Fantasma.</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button id="btnRefreshGlobalHistory" class="btn btn-secondary" style="font-size: 12px; padding: 8px 14px; display: flex; align-items: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Atualizar
+              </button>
+              <button id="btnClearGlobalHistory" class="btn btn-danger" style="font-size: 12px; padding: 8px 14px; display: flex; align-items: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                Limpar Todo Histórico
+              </button>
+            </div>
+          </div>
+
+          <!-- Barra de Filtros Avançados -->
+          <div class="history-filter-bar" style="background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+            <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 180px;">
+              <label for="historyFilterAutomation" style="font-size: 11px; font-weight: 600; color: #94a3b8;">Filtrar por Automação</label>
+              <select id="historyFilterAutomation" class="form-control" style="background: #090d16; border: 1px solid #243049; border-radius: 6px; padding: 7px 10px; color: #f8fafc; font-size: 12px;">
+                <option value="">Todas as Automações</option>
+              </select>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 4px; width: 170px;">
+              <label for="historyFilterStatus" style="font-size: 11px; font-weight: 600; color: #94a3b8;">Status Final</label>
+              <select id="historyFilterStatus" class="form-control" style="background: #090d16; border: 1px solid #243049; border-radius: 6px; padding: 7px 10px; color: #f8fafc; font-size: 12px;">
+                <option value="all">Todos os Status</option>
+                <option value="completed">✓ Concluído (Sucesso)</option>
+                <option value="failed">✕ Falha (Erro)</option>
+                <option value="cancelled">⊘ Cancelado</option>
+              </select>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 4px; width: 160px;">
+              <label for="historyFilterDate" style="font-size: 11px; font-weight: 600; color: #94a3b8;">Período / Data</label>
+              <select id="historyFilterDate" class="form-control" style="background: #090d16; border: 1px solid #243049; border-radius: 6px; padding: 7px 10px; color: #f8fafc; font-size: 12px;">
+                <option value="all">Todo o Período</option>
+                <option value="today">Apenas Hoje</option>
+                <option value="last7days">Últimos 7 dias</option>
+                <option value="last30days">Últimos 30 dias</option>
+              </select>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 4px; flex: 1.5; min-width: 220px;">
+              <label for="historyFilterQuery" style="font-size: 11px; font-weight: 600; color: #94a3b8;">Buscar por Nome, Erro ou Gatilho</label>
+              <input type="text" id="historyFilterQuery" placeholder="Digite para filtrar..." style="background: #090d16; border: 1px solid #243049; border-radius: 6px; padding: 7px 10px; color: #f8fafc; font-size: 12px; outline: none;" />
+            </div>
+          </div>
+
+          <!-- Container da Lista de Execuções -->
+          <div id="globalHistoryListContainer" style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- Itens de histórico injetados dinamicamente via JavaScript -->
+          </div>
         </div>
       </div>
     </div>
@@ -97,6 +174,22 @@
           <button id="btnExportJson" class="btn btn-secondary" title="Exportar para arquivo .webautomation.json">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             Exportar
+          </button>
+          <button id="btnDebugFlow" class="btn btn-secondary" title="Depurar na Página Ativa do Navegador">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m8 2 1.88 1.88"></path>
+              <path d="M14.12 3.88 16 2"></path>
+              <path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"></path>
+              <path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"></path>
+              <path d="M12 20v-9"></path>
+              <path d="M6.53 9C4.6 8.8 3 7.1 3 5"></path>
+              <path d="M6 13H2"></path>
+              <path d="M3 21c0-2.1 1.7-3.9 3.8-4"></path>
+              <path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"></path>
+              <path d="M22 13h-4"></path>
+              <path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"></path>
+            </svg>
+            <span>Depurar</span>
           </button>
           <button id="btnRunFlow" class="btn btn-primary" title="Executar este fluxo no navegador">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -139,6 +232,22 @@
               <line x1="7" y1="16" x2="13" y2="16"></line>
             </svg>
             <span class="activity-tooltip">Variáveis do Fluxo</span>
+          </button>
+          <button id="btnActivityDebug" class="activity-btn" title="Depuração e Console (Aba de Testes & Logs)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m8 2 1.88 1.88"></path>
+              <path d="M14.12 3.88 16 2"></path>
+              <path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"></path>
+              <path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"></path>
+              <path d="M12 20v-9"></path>
+              <path d="M6.53 9C4.6 8.8 3 7.1 3 5"></path>
+              <path d="M6 13H2"></path>
+              <path d="M3 21c0-2.1 1.7-3.9 3.8-4"></path>
+              <path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"></path>
+              <path d="M22 13h-4"></path>
+              <path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"></path>
+            </svg>
+            <span class="activity-tooltip">Debug & Console</span>
           </button>
           <button id="btnActivityAnalyzer" class="activity-btn" title="Analisador de Elementos HTML (Menu Compacto na Página)">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -212,6 +321,92 @@
           </div>
         </aside>
 
+        <!-- Left Sidebar: Debug & Console (Depuração com Aba em Branco) -->
+        <aside class="sidebar-debug collapsed" id="sidebarDebug">
+          <div class="sidebar-header">
+            <div>
+              <h3>Depuração & Console</h3>
+              <p>Ambiente de teste com aba em branco</p>
+            </div>
+            <button id="btnToggleSidebarDebug" class="sidebar-toggle-btn" title="Fechar Depuração">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+
+          <div class="debug-sidebar-content" style="padding: 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 14px;">
+            <!-- Painel da Aba Web Ativa (Alvo de Depuração) -->
+            <div class="debug-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 14px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 12px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                  Página Web Alvo
+                </span>
+                <span id="debugTargetTabBadge" class="flow-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 10px; padding: 2px 6px;">Detectando...</span>
+              </div>
+              <div id="debugTargetTabInfo" style="font-size: 11px; color: #94a3b8; margin: 0 0 10px; line-height: 1.4; background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; word-break: break-all;">
+                Detectando aba web ativa...
+              </div>
+              <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <button id="btnRefreshTargetTab" class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 7px 10px; display: flex; align-items: center; justify-content: center; gap: 6px;" title="Atualizar detecção da aba web ativa">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  Atualizar Aba
+                </button>
+                <button id="btnFocusTargetTab" class="btn btn-secondary" style="font-size: 11px; padding: 7px 10px; display: none;" title="Focar na aba web ativa">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Focar
+                </button>
+              </div>
+              <button id="btnRunDebugActiveTab" class="btn btn-primary" style="width: 100%; font-size: 11px; padding: 8px 10px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Depurar na Página Ativa
+              </button>
+            </div>
+
+            <!-- Console de Logs em Tempo Real -->
+            <div class="debug-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; min-height: 200px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 12px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                  Console de Execução
+                </span>
+                <button id="btnClearLogs" class="btn-xs" style="background: #1e293b; border: 1px solid #334155; color: #94a3b8; padding: 3px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;">
+                  Limpar Logs
+                </button>
+              </div>
+              <div id="logsConsole" class="console-output" style="flex: 1; min-height: 140px; max-height: 240px; overflow-y: auto;">
+                <div class="log-entry debug">[SISTEMA] Console pronto. Clique em "Depurar" para executar na aba ativa.</div>
+              </div>
+            </div>
+
+            <!-- Variáveis de Execução (JSON) -->
+            <div class="debug-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 14px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 12px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                  Estado das Variáveis
+                </span>
+              </div>
+              <div id="variablesList" style="background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; max-height: 140px; overflow-y: auto;">
+                <span style="font-size: 11px; color: #64748b; font-family: var(--font-mono);">Nenhuma variável registrada ainda.</span>
+              </div>
+            </div>
+
+            <!-- Histórico de Execuções Deste Fluxo (Scoped) -->
+            <div class="debug-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 14px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <span style="font-size: 12px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Histórico Deste Fluxo
+                </span>
+                <span id="scopedHistoryCountBadge" class="flow-badge" style="background: rgba(129, 140, 248, 0.2); color: #818cf8; font-size: 10px; padding: 2px 6px;">0 execuções</span>
+              </div>
+              <div id="scopedHistoryList" style="display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto;">
+                <div style="font-size: 11px; color: #64748b; text-align: center; padding: 12px 6px;">Nenhuma execução deste fluxo registrada ainda.</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
         <!-- Left Sidebar: Properties Inspector (Movido para o lado esquerdo junto das outras opções) -->
         <aside class="sidebar-inspector collapsed" id="sidebarInspector">
           <div class="sidebar-header">
@@ -244,6 +439,25 @@
 
         <!-- Center: Graph Canvas -->
         <section class="canvas-container" id="canvasContainer">
+          <!-- Banner de Aviso do Modo Fantasma (Auditoria de Execução) -->
+          <div id="ghostModeBanner" class="ghost-mode-banner" style="display: none;">
+            <div class="ghost-banner-left">
+              <div class="ghost-banner-badge">
+                <span class="ghost-indicator-dot"></span>
+                <span class="ghost-emoji">👻</span>
+                <span class="ghost-badge-text">Modo Fantasma (Apenas Leitura)</span>
+              </div>
+              <div class="ghost-banner-details" id="ghostBannerDetails">
+                Visualizando execução. Modificações estão desativadas.
+              </div>
+            </div>
+            <div class="ghost-banner-right">
+              <button id="btnExitGhostMode" class="btn btn-secondary btn-exit-ghost" title="Sair do modo de visualização e voltar ao editor ativo">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <span>Sair do Modo Fantasma</span>
+              </button>
+            </div>
+          </div>
           <!-- Viewport transformável para Pan e Zoom suaves -->
           <div class="canvas-viewport" id="canvasViewport">
             <svg class="edges-svg-layer" id="edgesLayer"></svg>

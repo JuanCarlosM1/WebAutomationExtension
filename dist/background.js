@@ -22553,54 +22553,54 @@ var ChromeBrowserDriver = class {
   setActiveTab(tabId) {
     this.activeTabId = tabId;
   }
+  isStudioPage(url) {
+    if (!url)
+      return false;
+    return url.includes("editor.html") || url.includes("settings.html") || url.includes("analyzer.html");
+  }
   isRestrictedTab(tab) {
     if (!tab?.url)
       return false;
-    return tab.url.startsWith("chrome-extension://") || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://") || tab.url.startsWith("devtools://") || tab.url.startsWith("view-source:");
+    return tab.url.startsWith("chrome-extension://") || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://") || tab.url.startsWith("devtools://") || tab.url.startsWith("view-source:") || this.isStudioPage(tab.url);
   }
   async getTargetTabId() {
     if (this.activeTabId) {
-      const tab = await chrome.tabs.get(this.activeTabId).catch(() => null);
-      if (tab?.id && !this.isRestrictedTab(tab)) {
-        return this.activeTabId;
+      try {
+        const tab = await chrome.tabs.get(this.activeTabId);
+        if (tab?.id && !this.isRestrictedTab(tab))
+          return tab.id;
+      } catch {
+        this.activeTabId = void 0;
       }
     }
-    const tabs = await chrome.tabs.query({});
-    const webTabs = tabs.filter(
-      (t) => t.id && t.url && (t.url.startsWith("http://") || t.url.startsWith("https://") || t.url.startsWith("file://"))
-    );
-    const currentWindowActive = webTabs.find((t) => t.active && t.windowId === chrome.windows?.WINDOW_ID_CURRENT);
-    const anyActive = webTabs.find((t) => t.active);
-    const target2 = currentWindowActive || anyActive || webTabs[webTabs.length - 1];
-    if (target2?.id) {
-      this.activeTabId = target2.id;
-      return target2.id;
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (activeTab?.id && !this.isRestrictedTab(activeTab)) {
+      this.activeTabId = activeTab.id;
+      return activeTab.id;
     }
-    const newTab = await chrome.tabs.create({ url: "about:blank", active: false });
-    this.activeTabId = newTab.id;
-    return newTab.id;
-  }
-  async sendToContentScript(action, payload) {
-    const tabId = await this.getTargetTabId();
-    try {
-      const response = await chrome.tabs.sendMessage(tabId, { action, payload });
-      if (response && response.error) {
-        throw new Error(response.error);
+    if (chrome.tabs?.query) {
+      const allTabs = await chrome.tabs.query({});
+      const otherActiveTabs = allTabs.filter((t) => t.id && t.active && !this.isRestrictedTab(t));
+      if (otherActiveTabs.length > 0 && otherActiveTabs[0].id) {
+        this.activeTabId = otherActiveTabs[0].id;
+        return otherActiveTabs[0].id;
       }
-      return response?.data ?? response;
-    } catch (err) {
-      if (err?.message?.includes("Receiving end does not exist") || err?.message?.includes("Could not establish connection")) {
-        await chrome.scripting.executeScript({
-          target: { tabId },
-          files: ["dist/contentDriver.js"]
-        });
-        const retryResponse = await chrome.tabs.sendMessage(tabId, { action, payload });
-        if (retryResponse && retryResponse.error)
-          throw new Error(retryResponse.error);
-        return retryResponse?.data ?? retryResponse;
+      const webTab = allTabs.find((t) => t.id && !this.isRestrictedTab(t) && (t.url?.startsWith("http://") || t.url?.startsWith("https://") || t.url?.startsWith("file://")));
+      if (webTab?.id) {
+        this.activeTabId = webTab.id;
+        return webTab.id;
       }
-      throw err;
     }
+    if (activeTab?.id && !this.isRestrictedTab(activeTab)) {
+      this.activeTabId = activeTab.id;
+      return activeTab.id;
+    }
+    if (chrome.tabs?.create) {
+      const newTab = await chrome.tabs.create({ url: "about:blank", active: false });
+      this.activeTabId = newTab.id;
+      return newTab.id;
+    }
+    throw new Error("Nenhuma aba ativa encontrada para executar a a\xE7\xE3o.");
   }
   // -------------------------------------------------------------
   // NAVEGAÇÃO E ABAS
@@ -22651,7 +22651,8 @@ var ChromeBrowserDriver = class {
     });
   }
   async createTab(url, active = true) {
-    const tab = await chrome.tabs.create({ url, active });
+    const defaultUrl = "about:blank";
+    const tab = await chrome.tabs.create({ url: url || defaultUrl, active });
     if (tab.id && active) {
       this.activeTabId = tab.id;
     }
@@ -22706,67 +22707,297 @@ var ChromeBrowserDriver = class {
   // -------------------------------------------------------------
   // OPERAÇÕES NO DOM
   // -------------------------------------------------------------
-  async clickElement(selector, selectorType, clickType, timeoutMs, coordinates) {
-    await this.sendToContentScript("CLICK_ELEMENT", {
-      selector,
-      selectorType,
-      clickType,
-      timeoutMs,
-      coordinates
+  async clickElement(selector, selectorType, clickType, _timeoutMs, coordinates) {
+    const tabId = await this.getTargetTabId();
+    const [res2] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (sel, type, click, coords) => {
+        let el = null;
+        if (type === "xpath") {
+          const r = document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+          el = r.singleNodeValue;
+        } else {
+          el = document.querySelector(sel);
+        }
+        if (!el)
+          return { error: `Elemento n\xE3o encontrado para clique: ${sel}` };
+        if (coords) {
+          const rect = el.getBoundingClientRect();
+          const evt = new MouseEvent(click === "contextmenu" ? "contextmenu" : "click", {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: rect.left + coords.x,
+            clientY: rect.top + coords.y,
+            button: click === "contextmenu" ? 2 : 0
+          });
+          el.dispatchEvent(evt);
+        } else {
+          if (click === "double") {
+            el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, view: window }));
+          } else if (click === "contextmenu") {
+            el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, view: window, button: 2 }));
+          } else {
+            el.click();
+          }
+        }
+        return { success: true };
+      },
+      args: [selector, selectorType, clickType, coordinates]
     });
+    if (res2?.result && res2.result.error) {
+      throw new Error(res2.result.error);
+    }
   }
-  async typeText(selector, selectorType, text, mode, minDelay, maxDelay, clear, pressEnter, timeoutMs) {
-    await this.sendToContentScript("TYPE_INPUT", {
-      selector,
-      selectorType,
-      text,
-      mode,
-      minDelay,
-      maxDelay,
-      clear,
-      pressEnter,
-      timeoutMs
+  async typeText(selector, selectorType, text, _mode, _minDelay, _maxDelay, clear, pressEnter, _timeoutMs) {
+    const tabId = await this.getTargetTabId();
+    const [res2] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (sel, type, txt, clearFirst, enter) => {
+        let el = null;
+        if (type === "xpath") {
+          const r = document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+          el = r.singleNodeValue;
+        } else {
+          el = document.querySelector(sel);
+        }
+        if (!el)
+          return { error: `Elemento n\xE3o encontrado para digita\xE7\xE3o: ${sel}` };
+        const input = el;
+        input.focus();
+        if (clearFirst) {
+          input.value = "";
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        input.value = (input.value || "") + txt;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        if (enter) {
+          input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }));
+          input.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", bubbles: true }));
+        }
+        return { success: true };
+      },
+      args: [selector, selectorType, text, Boolean(clear), Boolean(pressEnter)]
     });
+    if (res2?.result && res2.result.error) {
+      throw new Error(res2.result.error);
+    }
   }
   async pressKey(key, modifiers, selector, selectorType) {
-    await this.sendToContentScript("PRESS_KEY", { key, modifiers, selector, selectorType });
+    const tabId = await this.getTargetTabId();
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (k, mods, sel, type) => {
+        let target2 = document.activeElement || document.body;
+        if (sel) {
+          let found = null;
+          if (type === "xpath") {
+            const r = document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+            found = r.singleNodeValue;
+          } else {
+            found = document.querySelector(sel);
+          }
+          if (found)
+            target2 = found;
+        }
+        const eventInit = {
+          key: k,
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: mods?.includes("ctrl") || mods?.includes("Control"),
+          shiftKey: mods?.includes("shift") || mods?.includes("Shift"),
+          altKey: mods?.includes("alt") || mods?.includes("Alt"),
+          metaKey: mods?.includes("meta") || mods?.includes("Meta")
+        };
+        target2.dispatchEvent(new KeyboardEvent("keydown", eventInit));
+        target2.dispatchEvent(new KeyboardEvent("keypress", eventInit));
+        target2.dispatchEvent(new KeyboardEvent("keyup", eventInit));
+      },
+      args: [key, modifiers || [], selector, selectorType]
+    });
   }
-  async hoverOrFocus(selector, selectorType, action, timeoutMs) {
-    await this.sendToContentScript("HOVER_FOCUS", { selector, selectorType, action, timeoutMs });
+  async hoverOrFocus(selector, selectorType, action, _timeoutMs) {
+    const tabId = await this.getTargetTabId();
+    const [res2] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (sel, type, act) => {
+        let el = null;
+        if (type === "xpath") {
+          const r = document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+          el = r.singleNodeValue;
+        } else {
+          el = document.querySelector(sel);
+        }
+        if (!el)
+          return { error: `Elemento n\xE3o encontrado: ${sel}` };
+        if (act === "focus") {
+          el.focus();
+        } else {
+          el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
+          el.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true, cancelable: true, view: window }));
+        }
+        return { success: true };
+      },
+      args: [selector, selectorType, action]
+    });
+    if (res2?.result && res2.result.error) {
+      throw new Error(res2.result.error);
+    }
   }
   async scroll(target2, selector, selectorType, deltaX, deltaY, smooth) {
-    await this.sendToContentScript("SCROLL", { target: target2, selector, selectorType, deltaX, deltaY, smooth });
+    const tabId = await this.getTargetTabId();
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (tgt, sel, type, dX, dY, isSmooth) => {
+        const behavior = isSmooth ? "smooth" : "auto";
+        if (sel) {
+          let el = null;
+          if (type === "xpath") {
+            const r = document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+            el = r.singleNodeValue;
+          } else {
+            el = document.querySelector(sel);
+          }
+          if (el) {
+            el.scrollIntoView({ behavior, block: "center" });
+            return;
+          }
+        }
+        if (tgt === "top") {
+          window.scrollTo({ top: 0, left: 0, behavior });
+        } else if (tgt === "bottom") {
+          window.scrollTo({ top: document.body.scrollHeight, left: 0, behavior });
+        } else if (tgt === "by_offset") {
+          window.scrollBy({ left: dX ?? 0, top: dY ?? 500, behavior });
+        }
+      },
+      args: [target2, selector, selectorType, deltaX, deltaY, smooth]
+    });
   }
   async waitForElement(selector, selectorType, state, timeoutMs) {
-    const res2 = await this.sendToContentScript("WAIT_FOR_ELEMENT", { selector, selectorType, state, timeoutMs });
-    return !!res2?.success;
+    const tabId = await this.getTargetTabId();
+    const start = Date.now();
+    const maxTimeout = timeoutMs || 5e3;
+    while (Date.now() - start < maxTimeout) {
+      const [res2] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (sel, type, checkState) => {
+          let el = null;
+          if (type === "xpath") {
+            const r = document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+            el = r.singleNodeValue;
+          } else {
+            el = document.querySelector(sel);
+          }
+          if (!el)
+            return false;
+          if (checkState === "visible" || checkState === "clickable") {
+            const style = window.getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0" && rect.width > 0 && rect.height > 0;
+          }
+          return true;
+        },
+        args: [selector, selectorType, state]
+      });
+      if (res2?.result)
+        return true;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    return false;
   }
   async elementExists(selector, selectorType, timeoutMs) {
-    const res2 = await this.sendToContentScript("ELEMENT_EXISTS", { selector, selectorType, timeoutMs });
-    return !!res2;
+    try {
+      return await this.waitForElement(selector, selectorType, "present", timeoutMs ?? 1e3);
+    } catch {
+      return false;
+    }
   }
-  async extractData(selector, selectorType, extractType, attributeName, timeoutMs) {
-    return await this.sendToContentScript("EXTRACT_DATA", {
-      selector,
-      selectorType,
-      extractType,
-      attributeName,
-      timeoutMs
+  async extractData(selector, selectorType, extractType, attributeName, _timeoutMs) {
+    const tabId = await this.getTargetTabId();
+    const [res2] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (sel, type, extType, attr) => {
+        let el = null;
+        if (type === "xpath") {
+          const r = document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+          el = r.singleNodeValue;
+        } else {
+          el = document.querySelector(sel);
+        }
+        if (!el)
+          return null;
+        if (extType === "text")
+          return (el.textContent || "").trim();
+        if (extType === "html")
+          return el.innerHTML;
+        if (extType === "outer_html")
+          return el.outerHTML;
+        if (extType === "attribute" && attr)
+          return el.getAttribute(attr);
+        if (extType === "value")
+          return el.value;
+        return (el.textContent || "").trim();
+      },
+      args: [selector, selectorType, extractType, attributeName]
     });
+    return res2?.result;
   }
-  async scrapeList(selector, selectorType, fields, maxItems, timeoutMs) {
-    return await this.sendToContentScript("SCRAPE_LIST", {
-      selector,
-      selectorType,
-      fields,
-      maxItems,
-      timeoutMs
+  async scrapeList(selector, selectorType, fields, maxItems, _timeoutMs) {
+    const tabId = await this.getTargetTabId();
+    const [res2] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (sel, type, fList, max) => {
+        let elements = [];
+        if (type === "xpath") {
+          const r = document.evaluate(sel, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+          for (let i = 0; i < r.snapshotLength; i++) {
+            const n2 = r.snapshotItem(i);
+            if (n2)
+              elements.push(n2);
+          }
+        } else {
+          elements = Array.from(document.querySelectorAll(sel));
+        }
+        if (max && max > 0)
+          elements = elements.slice(0, max);
+        return elements.map((itemEl) => {
+          const rowData = {};
+          for (const field of fList) {
+            const fName = field.name || "field";
+            const fSel = field.selector;
+            const subEl = fSel ? itemEl.querySelector(fSel) : itemEl;
+            if (!subEl) {
+              rowData[fName] = null;
+              continue;
+            }
+            if (field.extractType === "attribute" && field.attributeName) {
+              rowData[fName] = subEl.getAttribute(field.attributeName);
+            } else if (field.extractType === "html") {
+              rowData[fName] = subEl.innerHTML;
+            } else if (field.extractType === "value") {
+              rowData[fName] = subEl.value;
+            } else {
+              rowData[fName] = (subEl.textContent || "").trim();
+            }
+          }
+          return rowData;
+        });
+      },
+      args: [selector, selectorType, fields, maxItems]
     });
+    return res2?.result || [];
   }
-  async injectScript(code, _context, args = []) {
+  async injectScript(code, context, args = []) {
+    if (context === "background") {
+      const fn = new Function(...args.map((_, i) => `arg${i}`), code);
+      return fn(...args);
+    }
     const tabId = await this.getTargetTabId();
     const tab = await chrome.tabs.get(tabId).catch(() => null);
-    const isExtensionPage = !tab?.url || tab.url.startsWith("chrome-extension://") || tab.url.startsWith("chrome://");
+    const isExtensionPage = !tab?.url || this.isRestrictedTab(tab);
     if (isExtensionPage) {
       const evalRes = SafeJsEvaluator.evaluate(`(function(args, $args) {
 ${code}
@@ -22778,20 +23009,82 @@ ${code}
       });
       return evalRes !== void 0 ? evalRes : { success: true, executed: true };
     }
-    const response = await this.sendToContentScript("INJECT_SCRIPT", { code, args });
-    if (response && response.data && response.data.result !== void 0) {
-      return response.data.result;
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: (scriptCode, scriptArgs) => {
+        try {
+          const fn = new Function("args", scriptCode);
+          return fn(scriptArgs);
+        } catch (err) {
+          return { __isError: true, message: err?.message || String(err), stack: err?.stack };
+        }
+      },
+      args: [code, args]
+    });
+    const res2 = result?.result;
+    if (res2 && res2.__isError) {
+      throw new Error(res2.message);
     }
-    return response?.data ?? response;
+    return res2;
   }
   async injectHtml(html, targetSelector, position, selectorType) {
-    await this.sendToContentScript("INJECT_HTML", { html, targetSelector, position, selectorType });
+    const tabId = await this.getTargetTabId();
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (h, sel, pos, type) => {
+        let el = null;
+        if (type === "xpath") {
+          const r = document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+          el = r.singleNodeValue;
+        } else {
+          el = document.querySelector(sel);
+        }
+        if (!el)
+          throw new Error(`Elemento n\xE3o encontrado: ${sel}`);
+        el.insertAdjacentHTML(pos || "beforeend", h);
+      },
+      args: [html, targetSelector, position, selectorType]
+    });
   }
-  async injectCss(css, target2, styleId) {
-    await this.sendToContentScript("INJECT_CSS", { css, target: target2, styleId });
+  async injectCss(css, _target, styleId) {
+    const tabId = await this.getTargetTabId();
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (styleContent, id) => {
+        const style = document.createElement("style");
+        if (id)
+          style.id = id;
+        style.textContent = styleContent;
+        (document.head || document.documentElement).appendChild(style);
+      },
+      args: [css, styleId]
+    });
   }
   async injectWebComponent(html, css, js, containerId, mode) {
-    await this.sendToContentScript("INJECT_WEB_COMPONENT", { html, css, js, containerId, mode });
+    const tabId = await this.getTargetTabId();
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: (h, c, j, cid, m) => {
+        let container = document.getElementById(cid);
+        if (!container) {
+          container = document.createElement("div");
+          container.id = cid;
+          document.body.appendChild(container);
+        }
+        if (m === "shadow_dom") {
+          const shadow = container.shadowRoot || container.attachShadow({ mode: "open" });
+          shadow.innerHTML = `<style>${c}</style>${h}`;
+        } else {
+          container.innerHTML = `<style>${c}</style>${h}`;
+        }
+        if (j) {
+          new Function(j)();
+        }
+      },
+      args: [html, css, js, containerId, mode]
+    });
   }
   async downloadFile(content, filename, mimeType) {
     const base64Data = btoa(unescape(encodeURIComponent(content)));
@@ -22915,6 +23208,119 @@ var DEFAULT_AUTOMATION = {
   viewport: { x: 0, y: 0, zoom: 1 }
 };
 
+// src/editor/modules/executionHistoryManager.ts
+var STORAGE_KEY = "web_automations_history";
+var MAX_HISTORY_ITEMS = 100;
+var ExecutionHistoryManager = class {
+  /**
+   * Obtém todo o histórico de execuções armazenado localmente
+   */
+  static async getAll() {
+    if (!chrome.storage?.local)
+      return [];
+    return new Promise((resolve) => {
+      chrome.storage.local.get(STORAGE_KEY, (res2) => {
+        const list = res2?.[STORAGE_KEY] || [];
+        list.sort((a, b) => b.timestamp - a.timestamp);
+        resolve(list);
+      });
+    });
+  }
+  /**
+   * Obtém execuções filtradas
+   */
+  static async getFiltered(filters) {
+    const all = await this.getAll();
+    return this.applyFilters(all, filters);
+  }
+  /**
+   * Aplica filtros em uma lista de execuções em memória
+   */
+  static applyFilters(items, filters) {
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1e3;
+    return items.filter((item) => {
+      if (filters.automationId && item.automationId !== filters.automationId) {
+        return false;
+      }
+      if (filters.status && filters.status !== "all") {
+        if (item.status !== filters.status)
+          return false;
+      }
+      if (filters.dateRange && filters.dateRange !== "all") {
+        if (filters.dateRange === "today") {
+          const itemDate = new Date(item.timestamp).toDateString();
+          const todayDate = (/* @__PURE__ */ new Date()).toDateString();
+          if (itemDate !== todayDate)
+            return false;
+        } else if (filters.dateRange === "last7days") {
+          if (now - item.timestamp > 7 * oneDayMs)
+            return false;
+        } else if (filters.dateRange === "last30days") {
+          if (now - item.timestamp > 30 * oneDayMs)
+            return false;
+        }
+      }
+      if (filters.query && filters.query.trim()) {
+        const q = filters.query.toLowerCase().trim();
+        const matchName = (item.automationName || "").toLowerCase().includes(q);
+        const matchError = (item.error || "").toLowerCase().includes(q);
+        const matchTrigger = (item.triggerType || "").toLowerCase().includes(q);
+        const matchTab = (item.targetTabTitle || item.targetTabUrl || "").toLowerCase().includes(q);
+        if (!matchName && !matchError && !matchTrigger && !matchTab) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+  /**
+   * Busca uma execução específica pelo seu ID único
+   */
+  static async getById(id) {
+    const all = await this.getAll();
+    return all.find((item) => item.id === id);
+  }
+  /**
+   * Salva um novo registro de execução
+   */
+  static async save(item) {
+    if (!chrome.storage?.local)
+      return;
+    const all = await this.getAll();
+    const updated = [item, ...all.filter((i) => i.id !== item.id)].slice(0, MAX_HISTORY_ITEMS);
+    await chrome.storage.local.set({ [STORAGE_KEY]: updated });
+  }
+  /**
+   * Remove uma execução pelo ID
+   */
+  static async delete(id) {
+    if (!chrome.storage?.local)
+      return;
+    const all = await this.getAll();
+    const updated = all.filter((i) => i.id !== id);
+    await chrome.storage.local.set({ [STORAGE_KEY]: updated });
+  }
+  /**
+   * Limpa todo o histórico de execuções
+   */
+  static async clearAll() {
+    if (!chrome.storage?.local)
+      return;
+    await chrome.storage.local.remove(STORAGE_KEY);
+  }
+  /**
+   * Limpa o histórico de execuções de uma automação específica
+   */
+  static async clearForAutomation(automationId) {
+    if (!chrome.storage?.local)
+      return;
+    const all = await this.getAll();
+    const updated = all.filter((i) => i.automationId !== automationId);
+    await chrome.storage.local.set({ [STORAGE_KEY]: updated });
+  }
+};
+
 // src/background/serviceWorker.ts
 StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars, true);
 var ExtensionController = class {
@@ -23020,50 +23426,6 @@ var ExtensionController = class {
           });
         }
       }
-      if (chrome.tabs) {
-        chrome.tabs.query({}, (tabs) => {
-          for (const tab of tabs) {
-            if (!tab.id || !tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://"))
-              continue;
-            chrome.tabs.sendMessage(tab.id, {
-              action: "SYNC_FLOATING_TRIGGER_BUTTONS"
-            }).catch(() => {
-            });
-            for (const auto of automations) {
-              const startNode = auto.nodes.find((n2) => n2.type === "start");
-              if (!startNode)
-                continue;
-              const triggers = getActiveTriggers(startNode.data);
-              const floatingTriggers = triggers.filter((t) => t.type === "floating_button");
-              for (const trig of floatingTriggers) {
-                const patterns = trig.urlPatterns || (trig.urlPattern ? [trig.urlPattern] : ["*://*/*"]);
-                const floatingPatterns = patterns.length > 0 ? patterns : ["*://*/*"];
-                const matches = floatingPatterns.some((p) => {
-                  if (!p || p === "*://*/*" || p === "https://*/*" || p === "<all_urls>" || p === ".*")
-                    return true;
-                  try {
-                    const escaped = p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
-                    return new RegExp(`^${escaped}$`, "i").test(tab.url);
-                  } catch {
-                    return false;
-                  }
-                });
-                if (matches && tab.id) {
-                  chrome.tabs.sendMessage(tab.id, {
-                    action: "INJECT_FLOATING_TRIGGER_BUTTON",
-                    payload: {
-                      automationId: auto.metadata.id,
-                      automationName: auto.metadata.name,
-                      buttonConfig: trig.floatingButton
-                    }
-                  }).catch(() => {
-                  });
-                }
-              }
-            }
-          }
-        });
-      }
     } catch (err) {
       console.warn("[WebAutomations] Erro ao sincronizar gatilhos:", err);
     }
@@ -23082,7 +23444,7 @@ var ExtensionController = class {
           continue;
         const triggers = getActiveTriggers(startNode.data);
         if (triggers.some((t) => t.type === "shortcut" && t.shortcutKey === command)) {
-          this.executeAutomation(auto);
+          this.executeAutomation(auto, void 0, void 0, "shortcut");
         }
       }
     });
@@ -23095,7 +23457,7 @@ var ExtensionController = class {
         if (targetAuto) {
           const driver = tab?.id ? new ChromeBrowserDriver(tab.id) : new ChromeBrowserDriver();
           console.log(`[WebAutomations] Disparando fluxo pelo menu de contexto: ${targetAuto.metadata.name}`);
-          this.executeAutomation(targetAuto, driver);
+          this.executeAutomation(targetAuto, driver, void 0, "context_menu");
         }
       }
     });
@@ -23107,7 +23469,7 @@ var ExtensionController = class {
         const targetAuto = automations.find((a) => a.metadata.id === flowId || a.metadata.id === alarm.name.replace("alarm_flow_", ""));
         if (targetAuto) {
           console.log(`[WebAutomations] Disparando fluxo por intervalo agendado: ${targetAuto.metadata.name}`);
-          this.executeAutomation(targetAuto);
+          this.executeAutomation(targetAuto, void 0, void 0, "schedule");
         }
       } else if (alarm.name.startsWith("date_alarm_flow_")) {
         const parts = alarm.name.replace("date_alarm_flow_", "").split("_");
@@ -23148,7 +23510,7 @@ var ExtensionController = class {
         }
         if (isDateMatched) {
           console.log(`[WebAutomations] Disparando fluxo por data agendada (${ds.mode}): ${targetAuto.metadata.name}`);
-          this.executeAutomation(targetAuto);
+          this.executeAutomation(targetAuto, void 0, void 0, "date_schedule");
         }
       }
     });
@@ -23170,31 +23532,7 @@ var ExtensionController = class {
             });
             if (matches) {
               const driver = new ChromeBrowserDriver(details.tabId);
-              this.executeAutomation(auto, driver);
-            }
-          }
-          if (trigger.type === "floating_button") {
-            const floatingPatterns = patterns.length > 0 ? patterns : ["*://*/*"];
-            const matches = floatingPatterns.some((p) => {
-              if (!p || p === "*://*/*" || p === "https://*/*" || p === "<all_urls>" || p === ".*")
-                return true;
-              try {
-                const escaped = p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
-                return new RegExp(`^${escaped}$`, "i").test(details.url);
-              } catch {
-                return false;
-              }
-            });
-            if (matches && details.tabId) {
-              chrome.tabs.sendMessage(details.tabId, {
-                action: "INJECT_FLOATING_TRIGGER_BUTTON",
-                payload: {
-                  automationId: auto.metadata.id,
-                  automationName: auto.metadata.name,
-                  buttonConfig: trigger.floatingButton
-                }
-              }).catch(() => {
-              });
+              this.executeAutomation(auto, driver, void 0, "on_url_load");
             }
           }
         }
@@ -23288,26 +23626,100 @@ var ExtensionController = class {
       }));
     }
   }
+  async getActiveWebTab() {
+    const isExt = (url) => !url || url.includes("editor.html") || url.includes("settings.html") || url.includes("analyzer.html") || url.startsWith("chrome://") || url.startsWith("chrome-extension://");
+    if (chrome.tabs?.query) {
+      try {
+        const activeTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        const target2 = activeTabs.find((t) => t.id && !isExt(t.url));
+        if (target2?.id) {
+          return { tabId: target2.id, title: target2.title || "", url: target2.url || "" };
+        }
+        const allTabs = await chrome.tabs.query({});
+        const activeAnywhere = allTabs.find((t) => t.id && t.active && !isExt(t.url));
+        if (activeAnywhere?.id) {
+          return { tabId: activeAnywhere.id, title: activeAnywhere.title || "", url: activeAnywhere.url || "" };
+        }
+        const firstWeb = allTabs.find((t) => t.id && !isExt(t.url));
+        if (firstWeb?.id) {
+          return { tabId: firstWeb.id, title: firstWeb.title || "", url: firstWeb.url || "" };
+        }
+      } catch {
+      }
+    }
+    return {};
+  }
   async handleExtensionMessage(message, sender) {
     const { action, payload } = message;
     switch (action) {
+      case "GET_ACTIVE_WEB_TAB": {
+        const tabInfo = await this.getActiveWebTab();
+        return { success: true, ...tabInfo };
+      }
+      case "GET_EXECUTION_HISTORY": {
+        const history = await ExecutionHistoryManager.getAll();
+        return { success: true, history };
+      }
+      case "CLEAR_EXECUTION_HISTORY": {
+        if (payload?.automationId) {
+          await ExecutionHistoryManager.clearForAutomation(payload.automationId);
+        } else {
+          await ExecutionHistoryManager.clearAll();
+        }
+        return { success: true };
+      }
+      case "DELETE_EXECUTION": {
+        if (payload?.id) {
+          await ExecutionHistoryManager.delete(payload.id);
+          return { success: true };
+        }
+        return { success: false, error: "ID de execu\xE7\xE3o n\xE3o informado" };
+      }
       case "EXECUTE_AUTOMATION": {
         const graph = payload.graph;
-        const isSenderExtension = sender.tab?.url?.startsWith("chrome-extension://") || !sender.tab;
-        const targetTabId = payload.tabId || (isSenderExtension ? void 0 : sender.tab?.id);
+        let targetTabId = payload.tabId;
+        if (!targetTabId) {
+          const isStudioOrSettings = sender.tab?.url?.includes("editor.html") || sender.tab?.url?.includes("settings.html") || sender.tab?.url?.includes("analyzer.html") || sender.tab?.url?.startsWith("chrome-extension://");
+          if (sender.tab?.id && !isStudioOrSettings) {
+            targetTabId = sender.tab.id;
+          } else {
+            const activeTab = await this.getActiveWebTab();
+            targetTabId = activeTab.tabId;
+          }
+        }
+        const triggerType = payload.triggerType || (payload.isDebug ? "debug" : sender.tab?.id ? "floating_button" : "manual");
         const driver = new ChromeBrowserDriver(targetTabId);
-        const ctx = await this.executeAutomation(graph, driver);
+        const ctx = await this.executeAutomation(graph, driver, void 0, triggerType);
+        const nodeOutputs = ctx.nodeOutputs || (typeof ctx.state?.getNodeOutputs === "function" ? ctx.state.getNodeOutputs() : {});
+        const readonlyVariables = typeof ctx.state?.getReadonlyVariables === "function" ? ctx.state.getReadonlyVariables() : (graph.variableDefinitions || []).filter((v) => v.readonly).map((v) => v.name);
         const isSuccess = ctx.status === "completed";
-        const errorMsg = !isSuccess ? ctx.logs.find((l) => l.level === "error")?.message || "Falha na execu\xE7\xE3o do fluxo" : void 0;
+        const errorMsg = !isSuccess ? ctx.logs.filter((l) => l.level === "error").pop()?.message || "Falha na execu\xE7\xE3o do fluxo" : void 0;
         return {
           success: isSuccess,
+          tabId: targetTabId,
           status: ctx.status,
           variables: ctx.state.getAll(),
-          nodeOutputs: ctx.state.getNodeOutputs(),
-          readonlyVariables: ctx.state.getReadonlyVariables(),
+          nodeOutputs,
+          readonlyVariables,
           logs: ctx.logs,
+          historyItem: ctx.historyItem,
           error: errorMsg
         };
+      }
+      case "FOCUS_TAB": {
+        if (payload?.tabId) {
+          try {
+            await chrome.tabs.update(payload.tabId, { active: true });
+            const tab = await chrome.tabs.get(payload.tabId);
+            if (tab?.windowId && chrome.windows?.update) {
+              await chrome.windows.update(tab.windowId, { focused: true });
+            }
+            return { success: true };
+          } catch (err) {
+            return { success: false, error: err.message };
+          }
+        }
+        return { success: false, error: "tabId n\xE3o especificado" };
       }
       case "CANCEL_AUTOMATION": {
         const ctx = this.activeContexts.get(payload.automationId);
@@ -23358,21 +23770,56 @@ var ExtensionController = class {
         return { success: false, error: `A\xE7\xE3o n\xE3o reconhecida: ${action}` };
     }
   }
-  async executeAutomation(graph, driver = new ChromeBrowserDriver(), onProgress) {
+  async executeAutomation(graph, driver = new ChromeBrowserDriver(), onProgress, triggerType = "manual") {
     const autoId = graph.metadata.id;
-    const runtimeOutputs = {};
+    const startTime = Date.now();
+    const nodeOutputs = {};
+    const graphSnapshot = JSON.parse(JSON.stringify(graph));
+    const initialVariables = (graph.variableDefinitions || []).reduce((acc, v) => {
+      acc[v.name] = v.defaultValue;
+      return acc;
+    }, {});
+    const blockSnapshots = {};
+    for (const node of graph.nodes || []) {
+      blockSnapshots[node.id] = {
+        nodeId: node.id,
+        nodeType: node.type,
+        nodeLabel: node.data?.label || node.type,
+        status: "skipped",
+        config: JSON.parse(JSON.stringify(node.data || {})),
+        executedAt: 0
+      };
+    }
     const ctx = await this.engine.runGraph(graph, driver, {
       onStatusChange: (status) => {
         onProgress?.("status_change", { automationId: autoId, status });
         this.broadcastToUI({ type: "STATUS_CHANGE", automationId: autoId, status });
       },
       onNodeStart: (node) => {
+        const snap = blockSnapshots[node.id];
+        if (snap) {
+          snap.status = "running";
+          snap.executedAt = Date.now();
+        }
         onProgress?.("node_start", { automationId: autoId, nodeId: node.id });
         this.broadcastToUI({ type: "NODE_START", automationId: autoId, nodeId: node.id });
       },
       onNodeComplete: (node, result) => {
-        if (result.outputData !== void 0) {
-          runtimeOutputs[node.id] = result.outputData;
+        const out = result?.outputData !== void 0 ? result.outputData : result?.output !== void 0 ? result.output : result?.data !== void 0 ? result.data : result;
+        nodeOutputs[node.id] = out;
+        const snap = blockSnapshots[node.id];
+        if (snap) {
+          snap.status = "completed";
+          snap.outputData = out;
+          snap.durationMs = Date.now() - (snap.executedAt || startTime);
+          const incomingEdges = (graph.edges || []).filter((e) => e.target === node.id);
+          const inputMap = {};
+          for (const edge of incomingEdges) {
+            if (nodeOutputs[edge.source] !== void 0) {
+              inputMap[edge.source] = nodeOutputs[edge.source];
+            }
+          }
+          snap.inputData = Object.keys(inputMap).length > 0 ? inputMap : result?.input || result?.inputData || null;
         }
         onProgress?.("node_complete", { automationId: autoId, nodeId: node.id, nodeLabel: node.data?.label, result });
         this.broadcastToUI({
@@ -23381,10 +23828,16 @@ var ExtensionController = class {
           nodeId: node.id,
           nodeLabel: node.data?.label,
           result,
-          nodeOutputs: runtimeOutputs
+          nodeOutputs: { ...nodeOutputs }
         });
       },
       onNodeError: (node, error) => {
+        const snap = blockSnapshots[node.id];
+        if (snap) {
+          snap.status = "failed";
+          snap.error = error.message;
+          snap.durationMs = Date.now() - (snap.executedAt || startTime);
+        }
         onProgress?.("node_error", { automationId: autoId, nodeId: node.id, error: error.message });
         this.broadcastToUI({ type: "NODE_ERROR", automationId: autoId, nodeId: node.id, error: error.message });
       },
@@ -23393,6 +23846,45 @@ var ExtensionController = class {
         this.broadcastToUI({ type: "LOG", automationId: autoId, log });
       }
     });
+    ctx.nodeOutputs = nodeOutputs;
+    if (ctx.state) {
+      ctx.state.getNodeOutputs = () => nodeOutputs;
+      ctx.state.getReadonlyVariables = () => {
+        return (graph.variableDefinitions || []).filter((v) => v.readonly).map((v) => v.name);
+      };
+    }
+    const durationMs = Date.now() - startTime;
+    let targetTabUrl = "";
+    let targetTabTitle = "";
+    if (driver && driver.activeTabId) {
+      try {
+        const t = await chrome.tabs.get(driver.activeTabId);
+        targetTabUrl = t?.url || "";
+        targetTabTitle = t?.title || "";
+      } catch {
+      }
+    }
+    const historyItem = {
+      id: `run_${startTime}_${Math.random().toString(36).substring(2, 7)}`,
+      automationId: autoId,
+      automationName: graph.metadata?.name || "Automa\xE7\xE3o",
+      timestamp: startTime,
+      isoDate: new Date(startTime).toISOString(),
+      durationMs,
+      status: ctx.status,
+      error: ctx.status === "failed" ? ctx.logs.filter((l) => l.level === "error").pop()?.message || "Falha durante a execu\xE7\xE3o" : void 0,
+      triggerType,
+      targetTabUrl,
+      targetTabTitle,
+      graphSnapshot,
+      initialVariables,
+      finalVariables: ctx.state ? ctx.state.getAll() : {},
+      blockSnapshots,
+      logs: ctx.logs || []
+    };
+    await ExecutionHistoryManager.save(historyItem);
+    ctx.historyItem = historyItem;
+    this.broadcastToUI({ type: "EXECUTION_RECORDED", historyItem });
     this.activeContexts.set(autoId, ctx);
     return ctx;
   }

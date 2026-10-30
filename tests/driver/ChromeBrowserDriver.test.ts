@@ -21,7 +21,7 @@ describe('ChromeBrowserDriver', () => {
       expect(url).toBe('https://site.com');
     });
 
-    it('se a aba configurada for restrita (chrome://, chrome-extension://), deve buscar outra aba web', async () => {
+    it('se a aba configurada for restrita (chrome://, chrome-extension://, editor.html), deve buscar outra aba web', async () => {
       chromeMock.tabs.get.mockImplementation(async (id: number) => {
         if (id === 10) return { id: 10, url: 'chrome://extensions' };
         return { id: 20, url: 'https://exemplo.org' };
@@ -140,133 +140,147 @@ describe('ChromeBrowserDriver', () => {
     });
   });
 
-  describe('Envio para Content Script e Ações DOM', () => {
+  describe('Execução de Ações DOM via chrome.scripting.executeScript', () => {
     beforeEach(() => {
       chromeMock.tabs.query.mockResolvedValue([{ id: 1, url: 'https://site.com', active: true }]);
-    });
-
-    it('deve injetar script contentDriver.js se a conexão ainda não existir (auto-recovery)', async () => {
-      chromeMock.tabs.sendMessage
-        .mockRejectedValueOnce(new Error('Receiving end does not exist'))
-        .mockResolvedValueOnce({ data: { success: true } });
-
-      await driver.clickElement('button.send', 'css', 'single');
-
-      expect(chromeMock.scripting.executeScript).toHaveBeenCalledWith({
-        target: { tabId: 1 },
-        files: ['dist/contentDriver.js'],
-      });
-      expect(chromeMock.tabs.sendMessage).toHaveBeenCalledTimes(2);
-    });
-
-    it('clickElement deve enviar comando correto', async () => {
-      chromeMock.tabs.sendMessage.mockResolvedValue({ data: true });
-      await driver.clickElement('#btn', 'css', 'double', 2000, { x: 10, y: 20 });
-
-      expect(chromeMock.tabs.sendMessage).toHaveBeenCalledWith(1, {
-        action: 'CLICK_ELEMENT',
-        payload: {
-          selector: '#btn',
-          selectorType: 'css',
-          clickType: 'double',
-          timeoutMs: 2000,
-          coordinates: { x: 10, y: 20 },
-        },
+      chromeMock.scripting.executeScript.mockImplementation(async (injection: any) => {
+        return [{ result: { success: true } }];
       });
     });
 
-    it('typeText deve enviar parâmetros para TYPE_INPUT', async () => {
-      chromeMock.tabs.sendMessage.mockResolvedValue({ data: true });
+    it('clickElement deve executar script na aba alvo via executeScript', async () => {
+      await driver.clickElement('#btn', 'css', 'single', 2000, { x: 10, y: 20 });
+
+      expect(chromeMock.scripting.executeScript).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: { tabId: 1 },
+          func: expect.any(Function),
+          args: ['#btn', 'css', 'single', { x: 10, y: 20 }],
+        })
+      );
+    });
+
+    it('typeText deve chamar executeScript com texto e parâmetros de digitação', async () => {
       await driver.typeText('input', 'css', 'texto teste', 'human_typing', 10, 50, true, true, 3000);
 
-      expect(chromeMock.tabs.sendMessage).toHaveBeenCalledWith(1, {
-        action: 'TYPE_INPUT',
-        payload: {
-          selector: 'input',
-          selectorType: 'css',
-          text: 'texto teste',
-          mode: 'human_typing',
-          minDelay: 10,
-          maxDelay: 50,
-          clear: true,
-          pressEnter: true,
-          timeoutMs: 3000,
-        },
-      });
+      expect(chromeMock.scripting.executeScript).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: { tabId: 1 },
+          func: expect.any(Function),
+          args: ['input', 'css', 'texto teste', true, true],
+        })
+      );
     });
 
-    it('pressKey, hoverOrFocus e scroll', async () => {
-      chromeMock.tabs.sendMessage.mockResolvedValue({ data: true });
-
+    it('pressKey, hoverOrFocus e scroll devem executar scripts apropriados', async () => {
       await driver.pressKey('Enter', ['Shift'], 'input', 'css');
-      expect(chromeMock.tabs.sendMessage).toHaveBeenCalledWith(1, {
-        action: 'PRESS_KEY',
-        payload: { key: 'Enter', modifiers: ['Shift'], selector: 'input', selectorType: 'css' },
-      });
+      expect(chromeMock.scripting.executeScript).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: { tabId: 1 },
+          func: expect.any(Function),
+          args: ['Enter', ['Shift'], 'input', 'css'],
+        })
+      );
 
       await driver.hoverOrFocus('.card', 'css', 'hover', 1500);
-      expect(chromeMock.tabs.sendMessage).toHaveBeenCalledWith(1, {
-        action: 'HOVER_FOCUS',
-        payload: { selector: '.card', selectorType: 'css', action: 'hover', timeoutMs: 1500 },
-      });
+      expect(chromeMock.scripting.executeScript).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: { tabId: 1 },
+          func: expect.any(Function),
+          args: ['.card', 'css', 'hover'],
+        })
+      );
 
       await driver.scroll('element', '#container', 'css', 0, 100, true);
-      expect(chromeMock.tabs.sendMessage).toHaveBeenCalledWith(1, {
-        action: 'SCROLL',
-        payload: { target: 'element', selector: '#container', selectorType: 'css', deltaX: 0, deltaY: 100, smooth: true },
-      });
+      expect(chromeMock.scripting.executeScript).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: { tabId: 1 },
+          func: expect.any(Function),
+          args: ['element', '#container', 'css', 0, 100, true],
+        })
+      );
     });
 
     it('waitForElement e elementExists', async () => {
-      chromeMock.tabs.sendMessage.mockResolvedValueOnce({ data: { success: true } });
+      chromeMock.scripting.executeScript.mockResolvedValueOnce([{ result: true }]);
       const waitResult = await driver.waitForElement('.ready', 'css', 'visible', 5000);
       expect(waitResult).toBe(true);
 
-      chromeMock.tabs.sendMessage.mockResolvedValueOnce({ data: true });
+      chromeMock.scripting.executeScript.mockResolvedValueOnce([{ result: true }]);
       const existsResult = await driver.elementExists('.ready', 'css');
       expect(existsResult).toBe(true);
     });
 
     it('extractData e scrapeList', async () => {
-      chromeMock.tabs.sendMessage.mockResolvedValueOnce({ data: 'Texto extraído' });
+      chromeMock.scripting.executeScript.mockResolvedValueOnce([{ result: 'Texto extraído' }]);
       const text = await driver.extractData('h1', 'css', 'innerText');
       expect(text).toBe('Texto extraído');
 
-      chromeMock.tabs.sendMessage.mockResolvedValueOnce({ data: [{ title: 'Item 1' }, { title: 'Item 2' }] });
+      chromeMock.scripting.executeScript.mockResolvedValueOnce([{ result: [{ title: 'Item 1' }] }]);
       const list = await driver.scrapeList('ul > li', 'css', [{ name: 'title', selector: 'span', extractType: 'innerText' }]);
-      expect(list).toEqual([{ title: 'Item 1' }, { title: 'Item 2' }]);
+      expect(list).toEqual([{ title: 'Item 1' }]);
     });
 
     it('injectHtml, injectCss e injectWebComponent', async () => {
-      chromeMock.tabs.sendMessage.mockResolvedValue({ data: true });
-
       await driver.injectHtml('<div>banner</div>', 'body', 'beforeend');
-      expect(chromeMock.tabs.sendMessage).toHaveBeenCalledWith(1, expect.objectContaining({ action: 'INJECT_HTML' }));
+      expect(chromeMock.scripting.executeScript).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: { tabId: 1 },
+          func: expect.any(Function),
+          args: ['<div>banner</div>', 'body', 'beforeend', undefined],
+        })
+      );
 
       await driver.injectCss('body { background: red; }', 'page', 'custom-style');
-      expect(chromeMock.tabs.sendMessage).toHaveBeenCalledWith(1, expect.objectContaining({ action: 'INJECT_CSS' }));
+      expect(chromeMock.scripting.executeScript).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: { tabId: 1 },
+          func: expect.any(Function),
+          args: ['body { background: red; }', 'custom-style'],
+        })
+      );
 
       await driver.injectWebComponent('<div>wc</div>', 'div { color: blue }', 'console.log()', 'wc-root', 'shadow_dom');
-      expect(chromeMock.tabs.sendMessage).toHaveBeenCalledWith(1, expect.objectContaining({ action: 'INJECT_WEB_COMPONENT' }));
+      expect(chromeMock.scripting.executeScript).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: { tabId: 1 },
+          world: 'MAIN',
+          func: expect.any(Function),
+          args: ['<div>wc</div>', 'div { color: blue }', 'console.log()', 'wc-root', 'shadow_dom'],
+        })
+      );
     });
   });
 
   describe('injectScript e downloadFile', () => {
-    it('injectScript em página de extensão deve usar SafeJsEvaluator', async () => {
-      chromeMock.tabs.query.mockResolvedValue([{ id: 1, url: 'chrome-extension://xyz/popup.html', active: true }]);
-      chromeMock.tabs.get.mockImplementation(async (id: number) => ({ id, url: 'chrome-extension://xyz/popup.html' }));
-
-      const res = await driver.injectScript('return 42;', 'content_script', []);
-      expect(res).toBeDefined();
+    it('injectScript com context: background deve avaliar localmente via new Function', async () => {
+      const res = await driver.injectScript('return arg0 + arg1;', 'background', [15, 27]);
+      expect(res).toBe(42);
     });
 
-    it('injectScript em página web normal deve enviar para contentScript', async () => {
+    it('injectScript em página web com context: content_script deve usar world: MAIN', async () => {
       chromeMock.tabs.query.mockResolvedValue([{ id: 1, url: 'https://example.com', active: true }]);
       chromeMock.tabs.get.mockImplementation(async (id: number) => ({ id, url: 'https://example.com' }));
-      chromeMock.tabs.sendMessage.mockResolvedValue({ data: { result: 'resultado_remoto' } });
+      chromeMock.scripting.executeScript.mockResolvedValueOnce([{ result: 'titulo_da_pagina' }]);
 
-      const res = await driver.injectScript('document.title', 'content_script');
-      expect(res).toBeDefined();
+      const res = await driver.injectScript('return document.title;', 'content_script');
+      expect(res).toBe('titulo_da_pagina');
+      expect(chromeMock.scripting.executeScript).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: { tabId: 1 },
+          world: 'MAIN',
+        })
+      );
+    });
+
+    it('injectScript deve lançar erro se script retornar __isError', async () => {
+      chromeMock.tabs.query.mockResolvedValue([{ id: 1, url: 'https://example.com', active: true }]);
+      chromeMock.tabs.get.mockImplementation(async (id: number) => ({ id, url: 'https://example.com' }));
+      chromeMock.scripting.executeScript.mockResolvedValueOnce([
+        { result: { __isError: true, message: 'ReferenceError: foo is not defined' } },
+      ]);
+
+      await expect(driver.injectScript('foo()', 'content_script')).rejects.toThrow('ReferenceError: foo is not defined');
     });
 
     it('downloadFile deve codificar base64 e chamar chrome.downloads.download', async () => {

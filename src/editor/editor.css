@@ -384,6 +384,27 @@ body {
   background: #283652;
 }
 
+.btn-card-debug {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-card-debug:hover {
+  background: rgba(99, 102, 241, 0.3);
+  color: #ffffff;
+  border-color: #6366f1;
+}
+
 .flow-title-edit {
   background: transparent;
   border: 1px solid transparent;
@@ -1257,7 +1278,8 @@ body {
 .sidebar-inspector,
 .sidebar-library,
 .sidebar-colors,
-.sidebar-variables {
+.sidebar-variables,
+.sidebar-debug {
   width: 320px;
   min-width: 240px;
   max-width: 600px;
@@ -1277,12 +1299,14 @@ body {
 #viewStudio:has(#viewSettings.active) .sidebar-inspector,
 #viewStudio:has(#viewSettings.active) .sidebar-colors,
 #viewStudio:has(#viewSettings.active) .sidebar-variables,
+#viewStudio:has(#viewSettings.active) .sidebar-debug,
 #viewStudio:has(#viewSettings.active) .sidebar-resizer,
 .workspace.settings-mode .activity-bar-left,
 .workspace.settings-mode .sidebar-library,
 .workspace.settings-mode .sidebar-inspector,
 .workspace.settings-mode .sidebar-colors,
 .workspace.settings-mode .sidebar-variables,
+.workspace.settings-mode .sidebar-debug,
 .workspace.settings-mode .sidebar-resizer {
   display: none !important;
   pointer-events: none !important;
@@ -1295,7 +1319,8 @@ body {
 body:not(.is-resizing-active) .sidebar-inspector,
 body:not(.is-resizing-active) .sidebar-library,
 body:not(.is-resizing-active) .sidebar-colors,
-body:not(.is-resizing-active) .sidebar-variables {
+body:not(.is-resizing-active) .sidebar-variables,
+body:not(.is-resizing-active) .sidebar-debug {
   transition: width 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -1314,7 +1339,8 @@ body.is-resizing-active * {
 .sidebar-library.collapsed,
 .sidebar-inspector.collapsed,
 .sidebar-colors.collapsed,
-.sidebar-variables.collapsed {
+.sidebar-variables.collapsed,
+.sidebar-debug.collapsed {
   width: 0 !important;
   min-width: 0 !important;
   padding: 0 !important;
@@ -2215,5 +2241,329 @@ body.canvas-marquee-active * {
   background-color: rgba(59, 130, 246, 0.08) !important;
   transition: all 0.15s ease;
 }
+
+/* ========================================================
+   MODO FANTASMA (AUDITORIA E REPRODUÇÃO HISTÓRICA)
+   ======================================================== */
+
+.ghost-mode-banner {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: rgba(13, 20, 36, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(99, 102, 241, 0.5);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.65), 0 0 25px rgba(99, 102, 241, 0.25);
+  border-radius: 12px;
+  padding: 8px 16px;
+  min-width: 480px;
+  max-width: 85%;
+  animation: fadeInDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ghost-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ghost-banner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c7d2fe;
+  white-space: nowrap;
+}
+
+.ghost-indicator-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #818cf8;
+  box-shadow: 0 0 8px #818cf8;
+  animation: pulse-dot 1.4s infinite ease-in-out;
+}
+
+.ghost-emoji {
+  font-size: 13px;
+}
+
+.ghost-banner-details {
+  font-size: 11px;
+  color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-exit-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(239, 68, 68, 0.15) !important;
+  border: 1px solid rgba(239, 68, 68, 0.4) !important;
+  color: #fca5a5 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  padding: 6px 14px !important;
+  border-radius: 6px !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-exit-ghost:hover {
+  background: rgba(239, 68, 68, 0.28) !important;
+  border-color: #ef4444 !important;
+  color: #fee2e2 !important;
+  transform: translateY(-1px);
+}
+
+/* Estado de visualização Fantasma no Canvas */
+.canvas-container.ghost-mode {
+  background-color: #080c16;
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.05) 0%, transparent 80%),
+    radial-gradient(rgba(99, 102, 241, 0.12) 1px, transparent 0);
+}
+
+.canvas-container.ghost-mode .graph-node {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.canvas-container.ghost-mode .graph-node:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
+
+/* Indicadores de status de execução nos nós */
+.graph-node.ghost-success {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.28) !important;
+}
+
+.graph-node.ghost-failed {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.35) !important;
+}
+
+.graph-node.ghost-skipped {
+  opacity: 0.55 !important;
+  filter: grayscale(0.5);
+}
+
+.ghost-node-badge {
+  position: absolute;
+  top: -8px;
+  right: 12px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.ghost-node-badge.success {
+  background: #064e3b;
+  color: #34d399;
+  border: 1px solid #10b981;
+}
+
+.ghost-node-badge.failed {
+  background: #7f1d1d;
+  color: #fca5a5;
+  border: 1px solid #ef4444;
+}
+
+.ghost-node-badge.skipped {
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #475569;
+}
+
+/* ========================================================
+   CARDS DE HISTÓRICO GLOBAL E ESPECÍFICO (LOGS)
+   ======================================================== */
+
+.history-card {
+  background: #111827;
+  border: 1px solid #1f293d;
+  border-radius: 10px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  transition: all 0.15s ease;
+}
+
+.history-card:hover {
+  border-color: #3b82f6;
+  background: #131d33;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+}
+
+.history-card-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.history-status-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.history-status-icon.completed {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.history-status-icon.failed {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+
+.history-status-icon.cancelled {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+}
+
+.history-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.history-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-card-meta {
+  font-size: 11px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.history-trigger-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #1e293b;
+  color: #cbd5e1;
+  border: 1px solid #334155;
+}
+
+.history-error-callout {
+  font-size: 11px;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Histórico Scoped no Drawer Lateral do Studio */
+.scoped-history-item {
+  background: #090d16;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  transition: all 0.15s ease;
+}
+
+.scoped-history-item:hover {
+  border-color: #6366f1;
+  background: #0d1424;
+}
+
+.scoped-history-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.scoped-history-time {
+  font-size: 11px;
+  font-weight: 600;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scoped-history-meta {
+  font-size: 10px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 
 

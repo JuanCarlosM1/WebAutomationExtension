@@ -11,6 +11,7 @@ import { ExecutionContext } from '../../../BibliotecaDeDev/src/engine/ExecutionC
 import { StateManager } from '../../../BibliotecaDeDev/src/engine/StateManager';
 import { DEFAULT_AUTOMATION } from '../defaultAutomation';
 import { SafeJsEvaluator } from '../utils/safeJsEvaluator';
+import { ExecutionHistoryManager, ExecutionHistoryItem, BlockExecutionSnapshot } from '../editor/modules/executionHistoryManager';
 
 // Registrar avaliador JS em conformidade com a CSP do Manifest V3 (sem 'unsafe-eval' e sem acesso a privilégios de extensão)
 StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars, true);
@@ -124,54 +125,6 @@ class ExtensionController {
           });
         }
       }
-
-      // 3. Atualizar imediatamente os botões flutuantes em todas as abas abertas que correspondam às URLs
-      if (chrome.tabs) {
-        chrome.tabs.query({}, (tabs) => {
-          for (const tab of tabs) {
-            if (!tab.id || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://')) continue;
-
-            // Envia sinal para o content script reavaliar e limpar/reaplicar botões flutuantes de acordo com o storage atualizado
-            chrome.tabs.sendMessage(tab.id, {
-              action: 'SYNC_FLOATING_TRIGGER_BUTTONS',
-            }).catch(() => {});
-
-            for (const auto of automations) {
-              const startNode = auto.nodes.find((n) => n.type === 'start');
-              if (!startNode) continue;
-              const triggers = getActiveTriggers(startNode.data as any);
-              const floatingTriggers = triggers.filter((t) => t.type === 'floating_button');
-
-              for (const trig of floatingTriggers) {
-                const patterns = trig.urlPatterns || (trig.urlPattern ? [trig.urlPattern] : ['*://*/*']);
-                const floatingPatterns = patterns.length > 0 ? patterns : ['*://*/*'];
-                const matches = floatingPatterns.some((p) => {
-                  if (!p || p === '*://*/*' || p === 'https://*/*' || p === '<all_urls>' || p === '.*') return true;
-                  try {
-                    const escaped = p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-                    return new RegExp(`^${escaped}$`, 'i').test(tab.url!);
-                  } catch {
-                    return false;
-                  }
-                });
-
-                if (matches && tab.id) {
-                  chrome.tabs.sendMessage(tab.id, {
-                    action: 'INJECT_FLOATING_TRIGGER_BUTTON',
-                    payload: {
-                      automationId: auto.metadata.id,
-                      automationName: auto.metadata.name,
-                      buttonConfig: trig.floatingButton,
-                    },
-                  }).catch(() => {
-                    // Silenciar caso a aba ainda não possua o script carregado
-                  });
-                }
-              }
-            }
-          }
-        });
-      }
     } catch (err) {
       console.warn('[WebAutomations] Erro ao sincronizar gatilhos:', err);
     }
@@ -194,7 +147,7 @@ class ExtensionController {
         if (!startNode) continue;
         const triggers = getActiveTriggers(startNode.data as any);
         if (triggers.some((t) => t.type === 'shortcut' && t.shortcutKey === command)) {
-          this.executeAutomation(auto);
+          this.executeAutomation(auto, undefined, undefined, 'shortcut');
         }
       }
     });
@@ -210,7 +163,7 @@ class ExtensionController {
         if (targetAuto) {
           const driver = tab?.id ? new ChromeBrowserDriver(tab.id) : new ChromeBrowserDriver();
           console.log(`[WebAutomations] Disparando fluxo pelo menu de contexto: ${targetAuto.metadata.name}`);
-          this.executeAutomation(targetAuto, driver);
+          this.executeAutomation(targetAuto, driver, undefined, 'context_menu');
         }
       }
     });
@@ -224,7 +177,7 @@ class ExtensionController {
         const targetAuto = automations.find((a) => a.metadata.id === flowId || a.metadata.id === alarm.name.replace('alarm_flow_', ''));
         if (targetAuto) {
           console.log(`[WebAutomations] Disparando fluxo por intervalo agendado: ${targetAuto.metadata.name}`);
-          this.executeAutomation(targetAuto);
+          this.executeAutomation(targetAuto, undefined, undefined, 'schedule');
         }
       } else if (alarm.name.startsWith('date_alarm_flow_')) {
         const parts = alarm.name.replace('date_alarm_flow_', '').split('_');
@@ -268,7 +221,7 @@ class ExtensionController {
 
         if (isDateMatched) {
           console.log(`[WebAutomations] Disparando fluxo por data agendada (${ds.mode}): ${targetAuto.metadata.name}`);
-          this.executeAutomation(targetAuto);
+          this.executeAutomation(targetAuto, undefined, undefined, 'date_schedule');
         }
       }
     });
@@ -293,33 +246,7 @@ class ExtensionController {
             });
             if (matches) {
               const driver = new ChromeBrowserDriver(details.tabId);
-              this.executeAutomation(auto, driver);
-            }
-          }
-
-          // Gatilho por Botão Flutuante Personalizado
-          if (trigger.type === 'floating_button') {
-            const floatingPatterns = patterns.length > 0 ? patterns : ['*://*/*'];
-            const matches = floatingPatterns.some((p) => {
-              if (!p || p === '*://*/*' || p === 'https://*/*' || p === '<all_urls>' || p === '.*') return true;
-              try {
-                const escaped = p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-                return new RegExp(`^${escaped}$`, 'i').test(details.url);
-              } catch {
-                return false;
-              }
-            });
-            if (matches && details.tabId) {
-              chrome.tabs.sendMessage(details.tabId, {
-                action: 'INJECT_FLOATING_TRIGGER_BUTTON',
-                payload: {
-                  automationId: auto.metadata.id,
-                  automationName: auto.metadata.name,
-                  buttonConfig: trigger.floatingButton,
-                },
-              }).catch(() => {
-                // Silenciar se content script ainda não estiver ativo
-              });
+              this.executeAutomation(auto, driver, undefined, 'on_url_load');
             }
           }
         }
@@ -423,28 +350,137 @@ class ExtensionController {
     }
   }
 
+  public async getActiveWebTab(): Promise<{ tabId?: number; title?: string; url?: string }> {
+    const isExt = (url?: string) =>
+      !url ||
+      url.includes('editor.html') ||
+      url.includes('settings.html') ||
+      url.includes('analyzer.html') ||
+      url.startsWith('chrome://') ||
+      url.startsWith('chrome-extension://');
+
+    if (chrome.tabs?.query) {
+      try {
+        const activeTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        const target = activeTabs.find((t) => t.id && !isExt(t.url));
+        if (target?.id) {
+          return { tabId: target.id, title: target.title || '', url: target.url || '' };
+        }
+
+        const allTabs = await chrome.tabs.query({});
+        const activeAnywhere = allTabs.find((t) => t.id && t.active && !isExt(t.url));
+        if (activeAnywhere?.id) {
+          return { tabId: activeAnywhere.id, title: activeAnywhere.title || '', url: activeAnywhere.url || '' };
+        }
+
+        const firstWeb = allTabs.find((t) => t.id && !isExt(t.url));
+        if (firstWeb?.id) {
+          return { tabId: firstWeb.id, title: firstWeb.title || '', url: firstWeb.url || '' };
+        }
+      } catch {}
+    }
+    return {};
+  }
+
   private async handleExtensionMessage(message: any, sender: chrome.runtime.MessageSender): Promise<any> {
     const { action, payload } = message;
 
     switch (action) {
+      case 'GET_ACTIVE_WEB_TAB': {
+        const tabInfo = await this.getActiveWebTab();
+        return { success: true, ...tabInfo };
+      }
+
+      case 'GET_EXECUTION_HISTORY': {
+        const history = await ExecutionHistoryManager.getAll();
+        return { success: true, history };
+      }
+
+      case 'CLEAR_EXECUTION_HISTORY': {
+        if (payload?.automationId) {
+          await ExecutionHistoryManager.clearForAutomation(payload.automationId);
+        } else {
+          await ExecutionHistoryManager.clearAll();
+        }
+        return { success: true };
+      }
+
+      case 'DELETE_EXECUTION': {
+        if (payload?.id) {
+          await ExecutionHistoryManager.delete(payload.id);
+          return { success: true };
+        }
+        return { success: false, error: 'ID de execução não informado' };
+      }
+
       case 'EXECUTE_AUTOMATION': {
         const graph: WebAutomationGraph = payload.graph;
-        const isSenderExtension = sender.tab?.url?.startsWith('chrome-extension://') || !sender.tab;
-        const targetTabId = payload.tabId || (isSenderExtension ? undefined : sender.tab?.id);
+        let targetTabId = payload.tabId;
+
+        // Se tabId não foi especificado, prioriza a aba de onde veio a mensagem (se for página comum) ou a aba web ativa
+        if (!targetTabId) {
+          const isStudioOrSettings =
+            sender.tab?.url?.includes('editor.html') ||
+            sender.tab?.url?.includes('settings.html') ||
+            sender.tab?.url?.includes('analyzer.html') ||
+            sender.tab?.url?.startsWith('chrome-extension://');
+          if (sender.tab?.id && !isStudioOrSettings) {
+            targetTabId = sender.tab.id;
+          } else {
+            const activeTab = await this.getActiveWebTab();
+            targetTabId = activeTab.tabId;
+          }
+        }
+
+        const triggerType =
+          payload.triggerType ||
+          (payload.isDebug ? 'debug' : sender.tab?.id ? 'floating_button' : 'manual');
         const driver = new ChromeBrowserDriver(targetTabId);
-        const ctx = await this.executeAutomation(graph, driver);
+        const ctx = await this.executeAutomation(graph, driver, undefined, triggerType);
+        const nodeOutputs =
+          (ctx as any).nodeOutputs ||
+          (typeof (ctx.state as any)?.getNodeOutputs === 'function'
+            ? (ctx.state as any).getNodeOutputs()
+            : {});
+        const readonlyVariables =
+          typeof (ctx.state as any)?.getReadonlyVariables === 'function'
+            ? (ctx.state as any).getReadonlyVariables()
+            : (graph.variableDefinitions || [])
+                .filter((v: any) => v.readonly)
+                .map((v: any) => v.name);
+
         const isSuccess = ctx.status === 'completed';
-        const errorMsg = !isSuccess ? ctx.logs.find((l) => l.level === 'error')?.message || 'Falha na execução do fluxo' : undefined;
+        const errorMsg = !isSuccess
+          ? ctx.logs.filter((l) => l.level === 'error').pop()?.message || 'Falha na execução do fluxo'
+          : undefined;
 
         return {
           success: isSuccess,
+          tabId: targetTabId,
           status: ctx.status,
           variables: ctx.state.getAll(),
-          nodeOutputs: ctx.state.getNodeOutputs(),
-          readonlyVariables: ctx.state.getReadonlyVariables(),
+          nodeOutputs,
+          readonlyVariables,
           logs: ctx.logs,
+          historyItem: (ctx as any).historyItem,
           error: errorMsg,
         };
+      }
+
+      case 'FOCUS_TAB': {
+        if (payload?.tabId) {
+          try {
+            await chrome.tabs.update(payload.tabId, { active: true });
+            const tab = await chrome.tabs.get(payload.tabId);
+            if (tab?.windowId && chrome.windows?.update) {
+              await chrome.windows.update(tab.windowId, { focused: true });
+            }
+            return { success: true };
+          } catch (err: any) {
+            return { success: false, error: err.message };
+          }
+        }
+        return { success: false, error: 'tabId não especificado' };
       }
 
       case 'CANCEL_AUTOMATION': {
@@ -507,10 +543,32 @@ class ExtensionController {
   public async executeAutomation(
     graph: WebAutomationGraph,
     driver: ChromeBrowserDriver = new ChromeBrowserDriver(),
-    onProgress?: (event: string, data: any) => void
+    onProgress?: (event: string, data: any) => void,
+    triggerType: 'manual' | 'debug' | 'floating_button' | 'shortcut' | 'schedule' | 'date_schedule' | 'context_menu' | 'mcp' | 'unknown' = 'manual'
   ): Promise<ExecutionContext> {
     const autoId = graph.metadata.id;
-    const runtimeOutputs: Record<string, any> = {};
+    const startTime = Date.now();
+    const nodeOutputs: Record<string, any> = {};
+
+    // Clonar grafo integral para o snapshot histórico (fantasma)
+    const graphSnapshot: WebAutomationGraph = JSON.parse(JSON.stringify(graph));
+    const initialVariables = (graph.variableDefinitions || []).reduce((acc: any, v: any) => {
+      acc[v.name] = v.defaultValue;
+      return acc;
+    }, {});
+
+    // Inicializar snapshots de blocos com sua respectiva configuração exata
+    const blockSnapshots: Record<string, BlockExecutionSnapshot> = {};
+    for (const node of (graph.nodes || [])) {
+      blockSnapshots[node.id] = {
+        nodeId: node.id,
+        nodeType: node.type,
+        nodeLabel: (node.data as any)?.label || node.type,
+        status: 'skipped',
+        config: JSON.parse(JSON.stringify(node.data || {})),
+        executedAt: 0,
+      };
+    }
 
     const ctx = await this.engine.runGraph(graph, driver, {
       onStatusChange: (status) => {
@@ -518,12 +576,33 @@ class ExtensionController {
         this.broadcastToUI({ type: 'STATUS_CHANGE', automationId: autoId, status });
       },
       onNodeStart: (node) => {
+        const snap = blockSnapshots[node.id];
+        if (snap) {
+          snap.status = 'running';
+          snap.executedAt = Date.now();
+        }
         onProgress?.('node_start', { automationId: autoId, nodeId: node.id });
         this.broadcastToUI({ type: 'NODE_START', automationId: autoId, nodeId: node.id });
       },
       onNodeComplete: (node, result) => {
-        if (result.outputData !== undefined) {
-          runtimeOutputs[node.id] = result.outputData;
+        const out = result?.outputData !== undefined ? result.outputData : (result?.output !== undefined ? result.output : (result?.data !== undefined ? result.data : result));
+        nodeOutputs[node.id] = out;
+
+        const snap = blockSnapshots[node.id];
+        if (snap) {
+          snap.status = 'completed';
+          snap.outputData = out;
+          snap.durationMs = Date.now() - (snap.executedAt || startTime);
+
+          // Coleta os dados de entrada oriundos de blocos anteriores conectados
+          const incomingEdges = (graph.edges || []).filter((e) => e.target === node.id);
+          const inputMap: Record<string, any> = {};
+          for (const edge of incomingEdges) {
+            if (nodeOutputs[edge.source] !== undefined) {
+              inputMap[edge.source] = nodeOutputs[edge.source];
+            }
+          }
+          snap.inputData = Object.keys(inputMap).length > 0 ? inputMap : (result?.input || result?.inputData || null);
         }
         onProgress?.('node_complete', { automationId: autoId, nodeId: node.id, nodeLabel: (node.data as any)?.label, result });
         this.broadcastToUI({
@@ -532,10 +611,16 @@ class ExtensionController {
           nodeId: node.id,
           nodeLabel: (node.data as any)?.label,
           result,
-          nodeOutputs: runtimeOutputs,
+          nodeOutputs: { ...nodeOutputs },
         });
       },
       onNodeError: (node, error) => {
+        const snap = blockSnapshots[node.id];
+        if (snap) {
+          snap.status = 'failed';
+          snap.error = error.message;
+          snap.durationMs = Date.now() - (snap.executedAt || startTime);
+        }
         onProgress?.('node_error', { automationId: autoId, nodeId: node.id, error: error.message });
         this.broadcastToUI({ type: 'NODE_ERROR', automationId: autoId, nodeId: node.id, error: error.message });
       },
@@ -544,6 +629,56 @@ class ExtensionController {
         this.broadcastToUI({ type: 'LOG', automationId: autoId, log });
       },
     });
+
+    (ctx as any).nodeOutputs = nodeOutputs;
+    if (ctx.state) {
+      (ctx.state as any).getNodeOutputs = () => nodeOutputs;
+      (ctx.state as any).getReadonlyVariables = () => {
+        return (graph.variableDefinitions || [])
+          .filter((v: any) => v.readonly)
+          .map((v: any) => v.name);
+      };
+    }
+
+    // Registrar histórico completo de execução (para o Modo Fantasma)
+    const durationMs = Date.now() - startTime;
+    let targetTabUrl = '';
+    let targetTabTitle = '';
+    if (driver && (driver as any).activeTabId) {
+      try {
+        const t = await chrome.tabs.get((driver as any).activeTabId);
+        targetTabUrl = t?.url || '';
+        targetTabTitle = t?.title || '';
+      } catch {}
+    }
+
+    const historyItem: ExecutionHistoryItem = {
+      id: `run_${startTime}_${Math.random().toString(36).substring(2, 7)}`,
+      automationId: autoId,
+      automationName: graph.metadata?.name || 'Automação',
+      timestamp: startTime,
+      isoDate: new Date(startTime).toISOString(),
+      durationMs,
+      status: ctx.status as any,
+      error:
+        ctx.status === 'failed'
+          ? ctx.logs.filter((l) => l.level === 'error').pop()?.message ||
+            'Falha durante a execução'
+          : undefined,
+      triggerType,
+      targetTabUrl,
+      targetTabTitle,
+      graphSnapshot,
+      initialVariables,
+      finalVariables: ctx.state ? ctx.state.getAll() : {},
+      blockSnapshots,
+      logs: ctx.logs || [],
+    };
+
+    // Salvar e propagar para UI (Dashboard e Studio)
+    await ExecutionHistoryManager.save(historyItem);
+    (ctx as any).historyItem = historyItem;
+    this.broadcastToUI({ type: 'EXECUTION_RECORDED', historyItem });
 
     this.activeContexts.set(autoId, ctx);
     return ctx;

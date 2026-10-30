@@ -29,6 +29,14 @@ export class InspectorManager {
   private disableSidebarEditing: boolean = false;
   private runtimeNodeOutputs: Record<string, any> = {};
   private activeExpandedNodeId?: string;
+  private isGhostMode: boolean = false;
+  private ghostRunItem?: any;
+
+  public setGhostMode(enabled: boolean, runItem?: any): void {
+    this.isGhostMode = enabled;
+    this.ghostRunItem = runItem;
+    this.renderInspector();
+  }
 
   public setDisableSidebarEditing(disabled: boolean): void {
     this.disableSidebarEditing = disabled;
@@ -153,6 +161,11 @@ export class InspectorManager {
 
     noSelect.classList.add('hidden');
     form.classList.remove('hidden');
+
+    if (this.isGhostMode) {
+      this.renderGhostInspector(node, form);
+      return;
+    }
 
     if (this.disableSidebarEditing) {
       form.innerHTML = `
@@ -1091,5 +1104,98 @@ export class InspectorManager {
     card.querySelector('#btnClearSelectionInspector')?.addEventListener('click', () => {
       this.callbacks.onClearSelection?.();
     });
+  }
+
+  private renderGhostInspector(node: AnyAutomationNode, form: HTMLElement): void {
+    const snap = this.ghostRunItem?.blockSnapshots?.[node.id];
+    const status = snap?.status || 'skipped';
+    const durationText = snap?.durationMs !== undefined ? `${snap.durationMs}ms` : 'Não registrado';
+    const statusLabel =
+      status === 'completed'
+        ? '✓ Concluído com Sucesso'
+        : status === 'failed'
+        ? '✕ Falha / Erro'
+        : '⚪ Não Executado';
+    const statusColor =
+      status === 'completed' ? '#10b981' : status === 'failed' ? '#ef4444' : '#64748b';
+
+    const inputDataStr =
+      snap?.inputData !== undefined && snap?.inputData !== null
+        ? JSON.stringify(snap.inputData, null, 2)
+        : '(Nenhum dado de entrada registrado para este bloco)';
+
+    const outputDataStr =
+      snap?.outputData !== undefined && snap?.outputData !== null
+        ? JSON.stringify(snap.outputData, null, 2)
+        : '(Nenhum dado de saída gerado por este bloco)';
+
+    const configDataStr = JSON.stringify(snap?.config || node.data || {}, null, 2);
+
+    form.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 14px; animation: fadeIn 0.15s ease;">
+        <!-- Header Fantasma -->
+        <div style="background: #090d16; border: 1px solid #1e293b; border-left: 3px solid #818cf8; border-radius: 8px; padding: 12px 14px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: #818cf8; display: flex; align-items: center; gap: 4px;">
+              👻 Modo Fantasma • Leitura
+            </span>
+            <span style="font-size: 10px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; border: 1px solid ${statusColor}44; padding: 2px 7px; border-radius: 4px;">
+              ${statusLabel}
+            </span>
+          </div>
+          <div style="font-size: 13px; font-weight: 700; color: #f8fafc;">${node.data?.label || node.type}</div>
+          <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">
+            Duração: <strong style="color: #f1f5f9;">${durationText}</strong> • Tipo: <span style="font-family: monospace;">${node.type}</span>
+          </div>
+        </div>
+
+        ${
+          snap?.error
+            ? `
+          <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 12px;">
+            <div style="font-size: 11px; font-weight: 700; color: #fca5a5; display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+              Mensagem de Erro da Execução
+            </div>
+            <div style="font-size: 11px; color: #fee2e2; font-family: monospace; white-space: pre-wrap; word-break: break-all;">${snap.error}</div>
+          </div>
+        `
+            : ''
+        }
+
+        <!-- Entradas (Input Data) -->
+        <div style="background: #111827; border: 1px solid #1f293d; border-radius: 8px; padding: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              Entradas Recebidas (Inputs)
+            </span>
+          </div>
+          <pre style="background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; font-size: 10px; color: #cbd5e1; font-family: monospace; max-height: 140px; overflow: auto; margin: 0; white-space: pre-wrap;">${inputDataStr}</pre>
+        </div>
+
+        <!-- Saídas (Output Data) -->
+        <div style="background: #111827; border: 1px solid #1f293d; border-radius: 8px; padding: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: #34d399; display: flex; align-items: center; gap: 6px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></svg>
+              Saídas Geradas (Outputs)
+            </span>
+          </div>
+          <pre style="background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; font-size: 10px; color: #cbd5e1; font-family: monospace; max-height: 160px; overflow: auto; margin: 0; white-space: pre-wrap;">${outputDataStr}</pre>
+        </div>
+
+        <!-- Configuração Histórica do Bloco (Read-Only) -->
+        <div style="background: #111827; border: 1px solid #1f293d; border-radius: 8px; padding: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: #f59e0b; display: flex; align-items: center; gap: 6px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              Configuração do Bloco na Execução
+            </span>
+          </div>
+          <pre style="background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; font-size: 10px; color: #cbd5e1; font-family: monospace; max-height: 180px; overflow: auto; margin: 0; white-space: pre-wrap;">${configDataStr}</pre>
+        </div>
+      </div>
+    `;
   }
 }

@@ -4,6 +4,8 @@ import { DomPropertiesRenderer } from '../../src/editor/modules/inspector/domPro
 import { DataPropertiesRenderer } from '../../src/editor/modules/inspector/dataProperties';
 import { FlowPropertiesRenderer } from '../../src/editor/modules/inspector/flowProperties';
 import { StartPropertiesRenderer } from '../../src/editor/modules/inspector/startProperties';
+import { InspectorManager } from '../../src/editor/modules/inspectorManager';
+import { ColorPickerManager } from '../../src/editor/modules/colorPickerManager';
 import { installChromeMock } from '../helpers/chromeMock';
 
 describe('Inspector & Properties Modules', () => {
@@ -123,6 +125,118 @@ describe('Inspector & Properties Modules', () => {
       StartPropertiesRenderer.renderStartBlock(container, startData, mockCtx);
       expect(container.innerHTML).toContain('Formas de Disparo');
       expect(container.innerHTML).toContain('Tipo de Disparo');
+    });
+  });
+
+  describe('InspectorManager — Modo Fantasma e Controle de Edição', () => {
+    let form: HTMLFormElement;
+    let noSelection: HTMLElement;
+    let inspector: InspectorManager;
+    let mockGraph: any;
+    let selectedNodeId: string | undefined;
+
+    beforeEach(() => {
+      document.body.innerHTML = `
+        <div id="sidebarInspector"></div>
+        <div id="sidebarLibrary"></div>
+        <div id="resizerLeft"></div>
+        <button id="btnActivityBlocks"></button>
+        <button id="btnActivityInspector"></button>
+        <div id="noSelectionMessage"></div>
+        <form id="nodePropertiesForm"></form>
+      `;
+      form = document.getElementById('nodePropertiesForm') as HTMLFormElement;
+      noSelection = document.getElementById('noSelectionMessage')!;
+
+      mockGraph = {
+        nodes: [
+          {
+            id: 'node_1',
+            type: 'click_element',
+            category: 'browser_action',
+            position: { x: 0, y: 0 },
+            data: { label: 'Clique no Botão', selector: '#btn-submit' },
+          },
+        ],
+        edges: [],
+      };
+      selectedNodeId = 'node_1';
+
+      const callbacks = {
+        getGraph: () => mockGraph,
+        getSelectedNodeId: () => selectedNodeId,
+        getSelectedNodeIds: () => (selectedNodeId ? [selectedNodeId] : []),
+        onNodeDataChanged: vi.fn(),
+        onRenderGraph: vi.fn(),
+        showToast: vi.fn(),
+      };
+
+      const colorPicker = new ColorPickerManager();
+      inspector = new InspectorManager(callbacks, colorPicker);
+    });
+
+    it('renderiza propriedades normais quando não está em Modo Fantasma', () => {
+      inspector.renderInspector();
+      expect(form.classList.contains('hidden')).toBe(false);
+      expect(form.innerHTML).toContain('Clique no Botão');
+      expect(form.innerHTML).toContain('Seletor');
+    });
+
+    it('setGhostMode(true) ativa Modo Fantasma e exibe dados da execução', () => {
+      const ghostRunItem = {
+        blockSnapshots: {
+          node_1: {
+            nodeId: 'node_1',
+            nodeType: 'click_element',
+            nodeLabel: 'Clique no Botão',
+            status: 'completed',
+            durationMs: 45,
+            inputData: { target: '#btn-submit' },
+            outputData: { clicked: true },
+            config: { selector: '#btn-submit' },
+            executedAt: Date.now(),
+          },
+        },
+      };
+
+      inspector.setGhostMode(true, ghostRunItem);
+
+      expect(form.innerHTML).toContain('Modo Fantasma • Leitura');
+      expect(form.innerHTML).toContain('Concluído com Sucesso');
+      expect(form.innerHTML).toContain('45ms');
+      expect(form.innerHTML).toContain('"target": "#btn-submit"');
+      expect(form.innerHTML).toContain('"clicked": true');
+    });
+
+    it('setGhostMode(true) com falha exibe status de erro', () => {
+      const ghostRunItem = {
+        blockSnapshots: {
+          node_1: {
+            nodeId: 'node_1',
+            status: 'failed',
+            error: 'Elemento não encontrado',
+          },
+        },
+      };
+
+      inspector.setGhostMode(true, ghostRunItem);
+      expect(form.innerHTML).toContain('Falha / Erro');
+    });
+
+    it('setGhostMode(false) restaura visualização de edição do inspector', () => {
+      inspector.setGhostMode(true, { blockSnapshots: {} });
+      expect(form.innerHTML).toContain('Modo Fantasma');
+
+      inspector.setGhostMode(false);
+      expect(form.innerHTML).not.toContain('Modo Fantasma');
+      expect(form.innerHTML).toContain('Clique no Botão');
+    });
+
+    it('setDisableSidebarEditing(true) exibe aviso de bloqueio direcionando para modo expandido', () => {
+      inspector.setDisableSidebarEditing(true);
+
+      expect(form.innerHTML).toContain('Edição na Barra Lateral Desativada');
+      expect(form.innerHTML).toContain('Editar no Modo Expandido');
     });
   });
 });

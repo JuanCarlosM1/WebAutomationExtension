@@ -228,88 +228,6 @@ describe('Service Worker — sincronização de gatilhos', () => {
     expect(c.alarms.create).toHaveBeenCalledWith('alarm_flow_legado_0', { periodInMinutes: 45 });
   });
 
-  it('envia SYNC e INJECT de botões flutuantes para abas compatíveis', async () => {
-    const c = await loadWorker({
-      web_automations: [
-        makeGraph('fb', {
-          triggers: [
-            { type: 'floating_button', enabled: true, urlPatterns: ['https://site.com/*'], floatingButton: { buttonText: 'Go' } },
-          ],
-        }),
-      ],
-    });
-    c.tabs.query.mockImplementation((_q: any, cb?: any) => {
-      const tabs = [
-        { id: 1, url: 'https://site.com/pagina' },
-        { id: 2, url: 'https://outro.com/' },
-        { id: 3, url: 'chrome://extensions' },
-        { id: 4, url: 'edge://settings' },
-        { id: undefined, url: 'https://site.com/x' },
-      ];
-      cb?.(tabs);
-      return Promise.resolve(tabs);
-    });
-    await sendMessage({ action: 'SYNC_TRIGGERS' });
-
-    const calls = c.tabs.sendMessage.mock.calls;
-    const syncTabs = calls.filter((x: any[]) => x[1].action === 'SYNC_FLOATING_TRIGGER_BUTTONS').map((x: any[]) => x[0]);
-    expect(syncTabs).toEqual([1, 2]);
-    const injects = calls.filter((x: any[]) => x[1].action === 'INJECT_FLOATING_TRIGGER_BUTTON');
-    expect(injects).toHaveLength(1);
-    expect(injects[0][0]).toBe(1);
-    expect(injects[0][1].payload).toEqual({
-      automationId: 'fb',
-      automationName: 'Fluxo fb',
-      buttonConfig: { buttonText: 'Go' },
-    });
-  });
-
-  it.each(['*://*/*', 'https://*/*', '<all_urls>', '.*', ''])('padrão curinga "%s" corresponde a qualquer aba', async (p) => {
-    const c = await loadWorker({
-      web_automations: [makeGraph('fb', { triggers: [{ type: 'floating_button', enabled: true, urlPatterns: [p] }] })],
-    });
-    c.tabs.query.mockImplementation((_q: any, cb?: any) => cb?.([{ id: 7, url: 'http://qualquer.org/a' }]));
-    await sendMessage({ action: 'SYNC_TRIGGERS' });
-    const injects = c.tabs.sendMessage.mock.calls.filter((x: any[]) => x[1].action === 'INJECT_FLOATING_TRIGGER_BUTTON');
-    expect(injects).toHaveLength(1);
-  });
-
-  it('botão flutuante sem padrões corresponde a todas as abas', async () => {
-    const c = await loadWorker({
-      web_automations: [makeGraph('fb', { triggers: [{ type: 'floating_button', enabled: true }] })],
-    });
-    c.tabs.query.mockImplementation((_q: any, cb?: any) => cb?.([{ id: 9, url: 'https://a.com' }]));
-    await sendMessage({ action: 'SYNC_TRIGGERS' });
-    const injects = c.tabs.sendMessage.mock.calls.filter((x: any[]) => x[1].action === 'INJECT_FLOATING_TRIGGER_BUTTON');
-    expect(injects).toHaveLength(1);
-  });
-
-  it('a correspondência de URL do botão flutuante é case-insensitive e ancorada', async () => {
-    const c = await loadWorker({
-      web_automations: [
-        makeGraph('fb', { triggers: [{ type: 'floating_button', enabled: true, urlPattern: 'https://SITE.com/app' }] }),
-      ],
-    });
-    c.tabs.query.mockImplementation((_q: any, cb?: any) =>
-      cb?.([
-        { id: 1, url: 'https://site.com/app' },
-        { id: 2, url: 'https://site.com/app/extra' },
-      ])
-    );
-    await sendMessage({ action: 'SYNC_TRIGGERS' });
-    const injects = c.tabs.sendMessage.mock.calls.filter((x: any[]) => x[1].action === 'INJECT_FLOATING_TRIGGER_BUTTON');
-    expect(injects.map((x: any[]) => x[0])).toEqual([1]);
-  });
-
-  it('não falha se tabs.sendMessage rejeitar (content script ausente)', async () => {
-    const c = await loadWorker({
-      web_automations: [makeGraph('fb', { triggers: [{ type: 'floating_button', enabled: true }] })],
-    });
-    c.tabs.query.mockImplementation((_q: any, cb?: any) => cb?.([{ id: 1, url: 'https://a.com' }]));
-    c.tabs.sendMessage.mockRejectedValue(new Error('Receiving end does not exist'));
-    await expect(sendMessage({ action: 'SYNC_TRIGGERS' })).resolves.toEqual({ success: true });
-  });
-
   it('captura erros internos e continua respondendo com sucesso', async () => {
     const c = await loadWorker();
     c.storage.local.get.mockRejectedValueOnce(new Error('falha storage'));
@@ -454,6 +372,122 @@ describe('Service Worker — mensagens de runtime', () => {
     const res = await sendMessage({ action: 'RELAY_PICKER_KEY', payload: {} });
     expect(res).toEqual({ success: true });
     expect(c.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('GET_ACTIVE_WEB_TAB retorna a aba web ativa atual', async () => {
+    const c = await loadWorker();
+    c.tabs.query.mockImplementation((q: any) => {
+      if (q.active && q.lastFocusedWindow) {
+        return Promise.resolve([{ id: 42, title: 'Minha Pagina', url: 'https://exemplo.com' }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const res = await sendMessage({ action: 'GET_ACTIVE_WEB_TAB' });
+    expect(res).toEqual({
+      success: true,
+      tabId: 42,
+      title: 'Minha Pagina',
+      url: 'https://exemplo.com',
+    });
+  });
+
+  it('GET_ACTIVE_WEB_TAB ignora abas internas da extensão e seleciona a primeira web', async () => {
+    const c = await loadWorker();
+    c.tabs.query.mockImplementation((q: any) => {
+      if (q.active && q.lastFocusedWindow) {
+        return Promise.resolve([{ id: 10, title: 'Editor', url: 'chrome-extension://xyz/editor.html' }]);
+      }
+      return Promise.resolve([
+        { id: 10, title: 'Editor', url: 'chrome-extension://xyz/editor.html' },
+        { id: 99, title: 'Web Page', url: 'https://exemplo.com' },
+      ]);
+    });
+
+    const res = await sendMessage({ action: 'GET_ACTIVE_WEB_TAB' });
+    expect(res).toEqual({
+      success: true,
+      tabId: 99,
+      title: 'Web Page',
+      url: 'https://exemplo.com',
+    });
+  });
+
+  it('GET_EXECUTION_HISTORY retorna lista do histórico de execuções', async () => {
+    await loadWorker({
+      web_automations_history: [
+        { id: 'run_1', automationId: 'auto_1', status: 'completed' },
+      ],
+    });
+
+    const res = await sendMessage({ action: 'GET_EXECUTION_HISTORY' });
+    expect(res.success).toBe(true);
+    expect(res.history).toHaveLength(1);
+    expect(res.history[0].id).toBe('run_1');
+  });
+
+  it('CLEAR_EXECUTION_HISTORY limpa histórico global ou por automação', async () => {
+    const c = await loadWorker({
+      web_automations_history: [
+        { id: 'run_1', automationId: 'auto_1', status: 'completed' },
+        { id: 'run_2', automationId: 'auto_2', status: 'completed' },
+      ],
+    });
+
+    // Limpar específico
+    let res = await sendMessage({ action: 'CLEAR_EXECUTION_HISTORY', payload: { automationId: 'auto_1' } });
+    expect(res).toEqual({ success: true });
+    expect(c.__storage.web_automations_history).toHaveLength(1);
+    expect(c.__storage.web_automations_history[0].id).toBe('run_2');
+
+    // Limpar tudo
+    res = await sendMessage({ action: 'CLEAR_EXECUTION_HISTORY' });
+    expect(res).toEqual({ success: true });
+    expect(c.__storage.web_automations_history).toBeUndefined();
+  });
+
+  it('DELETE_EXECUTION remove um registro específico pelo ID', async () => {
+    const c = await loadWorker({
+      web_automations_history: [
+        { id: 'run_1', automationId: 'auto_1' },
+        { id: 'run_2', automationId: 'auto_1' },
+      ],
+    });
+
+    const res = await sendMessage({ action: 'DELETE_EXECUTION', payload: { id: 'run_1' } });
+    expect(res).toEqual({ success: true });
+    expect(c.__storage.web_automations_history).toHaveLength(1);
+    expect(c.__storage.web_automations_history[0].id).toBe('run_2');
+
+    const errRes = await sendMessage({ action: 'DELETE_EXECUTION', payload: {} });
+    expect(errRes.success).toBe(false);
+  });
+
+  it('FOCUS_TAB ativa a aba e coloca o foco na janela correspondente', async () => {
+    const c = await loadWorker();
+    c.tabs.get.mockResolvedValue({ id: 88, windowId: 5 });
+
+    const res = await sendMessage({ action: 'FOCUS_TAB', payload: { tabId: 88 } });
+    expect(res).toEqual({ success: true });
+    expect(c.tabs.update).toHaveBeenCalledWith(88, { active: true });
+    expect(c.windows.update).toHaveBeenCalledWith(5, { focused: true });
+
+    const errRes = await sendMessage({ action: 'FOCUS_TAB', payload: {} });
+    expect(errRes).toEqual({ success: false, error: 'tabId não especificado' });
+  });
+
+  it('EXECUTE_AUTOMATION registra histórico completo com snapshots de nós e variáveis', async () => {
+    const c = await loadWorker();
+    const g = makeGraph('hist_test');
+    const res = await sendMessage({ action: 'EXECUTE_AUTOMATION', payload: { graph: g } });
+
+    expect(res.success).toBe(true);
+    expect(res.historyItem).toBeDefined();
+    expect(res.historyItem.automationId).toBe('hist_test');
+    expect(res.historyItem.status).toBe('completed');
+    expect(res.historyItem.blockSnapshots).toBeDefined();
+    expect(c.__storage.web_automations_history).toBeDefined();
+    expect(c.__storage.web_automations_history.length).toBeGreaterThan(0);
   });
 
   it('ação desconhecida retorna erro', async () => {
@@ -613,37 +647,6 @@ describe('Service Worker — gatilhos de eventos', () => {
       await c.webNavigation.onCompleted.dispatch({ frameId: 0, tabId: 5, url: 'https://site.com/' } as any)[0];
       await flushPromises();
       expect(broadcasts('STATUS_CHANGE')).toHaveLength(0);
-    });
-
-    it('injeta botão flutuante quando a URL corresponde', async () => {
-      const c = await loadWorker({
-        web_automations: [
-          makeGraph('fb', {
-            triggers: [{ type: 'floating_button', enabled: true, urlPattern: 'https://site.com/*', floatingButton: { buttonText: 'X' } }],
-          }),
-        ],
-      });
-      await c.webNavigation.onCompleted.dispatch({ frameId: 0, tabId: 8, url: 'https://site.com/abc' } as any)[0];
-      expect(c.tabs.sendMessage).toHaveBeenCalledWith(8, {
-        action: 'INJECT_FLOATING_TRIGGER_BUTTON',
-        payload: { automationId: 'fb', automationName: 'Fluxo fb', buttonConfig: { buttonText: 'X' } },
-      });
-    });
-
-    it('não injeta botão flutuante quando a URL não corresponde', async () => {
-      const c = await loadWorker({
-        web_automations: [makeGraph('fb', { triggers: [{ type: 'floating_button', enabled: true, urlPattern: 'https://site.com/*' }] })],
-      });
-      await c.webNavigation.onCompleted.dispatch({ frameId: 0, tabId: 8, url: 'https://outro.com/' } as any)[0];
-      expect(c.tabs.sendMessage).not.toHaveBeenCalled();
-    });
-
-    it('botão flutuante sem padrão é injetado em qualquer URL', async () => {
-      const c = await loadWorker({
-        web_automations: [makeGraph('fb', { triggers: [{ type: 'floating_button', enabled: true }] })],
-      });
-      await c.webNavigation.onCompleted.dispatch({ frameId: 0, tabId: 8, url: 'https://x.com/' } as any)[0];
-      expect(c.tabs.sendMessage).toHaveBeenCalledTimes(1);
     });
   });
 });
