@@ -27525,6 +27525,12 @@ var InspectorManager = class {
       }
       return;
     }
+    if (this.disableSidebarEditing) {
+      if (this.pendingScrollSelector) {
+        this.pendingScrollSelector = void 0;
+      }
+      return;
+    }
     if (sidebarRight)
       sidebarRight.classList.remove("collapsed");
     if (sidebarLeft)
@@ -27537,44 +27543,6 @@ var InspectorManager = class {
     form.classList.remove("hidden");
     if (this.isGhostMode) {
       this.renderGhostInspector(node, form);
-      return;
-    }
-    if (this.disableSidebarEditing) {
-      form.innerHTML = `
-        <div style="background: #090e18; border: 1px solid #1e293b; border-left: 3px solid #6366f1; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(99, 102, 241, 0.15); display: flex; align-items: center; justify-content: center; color: #818cf8; font-size: 16px;">
-              \u{1F512}
-            </div>
-            <div>
-              <div style="font-size: 13px; font-weight: 700; color: #f8fafc;">${node.data.label || node.type}</div>
-              <span style="font-size: 10px; background: #1e293b; color: #818cf8; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;">${node.type}</span>
-            </div>
-          </div>
-          
-          <div style="background: #0b0f19; border: 1px solid #1a2333; border-radius: 6px; padding: 10px; font-size: 11px; color: #94a3b8; line-height: 1.4;">
-            <strong style="color: #cbd5e1; display: block; margin-bottom: 2px;">Edi\xE7\xE3o na Barra Lateral Desativada</strong>
-            Conforme definido nas Configura\xE7\xF5es, a edi\xE7\xE3o deste bloco deve ser realizada no Modo Expandido.
-          </div>
-
-          <button type="button" id="btnSidebarOpenExpanded" class="btn btn-primary" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; font-size: 12px; font-weight: 600; background: #6366f1; border-color: #6366f1; cursor: pointer; border-radius: 6px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
-            <span>Editar no Modo Expandido</span>
-          </button>
-          
-          <div style="font-size: 10px; color: #64748b; text-align: center;">
-            Dica: voc\xEA tamb\xE9m pode dar duplo clique no bloco no canvas.
-          </div>
-        </div>
-      `;
-      form.querySelector("#btnSidebarOpenExpanded")?.addEventListener("click", () => {
-        this.openExpandedModal(node.id);
-      });
-      if (this.pendingScrollSelector) {
-        const sel = this.pendingScrollSelector;
-        this.pendingScrollSelector = void 0;
-        this.scrollTargetIntoInspectorView(sel);
-      }
       return;
     }
     this.populatePropertiesForm(form, node);
@@ -27869,6 +27837,9 @@ var InspectorManager = class {
     const backdrop = document.createElement("div");
     backdrop.id = "expandedNodeModalBackdrop";
     backdrop.className = "flow-modal-backdrop";
+    const isGhost = this.isGhostMode;
+    const ghostSnap = isGhost ? this.ghostRunItem?.blockSnapshots?.[node.id] : void 0;
+    const modalTitleBadge = isGhost ? `<span style="font-size: 10px; background: rgba(129, 140, 248, 0.2); color: #818cf8; border: 1px solid rgba(129, 140, 248, 0.4); padding: 2px 7px; border-radius: 4px; font-weight: 700;">\u{1F47B} Modo Fantasma \u2022 Leitura</span>` : `<span style="font-size: 10px; background: #1e293b; color: #818cf8; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;">${node.type}</span>`;
     backdrop.innerHTML = `
       <div class="node-expand-modal-card">
         <div class="node-expand-header">
@@ -27879,7 +27850,7 @@ var InspectorManager = class {
             <div>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <h3 id="expandedModalNodeTitle" style="font-size: 15px; font-weight: 700; color: #f8fafc; margin: 0;">${node.data.label || node.type}</h3>
-                <span style="font-size: 10px; background: #1e293b; color: #818cf8; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;">${node.type}</span>
+                ${modalTitleBadge}
               </div>
               <p style="font-size: 11px; color: #94a3b8; margin: 2px 0 0 0;">Configura\xE7\xF5es expandidas e fluxo de dados estilo N8N</p>
             </div>
@@ -27889,48 +27860,74 @@ var InspectorManager = class {
           </button>
         </div>
         <div class="node-expand-body">
-          <!-- Painel Esquerdo: Explorador N8N de Dados Anteriores e Vari\xE1veis -->
+          <!-- Coluna 1: Dados de Entrada (INPUT) -->
           <div id="expandedModalLeftPane" class="node-expand-explorer-pane">
-            <!-- N8NDataExplorer renderizado aqui -->
+            <div class="expand-pane-header">
+              <span class="expand-pane-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                Dados de Entrada (INPUT)
+              </span>
+              <span class="expand-pane-badge">Anteriores & Vari\xE1veis</span>
+            </div>
+            <div id="expandedModalLeftContent" style="padding: 14px; flex: 1; overflow-y: auto;">
+              <!-- N8NDataExplorer renderizado aqui -->
+            </div>
           </div>
 
-          <!-- Painel Direito: Configura\xE7\xF5es do Bloco e Sa\xEDda -->
-          <div id="expandedModalRightPane" class="node-expand-form-pane">
-            <!-- Abas do painel direito -->
-            <div style="display: flex; gap: 6px; padding: 10px 20px 0 20px; border-bottom: 1px solid #1e293b; background: #0c121e;">
-              <button type="button" id="btnTabExpandedConfig" style="padding: 7px 16px; border: none; border-bottom: 2px solid #3b82f6; background: transparent; color: #60a5fa; font-weight: 700; font-size: 12px; cursor: pointer;">
-                Configura\xE7\xF5es do Bloco
-              </button>
-              <button type="button" id="btnTabExpandedOutput" style="padding: 7px 16px; border: none; border-bottom: 2px solid transparent; background: transparent; color: #94a3b8; font-weight: 600; font-size: 12px; cursor: pointer;">
-                Dados de Sa\xEDda ($output)
-              </button>
-            </div>
+          <!-- Resizer 1 (Divisor arrast\xE1vel entre Entrada e Config) -->
+          <div id="resizerExpandedLeft" class="node-expand-resizer" title="Arraste para redimensionar a se\xE7\xE3o de Entrada"></div>
 
-            <!-- Tab Content 1: Formul\xE1rio de Configura\xE7\xE3o -->
+          <!-- Coluna 2: Configura\xE7\xF5es do Bloco (CONFIG) -->
+          <div id="expandedModalCenterPane" class="node-expand-form-pane">
+            <div class="expand-pane-header">
+              <span class="expand-pane-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Configura\xE7\xF5es do Bloco
+              </span>
+              <span id="expandedConfigBadge" class="expand-pane-badge">${node.type}</span>
+            </div>
             <div id="expandedTabContentConfig" style="padding: 20px; flex: 1; overflow-y: auto;">
               <form id="expandedNodeModalForm" class="node-form">
                 <!-- Campos gerados dinamicamente -->
               </form>
             </div>
+          </div>
 
-            <!-- Tab Content 2: Dados de Sa\xEDda do Bloco -->
-            <div id="expandedTabContentOutput" style="padding: 20px; flex: 1; overflow-y: auto; display: none;">
-              <!-- Container de Sa\xEDda -->
+          <!-- Resizer 2 (Divisor arrast\xE1vel entre Config e Sa\xEDda) -->
+          <div id="resizerExpandedRight" class="node-expand-resizer" title="Arraste para redimensionar a se\xE7\xE3o de Sa\xEDda"></div>
+
+          <!-- Coluna 3: Dados de Sa\xEDda (OUTPUT) -->
+          <div id="expandedModalRightPane" class="node-expand-output-pane">
+            <div class="expand-pane-header">
+              <span class="expand-pane-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                Dados de Sa\xEDda ($output)
+              </span>
+              <span class="expand-pane-badge" style="color: #34d399; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3);">Resultado</span>
+            </div>
+            <div id="expandedTabContentOutput" style="padding: 16px; flex: 1; overflow-y: auto;">
+              <!-- Container de Sa\xEDda renderizado por renderNodeOutputPanel -->
             </div>
           </div>
         </div>
         <!-- Bot\xF5es de A\xE7\xE3o do Rodap\xE9 -->
-        <div class="node-expand-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-top: 1px solid #1e293b; background: #0b1120;">
-          <button type="button" id="btnDiscardExpandedModal" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; color: #f87171; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); cursor: pointer; border-radius: 6px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            <span>Descartar Altera\xE7\xF5es</span>
-          </button>
-          <div style="display: flex; gap: 10px;">
-            <button type="button" id="btnDoneExpandedModal" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px; padding: 8px 22px; font-size: 13px; background: #6366f1; border-color: #6366f1; cursor: pointer; border-radius: 6px; font-weight: 600;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span>Concluir e Aplicar</span>
+        <div class="node-expand-footer" style="display: flex; justify-content: ${isGhost ? "flex-end" : "space-between"}; align-items: center; gap: 12px; padding: 14px 20px; border-top: 1px solid #1e293b; background: #0b1120;">
+          ${isGhost ? `
+            <button type="button" id="btnCloseExpandedModalFooter" class="btn btn-secondary" style="padding: 8px 22px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px;">
+              Fechar Visualiza\xE7\xE3o
             </button>
-          </div>
+          ` : `
+            <button type="button" id="btnDiscardExpandedModal" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; color: #f87171; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); cursor: pointer; border-radius: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              <span>Descartar Altera\xE7\xF5es</span>
+            </button>
+            <div style="display: flex; gap: 10px;">
+              <button type="button" id="btnDoneExpandedModal" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px; padding: 8px 22px; font-size: 13px; background: #6366f1; border-color: #6366f1; cursor: pointer; border-radius: 6px; font-weight: 600;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Concluir e Aplicar</span>
+              </button>
+            </div>
+          `}
         </div>
       </div>
     `;
@@ -27938,6 +27935,14 @@ var InspectorManager = class {
     let changesCommitted = false;
     const formEl = backdrop.querySelector("#expandedNodeModalForm");
     this.populatePropertiesForm(formEl, node);
+    if (isGhost) {
+      formEl.querySelectorAll("input, select, textarea, button").forEach((el) => {
+        el.disabled = true;
+        if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+          el.readOnly = true;
+        }
+      });
+    }
     let lastFocusedInput = null;
     formEl.addEventListener("focusin", (e) => {
       const target2 = e.target;
@@ -27946,6 +27951,8 @@ var InspectorManager = class {
       }
     });
     const insertIntoInput = (inputEl, expr) => {
+      if (isGhost)
+        return;
       const start = inputEl.selectionStart ?? inputEl.value.length;
       const end = inputEl.selectionEnd ?? inputEl.value.length;
       const val = inputEl.value;
@@ -27956,6 +27963,11 @@ var InspectorManager = class {
       inputEl.dispatchEvent(new Event("change", { bubbles: true }));
     };
     const handleInsertExpression = (expr) => {
+      if (isGhost) {
+        navigator.clipboard.writeText(expr);
+        this.callbacks.showToast(`Copiado para a \xE1rea de transfer\xEAncia: ${expr}`, "success");
+        return;
+      }
       if (lastFocusedInput && document.body.contains(lastFocusedInput)) {
         insertIntoInput(lastFocusedInput, expr);
       } else {
@@ -27963,77 +27975,118 @@ var InspectorManager = class {
         this.callbacks.showToast(`Copiado para a \xE1rea de transfer\xEAncia: ${expr}`, "success");
       }
     };
-    formEl.addEventListener("dragover", (e) => {
-      const target2 = e.target?.closest("input, textarea");
-      if (target2) {
-        e.preventDefault();
-        if (e.dataTransfer)
-          e.dataTransfer.dropEffect = "copy";
-        target2.classList.add("drag-over-input");
-      } else if (lastFocusedInput && document.body.contains(lastFocusedInput)) {
-        e.preventDefault();
-        if (e.dataTransfer)
-          e.dataTransfer.dropEffect = "copy";
-      }
-    });
-    formEl.addEventListener("dragleave", (e) => {
-      const target2 = e.target?.closest("input, textarea");
-      if (target2) {
-        target2.classList.remove("drag-over-input");
-      }
-    });
-    formEl.addEventListener("drop", (e) => {
-      const expr = e.dataTransfer?.getData("application/x-n8n-tag") || e.dataTransfer?.getData("text/plain");
-      const target2 = e.target?.closest("input, textarea");
-      if (target2) {
-        target2.classList.remove("drag-over-input");
-      }
-      if (expr) {
-        e.preventDefault();
+    if (!isGhost) {
+      formEl.addEventListener("dragover", (e) => {
+        const target2 = e.target?.closest("input, textarea");
         if (target2) {
-          insertIntoInput(target2, expr);
-          this.callbacks.showToast(`Inserido no campo: ${expr}`, "success");
+          e.preventDefault();
+          if (e.dataTransfer)
+            e.dataTransfer.dropEffect = "copy";
+          target2.classList.add("drag-over-input");
         } else if (lastFocusedInput && document.body.contains(lastFocusedInput)) {
-          insertIntoInput(lastFocusedInput, expr);
-          this.callbacks.showToast(`Inserido no campo: ${expr}`, "success");
-        } else {
-          navigator.clipboard.writeText(expr);
-          this.callbacks.showToast(`Copiado para a \xE1rea de transfer\xEAncia: ${expr}`, "success");
+          e.preventDefault();
+          if (e.dataTransfer)
+            e.dataTransfer.dropEffect = "copy";
         }
-      }
-    });
-    const explorerContainer = backdrop.querySelector("#expandedModalLeftPane");
+      });
+      formEl.addEventListener("dragleave", (e) => {
+        const target2 = e.target?.closest("input, textarea");
+        if (target2) {
+          target2.classList.remove("drag-over-input");
+        }
+      });
+      formEl.addEventListener("drop", (e) => {
+        const expr = e.dataTransfer?.getData("application/x-n8n-tag") || e.dataTransfer?.getData("text/plain");
+        const target2 = e.target?.closest("input, textarea");
+        if (target2) {
+          target2.classList.remove("drag-over-input");
+        }
+        if (expr) {
+          e.preventDefault();
+          if (target2) {
+            insertIntoInput(target2, expr);
+            this.callbacks.showToast(`Inserido no campo: ${expr}`, "success");
+          } else if (lastFocusedInput && document.body.contains(lastFocusedInput)) {
+            insertIntoInput(lastFocusedInput, expr);
+            this.callbacks.showToast(`Inserido no campo: ${expr}`, "success");
+          } else {
+            navigator.clipboard.writeText(expr);
+            this.callbacks.showToast(`Copiado para a \xE1rea de transfer\xEAncia: ${expr}`, "success");
+          }
+        }
+      });
+    }
+    const explorerContainer = backdrop.querySelector("#expandedModalLeftContent") || backdrop.querySelector("#expandedModalLeftPane");
     if (explorerContainer) {
       N8NDataExplorer.render(explorerContainer, {
         graph,
         currentNode: node,
-        runtimeNodeOutputs: this.runtimeNodeOutputs,
+        runtimeNodeOutputs: isGhost && ghostSnap ? { [node.id]: ghostSnap.inputData } : this.runtimeNodeOutputs,
         onInsertExpression: handleInsertExpression,
         onShowToast: (msg, type) => this.callbacks.showToast(msg, type)
       });
     }
-    const outputTabContainer = backdrop.querySelector("#expandedTabContentOutput");
-    const configTabContainer = backdrop.querySelector("#expandedTabContentConfig");
-    const btnTabConfig = backdrop.querySelector("#btnTabExpandedConfig");
-    const btnTabOutput = backdrop.querySelector("#btnTabExpandedOutput");
-    btnTabConfig?.addEventListener("click", () => {
-      configTabContainer.style.display = "block";
-      outputTabContainer.style.display = "none";
-      btnTabConfig.style.borderBottomColor = "#3b82f6";
-      btnTabConfig.style.color = "#60a5fa";
-      btnTabOutput.style.borderBottomColor = "transparent";
-      btnTabOutput.style.color = "#94a3b8";
-    });
-    btnTabOutput?.addEventListener("click", () => {
-      configTabContainer.style.display = "none";
-      outputTabContainer.style.display = "block";
-      btnTabOutput.style.borderBottomColor = "#3b82f6";
-      btnTabOutput.style.color = "#60a5fa";
-      btnTabConfig.style.borderBottomColor = "transparent";
-      btnTabConfig.style.color = "#94a3b8";
-      this.renderNodeOutputPanel(outputTabContainer, node);
-    });
+    const outputContainer = backdrop.querySelector("#expandedTabContentOutput");
+    if (outputContainer) {
+      this.renderNodeOutputPanel(outputContainer, node);
+    }
+    const resizerLeft = backdrop.querySelector("#resizerExpandedLeft");
+    const leftPane = backdrop.querySelector("#expandedModalLeftPane");
+    if (resizerLeft && leftPane) {
+      resizerLeft.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startWidth = leftPane.getBoundingClientRect().width;
+        resizerLeft.classList.add("resizing");
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        const onMouseMove = (moveEv) => {
+          const deltaX = moveEv.clientX - startX;
+          const newWidth = Math.max(220, Math.min(550, startWidth + deltaX));
+          leftPane.style.width = `${newWidth}px`;
+        };
+        const onMouseUp = () => {
+          resizerLeft.classList.remove("resizing");
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+          window.removeEventListener("mousemove", onMouseMove);
+          window.removeEventListener("mouseup", onMouseUp);
+        };
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
+      });
+    }
+    const resizerRight = backdrop.querySelector("#resizerExpandedRight");
+    const rightPane = backdrop.querySelector("#expandedModalRightPane");
+    if (resizerRight && rightPane) {
+      resizerRight.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startWidth = rightPane.getBoundingClientRect().width;
+        resizerRight.classList.add("resizing");
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        const onMouseMove = (moveEv) => {
+          const deltaX = startX - moveEv.clientX;
+          const newWidth = Math.max(240, Math.min(650, startWidth + deltaX));
+          rightPane.style.width = `${newWidth}px`;
+        };
+        const onMouseUp = () => {
+          resizerRight.classList.remove("resizing");
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+          window.removeEventListener("mousemove", onMouseMove);
+          window.removeEventListener("mouseup", onMouseUp);
+        };
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
+      });
+    }
     const discardChanges = () => {
+      if (isGhost) {
+        this.closeExpandedModal();
+        return;
+      }
       node.data = JSON.parse(JSON.stringify(backupNodeData));
       this.closeExpandedModal();
       this.renderInspector();
@@ -28041,15 +28094,29 @@ var InspectorManager = class {
       this.callbacks.showToast("Altera\xE7\xF5es no bloco foram descartadas.", "info");
     };
     const commitChanges = () => {
+      if (isGhost) {
+        this.closeExpandedModal();
+        return;
+      }
       changesCommitted = true;
       this.closeExpandedModal();
       this.renderInspector();
       this.callbacks.onNodeDataChanged();
       this.callbacks.showToast("Altera\xE7\xF5es no bloco aplicadas com sucesso!", "success");
     };
-    backdrop.querySelector("#btnDiscardExpandedModal")?.addEventListener("click", discardChanges);
-    backdrop.querySelector("#btnDoneExpandedModal")?.addEventListener("click", commitChanges);
+    if (isGhost) {
+      backdrop.querySelector("#btnCloseExpandedModalFooter")?.addEventListener("click", () => {
+        this.closeExpandedModal();
+      });
+    } else {
+      backdrop.querySelector("#btnDiscardExpandedModal")?.addEventListener("click", discardChanges);
+      backdrop.querySelector("#btnDoneExpandedModal")?.addEventListener("click", commitChanges);
+    }
     const handleCloseDialog = () => {
+      if (isGhost) {
+        this.closeExpandedModal();
+        return;
+      }
       if (!changesCommitted) {
         discardChanges();
       }
@@ -28112,6 +28179,60 @@ var InspectorManager = class {
   renderNodeOutputPanel(container, node) {
     container.innerHTML = "";
     const nodeLabel = node.data?.label || node.type;
+    if (this.isGhostMode) {
+      const snap = this.ghostRunItem?.blockSnapshots?.[node.id];
+      const status = snap?.status || "skipped";
+      const durationText = snap?.durationMs !== void 0 ? `${snap.durationMs}ms` : "\u2014";
+      const statusLabel = status === "completed" ? "\u2713 Conclu\xEDdo com Sucesso" : status === "failed" ? "\u2715 Falha na Execu\xE7\xE3o" : "\u26AA N\xE3o Executado";
+      const statusColor = status === "completed" ? "#10b981" : status === "failed" ? "#ef4444" : "#64748b";
+      const outputData = snap?.outputData !== void 0 ? snap.outputData : null;
+      const jsonStr2 = outputData !== null ? JSON.stringify(outputData, null, 2) : "";
+      const panel2 = document.createElement("div");
+      panel2.style.cssText = "display: flex; flex-direction: column; gap: 12px;";
+      panel2.innerHTML = `
+        <div style="background: #090e18; border: 1px solid #1e293b; border-left: 3px solid ${statusColor}; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size: 11px; font-weight: 700; color: #818cf8;">Auditoria Fantasma</span>
+            <span style="font-size: 10px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; border: 1px solid ${statusColor}44; padding: 2px 7px; border-radius: 4px;">
+              ${statusLabel}
+            </span>
+          </div>
+
+          <div style="font-size: 11px; color: #94a3b8;">
+            Dura\xE7\xE3o: <strong style="color: #f1f5f9;">${durationText}</strong> \u2022 Bloco: <span style="color: #38bdf8;">${nodeLabel}</span>
+          </div>
+
+          ${snap?.error ? `
+            <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 10px; font-size: 11px; color: #fca5a5; font-family: monospace; word-break: break-all;">
+              \u2715 Erro: ${snap.error}
+            </div>
+          ` : ""}
+        </div>
+
+        <div style="background: #090e18; border: 1px solid #1e293b; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Dados Produzidos ($output):</label>
+            ${jsonStr2 ? `<button type="button" id="btnCopyGhostOutput" class="btn btn-secondary" style="font-size: 10px; padding: 3px 8px;">\u{1F4CB} Copiar JSON</button>` : ""}
+          </div>
+
+          ${jsonStr2 ? `
+            <pre style="
+              width: 100%; box-sizing: border-box; max-height: 380px; overflow-y: auto; font-family: monospace; font-size: 11px; background: #080c14; color: #86efac; border: 1px solid #166534; border-radius: 6px; padding: 12px; line-height: 1.4; margin: 0;
+            ">${jsonStr2}</pre>
+          ` : `
+            <div style="font-size: 11px; color: #64748b; font-style: italic; padding: 12px 6px; text-align: center;">
+              Nenhum dado de sa\xEDda foi gerado por este bloco nesta execu\xE7\xE3o.
+            </div>
+          `}
+        </div>
+      `;
+      panel2.querySelector("#btnCopyGhostOutput")?.addEventListener("click", () => {
+        navigator.clipboard.writeText(jsonStr2);
+        this.callbacks.showToast("JSON copiado com sucesso!", "success");
+      });
+      container.appendChild(panel2);
+      return;
+    }
     const outputResult = N8NDataExplorer.getNodeOutputResult(node, this.runtimeNodeOutputs);
     const isMockEnabled = !!node.data.useMockOutput;
     const hasRuntimeData = outputResult.source === "runtime";
@@ -30174,6 +30295,8 @@ var WorkflowTabManager = class {
     this.renderTabs();
   }
   updateFlowInTabsAndSaved(graph) {
+    if (graph.isGhost)
+      return;
     if (graph.metadata?.name) {
       graph.metadata.name = this.cleanFlowName(graph.metadata.name);
     }
@@ -30260,11 +30383,12 @@ var WorkflowTabManager = class {
     this.openTabs.forEach((flow) => {
       const tabEl = document.createElement("div");
       const isActive = this.activeTabId === flow.metadata?.id;
-      tabEl.className = `app-tab-item ${isActive ? "active" : ""}`;
+      const isGhost = !!flow.isGhost;
+      tabEl.className = `app-tab-item ${isActive ? "active" : ""} ${isGhost ? "tab-ghost" : ""}`;
       const titleClean = this.cleanFlowName(flow.metadata?.name);
-      tabEl.title = titleClean;
+      tabEl.title = isGhost ? `[Fantasma] ${titleClean}` : titleClean;
       tabEl.innerHTML = `
-        <span class="tab-label">${titleClean}</span>
+        <span class="tab-label" style="${isGhost ? "color: #c7d2fe; display: flex; align-items: center; gap: 4px;" : ""}">${titleClean}</span>
         <span class="app-tab-close" data-id="${flow.metadata?.id}" title="Fechar aba">\u2715</span>
       `;
       tabEl.addEventListener("click", (e) => {
@@ -31054,7 +31178,10 @@ var VisualEditorApp = class {
       onOpenFlow: (flow) => this.openStudio(flow),
       onViewChange: (view) => this.switchView(view),
       onRunFlowDirectly: (flow) => this.runFlowDirectly(flow),
-      onDebugFlowDirectly: (flow) => this.runFlowDirectly(flow, true),
+      onDebugFlowDirectly: (flow) => {
+        this.openStudio(flow);
+        this.openExpandedDebugModal();
+      },
       showToast: (msg, type) => showToast(msg, type)
     });
     this.variablesManager = new VariablesManager({
@@ -31171,23 +31298,51 @@ var VisualEditorApp = class {
     this.tabManager.renderTabs();
   }
   openStudio(graph) {
-    if (this.isGhostMode) {
-      this.exitGhostMode();
+    const isGhostTab = !!graph.isGhost;
+    if (isGhostTab) {
+      this.isGhostMode = true;
+      this.ghostHistoricalRun = graph.ghostHistoricalRun;
+    } else if (this.isGhostMode) {
+      this.exitGhostMode(false);
     }
     this.graph = JSON.parse(JSON.stringify(graph));
+    if (isGhostTab) {
+      this.graph.isGhost = true;
+      this.graph.ghostHistoricalRun = graph.ghostHistoricalRun;
+    }
     if (this.graph.metadata?.name) {
       this.graph.metadata.name = this.cleanFlowName(this.graph.metadata.name);
     }
     this.selectedNodeId = void 0;
     this.tabManager.registerOpenTab(this.graph);
     const titleInput = document.getElementById("flowTitleInput");
-    if (titleInput)
+    if (titleInput) {
       titleInput.value = this.cleanFlowName(this.graph.metadata?.name);
-    if (this.graph.metadata?.id) {
+      titleInput.readOnly = isGhostTab;
+    }
+    this.setEditorActionsReadOnly(isGhostTab);
+    const banner = document.getElementById("ghostModeBanner");
+    const details = document.getElementById("ghostBannerDetails");
+    if (isGhostTab) {
+      if (banner)
+        banner.style.display = "flex";
+      if (details && this.ghostHistoricalRun) {
+        const execDate = new Date(this.ghostHistoricalRun.timestamp).toLocaleString();
+        const statusText = this.ghostHistoricalRun.status === "completed" ? "\u2713 Conclu\xEDdo" : this.ghostHistoricalRun.status === "failed" ? "\u2715 Falha" : "\u2298 Cancelado";
+        const statusColor = this.ghostHistoricalRun.status === "completed" ? "#34d399" : "#f87171";
+        details.innerHTML = `Fluxo: <strong style="color: #fff;">${this.ghostHistoricalRun.automationName}</strong> \u2022 Executado em: ${execDate} \u2022 Dura\xE7\xE3o: <strong>${this.ghostHistoricalRun.durationMs}ms</strong> \u2022 Status: <strong style="color: ${statusColor};">${statusText}</strong>`;
+      }
+    } else {
+      if (banner)
+        banner.style.display = "none";
+    }
+    if (this.graph.metadata?.id && !isGhostTab) {
       const newUrl = `${window.location.pathname}?flowId=${encodeURIComponent(this.graph.metadata.id)}`;
       window.history.replaceState({}, "", newUrl);
     }
     this.switchView("studio");
+    this.canvasManager.setGhostMode(isGhostTab, this.ghostHistoricalRun);
+    this.inspectorManager.setGhostMode(isGhostTab, this.ghostHistoricalRun);
     this.canvasManager.updateCanvasTransform();
     this.canvasManager.render();
     if (this.graph.lastExecutionData?.nodeOutputs) {
@@ -31352,9 +31507,17 @@ var VisualEditorApp = class {
     }
   }
   clearLogs() {
+    this.logs = [];
     const consoleEl = document.getElementById("logsConsole");
     if (consoleEl) {
       consoleEl.innerHTML = '<div class="log-entry debug">[SISTEMA] Console limpo.</div>';
+    }
+    const modalConsoleEl = document.getElementById("modalLogsConsole");
+    if (modalConsoleEl) {
+      modalConsoleEl.innerHTML = '<div class="log-entry debug">[SISTEMA] Console limpo.</div>';
+      const countBadge = document.getElementById("modalLogsCountBadge");
+      if (countBadge)
+        countBadge.textContent = "0 eventos";
     }
   }
   async runCurrentFlow(isDebug = false, explicitTabId) {
@@ -31419,57 +31582,33 @@ var VisualEditorApp = class {
     }
   }
   enterGhostMode(historyItem) {
-    if (!this.isGhostMode) {
-      this.originalEditableGraph = JSON.parse(JSON.stringify(this.graph));
-    }
-    this.isGhostMode = true;
-    this.ghostHistoricalRun = historyItem;
-    if (this.currentView !== "studio") {
-      this.switchView("studio");
-    }
-    this.graph = JSON.parse(JSON.stringify(historyItem.graphSnapshot));
-    this.canvasManager.setGhostMode(true, historyItem);
-    this.inspectorManager.setGhostMode(true, historyItem);
-    const banner = document.getElementById("ghostModeBanner");
-    const details = document.getElementById("ghostBannerDetails");
-    if (banner)
-      banner.style.display = "flex";
-    if (details) {
-      const execDate = new Date(historyItem.timestamp).toLocaleString();
-      const statusText = historyItem.status === "completed" ? "\u2713 Conclu\xEDdo" : historyItem.status === "failed" ? "\u2715 Falha" : "\u2298 Cancelado";
-      const statusColor = historyItem.status === "completed" ? "#34d399" : "#f87171";
-      details.innerHTML = `Fluxo: <strong style="color: #fff;">${historyItem.automationName}</strong> \u2022 Executado em: ${execDate} \u2022 Dura\xE7\xE3o: <strong>${historyItem.durationMs}ms</strong> \u2022 Status: <strong style="color: ${statusColor};">${statusText}</strong>`;
-    }
-    const titleInput = document.getElementById("flowTitleInput");
-    if (titleInput) {
-      titleInput.value = `\u{1F47B} [FANTASMA] ${this.cleanFlowName(historyItem.automationName)}`;
-      titleInput.readOnly = true;
-    }
-    this.setEditorActionsReadOnly(true);
-    if (historyItem.finalVariables) {
-      this.renderVariables(historyItem.finalVariables);
-    }
-    const failedNodeId = Object.keys(historyItem.blockSnapshots).find(
+    const timeStr = new Date(historyItem.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const ghostTabId = `ghost_${historyItem.id}`;
+    const ghostGraph = JSON.parse(JSON.stringify(historyItem.graphSnapshot));
+    ghostGraph.metadata.id = ghostTabId;
+    ghostGraph.metadata.name = `\u{1F47B} ${this.cleanFlowName(historyItem.automationName)} (${timeStr})`;
+    ghostGraph.isGhost = true;
+    ghostGraph.ghostHistoricalRun = historyItem;
+    this.tabManager.registerOpenTab(ghostGraph);
+    this.openStudio(ghostGraph);
+    const failedNodeId = Object.keys(historyItem.blockSnapshots || {}).find(
       (id) => historyItem.blockSnapshots[id]?.status === "failed"
     );
-    const firstExecNodeId = failedNodeId || Object.keys(historyItem.blockSnapshots).find(
+    const firstExecNodeId = failedNodeId || Object.keys(historyItem.blockSnapshots || {}).find(
       (id) => historyItem.blockSnapshots[id]?.status === "completed"
     );
     if (firstExecNodeId) {
       this.selectedNodeId = firstExecNodeId;
       this.canvasManager.setSelectedNodeIds([firstExecNodeId]);
       this.openInspectorSidebar();
-    } else {
-      this.canvasManager.render();
-      this.inspectorManager.renderInspector();
     }
-    this.loadScopedHistory();
-    showToast("Modo Fantasma ativado! Inspe\xE7\xE3o hist\xF3rica somente leitura.", "info");
+    showToast("Modo Fantasma aberto em nova aba! Inspe\xE7\xE3o hist\xF3rica somente leitura.", "info");
   }
-  exitGhostMode() {
+  exitGhostMode(closeTab = true) {
     if (!this.isGhostMode)
       return;
     this.isGhostMode = false;
+    const ghostId = this.graph?.metadata?.id;
     this.ghostHistoricalRun = void 0;
     const banner = document.getElementById("ghostModeBanner");
     if (banner)
@@ -31479,12 +31618,16 @@ var VisualEditorApp = class {
       titleInput.readOnly = false;
     }
     this.setEditorActionsReadOnly(false);
+    this.canvasManager.setGhostMode(false);
+    this.inspectorManager.setGhostMode(false);
+    if (closeTab && this.graph?.isGhost && ghostId) {
+      this.tabManager.closeTab(ghostId);
+      return;
+    }
     if (this.originalEditableGraph) {
       this.graph = JSON.parse(JSON.stringify(this.originalEditableGraph));
       this.originalEditableGraph = void 0;
     }
-    this.canvasManager.setGhostMode(false);
-    this.inspectorManager.setGhostMode(false);
     if (titleInput) {
       titleInput.value = this.cleanFlowName(this.graph.metadata?.name);
     }
@@ -31722,21 +31865,272 @@ var VisualEditorApp = class {
     document.getElementById(`rendered_${nodeId}`)?.classList.remove("active-executing");
   }
   appendLog(log) {
-    const consoleEl = document.getElementById("logsConsole");
-    if (!consoleEl)
-      return;
+    this.logs.push(log);
     const time = new Date(log.timestamp).toLocaleTimeString();
-    const entry = document.createElement("div");
-    entry.className = `log-entry ${log.level}`;
-    entry.textContent = `[${time}] [${log.level.toUpperCase()}] ${log.message}`;
-    consoleEl.appendChild(entry);
-    consoleEl.scrollTop = consoleEl.scrollHeight;
+    const entryText = `[${time}] [${log.level.toUpperCase()}] ${log.message}`;
+    const consoleEl = document.getElementById("logsConsole");
+    if (consoleEl) {
+      const entry = document.createElement("div");
+      entry.className = `log-entry ${log.level}`;
+      entry.textContent = entryText;
+      consoleEl.appendChild(entry);
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+    const modalConsoleEl = document.getElementById("modalLogsConsole");
+    if (modalConsoleEl) {
+      const entry = document.createElement("div");
+      entry.className = `log-entry ${log.level}`;
+      entry.textContent = entryText;
+      modalConsoleEl.appendChild(entry);
+      modalConsoleEl.scrollTop = modalConsoleEl.scrollHeight;
+      const countBadge = document.getElementById("modalLogsCountBadge");
+      if (countBadge)
+        countBadge.textContent = `${this.logs.length} eventos`;
+    }
   }
   renderVariables(vars) {
+    const jsonStr = JSON.stringify(vars, null, 2);
     const varEl = document.getElementById("variablesList");
-    if (!varEl)
-      return;
-    varEl.innerHTML = `<pre style="font-family: var(--font-mono); font-size: 11px;">${JSON.stringify(vars, null, 2)}</pre>`;
+    if (varEl) {
+      varEl.innerHTML = `<pre style="font-family: var(--font-mono); font-size: 11px;">${jsonStr}</pre>`;
+    }
+    const modalVarEl = document.getElementById("modalVariablesList");
+    if (modalVarEl) {
+      modalVarEl.innerHTML = `<pre style="font-family: var(--font-mono); font-size: 11px; margin: 0; color: #a5f3fc;">${jsonStr}</pre>`;
+    }
+  }
+  openExpandedDebugModal() {
+    const existing = document.getElementById("debugModalBackdrop");
+    if (existing)
+      existing.remove();
+    const backdrop = document.createElement("div");
+    backdrop.id = "debugModalBackdrop";
+    backdrop.className = "flow-modal-backdrop";
+    const flowName = this.cleanFlowName(this.graph.metadata?.name);
+    backdrop.innerHTML = `
+      <div class="debug-modal-card">
+        <div class="debug-modal-header">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(56, 189, 248, 0.15); display: flex; align-items: center; justify-content: center; color: #38bdf8;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/></svg>
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <h3 style="font-size: 15px; font-weight: 700; color: #f8fafc; margin: 0;">Depura\xE7\xE3o & Console de Execu\xE7\xE3o</h3>
+                <span style="font-size: 10px; background: #1e293b; color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;">${flowName}</span>
+              </div>
+              <p style="font-size: 11px; color: #94a3b8; margin: 2px 0 0 0;">Ambiente expandido de teste, inspe\xE7\xE3o de vari\xE1veis e logs ao vivo</p>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button id="btnModalRunDebug" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 14px; background: #0284c7; border-color: #0284c7; cursor: pointer;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span>Iniciar Depura\xE7\xE3o</span>
+            </button>
+            <button id="btnModalStopDebug" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 12px; color: #f87171; border-color: rgba(239, 68, 68, 0.3); cursor: pointer;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+              <span>Parar</span>
+            </button>
+            <button id="btnCloseDebugModal" class="sidebar-toggle-btn" title="Fechar visualiza\xE7\xE3o (Esc)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="debug-modal-body">
+          <!-- Coluna Esquerda: Informa\xE7\xF5es da Aba Alvo, Vari\xE1veis e Hist\xF3rico -->
+          <div id="modalDebugLeftPane" class="debug-modal-left-pane">
+            <!-- Card Alvo -->
+            <div style="background: #111827; border: 1px solid #1f293d; border-radius: 8px; padding: 12px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 11px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                  \u{1F3AF} P\xE1gina Web Alvo
+                </span>
+                <span id="modalDebugTargetBadge" class="flow-badge" style="font-size: 9px; padding: 1px 5px; background: rgba(56, 189, 248, 0.15); color: #38bdf8;">
+                  ${this.activeWebTabInfo?.tabId ? `Aba #${this.activeWebTabInfo.tabId}` : "Detectando..."}
+                </span>
+              </div>
+              <div id="modalDebugTargetInfo" style="font-size: 11px; color: #cbd5e1; margin-bottom: 10px; line-height: 1.4; background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; word-break: break-all;">
+                ${this.activeWebTabInfo?.title ? `<strong>${this.activeWebTabInfo.title}</strong><br/><span style="color: #64748b; font-size: 10px;">${this.activeWebTabInfo.url}</span>` : "Detectando aba web ativa no navegador..."}
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button id="btnModalRefreshTab" class="btn btn-secondary" style="flex: 1; font-size: 10px; padding: 5px 8px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+                  \u{1F504} Atualizar
+                </button>
+                <button id="btnModalFocusTab" class="btn btn-secondary" style="flex: 1; font-size: 10px; padding: 5px 8px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+                  \u{1F50D} Focar
+                </button>
+                <button id="btnModalNewTab" class="btn btn-secondary" style="flex: 1; font-size: 10px; padding: 5px 8px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;" title="Abrir nova aba em branco para testar">
+                  \u2795 Nova Aba
+                </button>
+              </div>
+            </div>
+
+            <!-- Card Vari\xE1veis do Fluxo -->
+            <div style="background: #111827; border: 1px solid #1f293d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; flex: 1; min-height: 180px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 11px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                  \u{1F4E6} Estado das Vari\xE1veis
+                </span>
+                <span style="font-size: 10px; color: #64748b;">(JSON em Tempo Real)</span>
+              </div>
+              <div id="modalVariablesList" style="background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 10px; flex: 1; overflow-y: auto; font-family: monospace; font-size: 11px; color: #a5f3fc;">
+                <pre style="margin: 0; font-family: var(--font-mono); font-size: 11px; color: #a5f3fc;">{}</pre>
+              </div>
+            </div>
+          </div>
+
+          <!-- Divisor Resizer -->
+          <div id="resizerDebugModal" class="debug-modal-resizer" title="Arraste para redimensionar o painel"></div>
+
+          <!-- Coluna Direita: Console / Terminal de Logs -->
+          <div id="modalDebugRightPane" class="debug-modal-console-pane">
+            <div style="padding: 10px 16px; background: #0d131f; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 11px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px; text-transform: uppercase;">
+                  \u{1F5A5}\uFE0F Console de Execu\xE7\xE3o
+                </span>
+                <span id="modalLogsCountBadge" style="font-size: 10px; color: #94a3b8; background: #1e293b; padding: 2px 6px; border-radius: 4px;">
+                  ${this.logs.length} eventos
+                </span>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="text" id="modalLogSearchInput" placeholder="Filtrar logs..." style="background: #080c14; border: 1px solid #243049; border-radius: 4px; padding: 4px 8px; font-size: 11px; color: #f1f5f9; width: 140px;" />
+                <button id="btnModalClearLogs" class="btn-xs" style="background: #1e293b; border: 1px solid #334155; color: #94a3b8; padding: 3px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;">
+                  Limpar Logs
+                </button>
+              </div>
+            </div>
+
+            <!-- Lista de logs estilo terminal -->
+            <div id="modalLogsConsole" class="console-output" style="flex: 1; padding: 14px; overflow-y: auto; background: #060911; font-family: monospace; font-size: 12px; line-height: 1.5;">
+              <!-- Logs populados aqui -->
+            </div>
+          </div>
+        </div>
+
+        <div class="debug-modal-footer">
+          <div style="font-size: 11px; color: #64748b; display: flex; align-items: center; gap: 12px;">
+            <span>Pressione <strong>Esc</strong> para fechar</span>
+            <span>\u2022</span>
+            <span id="modalDebugStatusText" style="color: #38bdf8;">Pronto para iniciar depura\xE7\xE3o</span>
+          </div>
+          <button id="btnFooterCloseDebug" class="btn btn-secondary" style="padding: 6px 16px; font-size: 12px; cursor: pointer;">
+            Fechar
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+    const resizer = backdrop.querySelector("#resizerDebugModal");
+    const leftPane = backdrop.querySelector("#modalDebugLeftPane");
+    if (resizer && leftPane) {
+      resizer.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startWidth = leftPane.getBoundingClientRect().width;
+        resizer.classList.add("resizing");
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        const onMouseMove = (moveEv) => {
+          const deltaX = moveEv.clientX - startX;
+          const newWidth = Math.max(260, Math.min(600, startWidth + deltaX));
+          leftPane.style.width = `${newWidth}px`;
+        };
+        const onMouseUp = () => {
+          resizer.classList.remove("resizing");
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+          window.removeEventListener("mousemove", onMouseMove);
+          window.removeEventListener("mouseup", onMouseUp);
+        };
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
+      });
+    }
+    const modalConsole = backdrop.querySelector("#modalLogsConsole");
+    if (modalConsole) {
+      if (this.logs.length === 0) {
+        modalConsole.innerHTML = '<div class="log-entry debug">[SISTEMA] Console pronto. Clique em "Iniciar Depura\xE7\xE3o" para executar na aba web ativa.</div>';
+      } else {
+        this.logs.forEach((l) => {
+          const time = new Date(l.timestamp).toLocaleTimeString();
+          const entry = document.createElement("div");
+          entry.className = `log-entry ${l.level}`;
+          entry.textContent = `[${time}] [${l.level.toUpperCase()}] ${l.message}`;
+          modalConsole.appendChild(entry);
+        });
+        modalConsole.scrollTop = modalConsole.scrollHeight;
+      }
+    }
+    backdrop.querySelector("#btnModalRunDebug")?.addEventListener("click", () => {
+      this.runCurrentFlow(true);
+      const statusText = backdrop.querySelector("#modalDebugStatusText");
+      if (statusText)
+        statusText.textContent = "Depurando na aba ativa...";
+    });
+    backdrop.querySelector("#btnModalStopDebug")?.addEventListener("click", () => {
+      if (chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ action: "CANCEL_AUTOMATION", payload: { automationId: this.graph.metadata?.id } });
+      }
+      const statusText = backdrop.querySelector("#modalDebugStatusText");
+      if (statusText)
+        statusText.textContent = "Execu\xE7\xE3o cancelada.";
+    });
+    backdrop.querySelector("#btnModalRefreshTab")?.addEventListener("click", async () => {
+      await this.detectActiveWebTab();
+      const badge = backdrop.querySelector("#modalDebugTargetBadge");
+      const info = backdrop.querySelector("#modalDebugTargetInfo");
+      if (badge && this.activeWebTabInfo?.tabId) {
+        badge.textContent = `Aba #${this.activeWebTabInfo.tabId}`;
+      }
+      if (info && this.activeWebTabInfo?.title) {
+        info.innerHTML = `<strong>${this.activeWebTabInfo.title}</strong><br/><span style="color: #64748b; font-size: 10px;">${this.activeWebTabInfo.url}</span>`;
+      }
+    });
+    backdrop.querySelector("#btnModalFocusTab")?.addEventListener("click", () => {
+      this.focusTargetTab();
+    });
+    backdrop.querySelector("#btnModalNewTab")?.addEventListener("click", () => {
+      if (chrome.tabs?.create) {
+        chrome.tabs.create({ url: "about:blank", active: false }, (t) => {
+          if (t?.id) {
+            this.activeWebTabInfo = { tabId: t.id, title: "Nova Aba em Branco", url: "about:blank" };
+            const badge = backdrop.querySelector("#modalDebugTargetBadge");
+            const info = backdrop.querySelector("#modalDebugTargetInfo");
+            if (badge)
+              badge.textContent = `Aba #${t.id}`;
+            if (info)
+              info.innerHTML = `<strong>Nova Aba em Branco</strong><br/><span style="color: #64748b; font-size: 10px;">about:blank</span>`;
+            showToast("Aba em branco criada e selecionada como alvo.", "success");
+          }
+        });
+      }
+    });
+    backdrop.querySelector("#btnModalClearLogs")?.addEventListener("click", () => {
+      this.clearLogs();
+    });
+    const searchInput = backdrop.querySelector("#modalLogSearchInput");
+    searchInput?.addEventListener("input", () => {
+      const q = searchInput.value.toLowerCase().trim();
+      modalConsole?.querySelectorAll(".log-entry").forEach((el) => {
+        el.style.display = !q || el.textContent.toLowerCase().includes(q) ? "block" : "none";
+      });
+    });
+    const closeModal = () => {
+      backdrop.remove();
+      window.removeEventListener("keydown", onKeyDown);
+    };
+    backdrop.querySelector("#btnCloseDebugModal")?.addEventListener("click", closeModal);
+    backdrop.querySelector("#btnFooterCloseDebug")?.addEventListener("click", closeModal);
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        closeModal();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
   }
   initBlockCatalogUI() {
     const container = document.getElementById("categoriesContainer");
@@ -31946,7 +32340,8 @@ var VisualEditorApp = class {
       document.querySelectorAll(".graph-node").forEach((el) => el.classList.remove("selected"));
       this.openBlocksSidebar();
     });
-    document.getElementById("btnDebugFlow")?.addEventListener("click", () => this.runCurrentFlow(true));
+    document.getElementById("btnDebugFlow")?.addEventListener("click", () => this.openExpandedDebugModal());
+    document.getElementById("btnExpandDebugModal")?.addEventListener("click", () => this.openExpandedDebugModal());
     document.getElementById("btnRunDebugActiveTab")?.addEventListener("click", () => this.runCurrentFlow(true));
     document.getElementById("btnRefreshTargetTab")?.addEventListener("click", () => this.detectActiveWebTab());
     document.getElementById("btnFocusTargetTab")?.addEventListener("click", () => this.focusTargetTab());

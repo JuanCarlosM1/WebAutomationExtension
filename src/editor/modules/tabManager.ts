@@ -108,6 +108,7 @@ export class WorkflowTabManager {
   }
 
   public updateFlowInTabsAndSaved(graph: WebAutomationGraph): void {
+    if ((graph as any).isGhost) return;
     if (graph.metadata?.name) {
       graph.metadata.name = this.cleanFlowName(graph.metadata.name);
     }
@@ -205,12 +206,13 @@ export class WorkflowTabManager {
     this.openTabs.forEach((flow) => {
       const tabEl = document.createElement('div');
       const isActive = this.activeTabId === flow.metadata?.id;
-      tabEl.className = `app-tab-item ${isActive ? 'active' : ''}`;
+      const isGhost = !!(flow as any).isGhost;
+      tabEl.className = `app-tab-item ${isActive ? 'active' : ''} ${isGhost ? 'tab-ghost' : ''}`;
       const titleClean = this.cleanFlowName(flow.metadata?.name);
-      tabEl.title = titleClean;
+      tabEl.title = isGhost ? `[Fantasma] ${titleClean}` : titleClean;
 
       tabEl.innerHTML = `
-        <span class="tab-label">${titleClean}</span>
+        <span class="tab-label" style="${isGhost ? 'color: #c7d2fe; display: flex; align-items: center; gap: 4px;' : ''}">${titleClean}</span>
         <span class="app-tab-close" data-id="${flow.metadata?.id}" title="Fechar aba">✕</span>
       `;
 

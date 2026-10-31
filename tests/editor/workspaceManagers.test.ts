@@ -92,5 +92,32 @@ describe('Workspace Managers (variablesManager.ts & tabManager.ts)', () => {
       tabManager.openDashboardTab();
       expect(onViewChange).toHaveBeenCalledWith('dashboard');
     });
+
+    it('aba fantasma deve receber classe tab-ghost e não ser persistida em savedAutomations', () => {
+      document.body.innerHTML += '<div id="workflowTabsContainer"></div>';
+      const tabManager = new WorkflowTabManager({
+        onOpenFlow: vi.fn(),
+        onViewChange: vi.fn(),
+        onRunFlowDirectly: vi.fn(),
+        showToast: vi.fn(),
+      });
+
+      const normal = makeTabGraph('n1', 'Fluxo Normal');
+      tabManager.setSavedAutomations([normal]);
+      tabManager.registerOpenTab(normal);
+
+      const ghost = makeTabGraph('ghost_run_1', 'Fluxo Fantasma');
+      (ghost as any).isGhost = true;
+      tabManager.registerOpenTab(ghost);
+
+      // Deve renderizar a aba fantasma com estilo diferenciado
+      const tabs = document.querySelectorAll('.app-tab-item');
+      const ghostTab = Array.from(tabs).find((t) => t.classList.contains('tab-ghost'));
+      expect(ghostTab).toBeDefined();
+
+      // updateFlowInTabsAndSaved ignora fluxos fantasma
+      tabManager.updateFlowInTabsAndSaved(ghost);
+      expect(tabManager.getSavedAutomations().some((a) => a.metadata.id === 'ghost_run_1')).toBe(false);
+    });
   });
 });

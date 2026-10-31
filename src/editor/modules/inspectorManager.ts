@@ -153,6 +153,13 @@ export class InspectorManager {
       return;
     }
 
+    if (this.disableSidebarEditing) {
+      if (this.pendingScrollSelector) {
+        this.pendingScrollSelector = undefined;
+      }
+      return;
+    }
+
     if (sidebarRight) sidebarRight.classList.remove('collapsed');
     if (sidebarLeft) sidebarLeft.classList.add('collapsed');
     btnActivityBlocks?.classList.remove('active');
@@ -164,46 +171,6 @@ export class InspectorManager {
 
     if (this.isGhostMode) {
       this.renderGhostInspector(node, form);
-      return;
-    }
-
-    if (this.disableSidebarEditing) {
-      form.innerHTML = `
-        <div style="background: #090e18; border: 1px solid #1e293b; border-left: 3px solid #6366f1; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(99, 102, 241, 0.15); display: flex; align-items: center; justify-content: center; color: #818cf8; font-size: 16px;">
-              🔒
-            </div>
-            <div>
-              <div style="font-size: 13px; font-weight: 700; color: #f8fafc;">${node.data.label || node.type}</div>
-              <span style="font-size: 10px; background: #1e293b; color: #818cf8; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;">${node.type}</span>
-            </div>
-          </div>
-          
-          <div style="background: #0b0f19; border: 1px solid #1a2333; border-radius: 6px; padding: 10px; font-size: 11px; color: #94a3b8; line-height: 1.4;">
-            <strong style="color: #cbd5e1; display: block; margin-bottom: 2px;">Edição na Barra Lateral Desativada</strong>
-            Conforme definido nas Configurações, a edição deste bloco deve ser realizada no Modo Expandido.
-          </div>
-
-          <button type="button" id="btnSidebarOpenExpanded" class="btn btn-primary" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; font-size: 12px; font-weight: 600; background: #6366f1; border-color: #6366f1; cursor: pointer; border-radius: 6px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
-            <span>Editar no Modo Expandido</span>
-          </button>
-          
-          <div style="font-size: 10px; color: #64748b; text-align: center;">
-            Dica: você também pode dar duplo clique no bloco no canvas.
-          </div>
-        </div>
-      `;
-      form.querySelector('#btnSidebarOpenExpanded')?.addEventListener('click', () => {
-        this.openExpandedModal(node.id);
-      });
-
-      if (this.pendingScrollSelector) {
-        const sel = this.pendingScrollSelector;
-        this.pendingScrollSelector = undefined;
-        this.scrollTargetIntoInspectorView(sel);
-      }
       return;
     }
 
@@ -501,6 +468,13 @@ export class InspectorManager {
     backdrop.id = 'expandedNodeModalBackdrop';
     backdrop.className = 'flow-modal-backdrop';
 
+    const isGhost = this.isGhostMode;
+    const ghostSnap = isGhost ? this.ghostRunItem?.blockSnapshots?.[node.id] : undefined;
+
+    const modalTitleBadge = isGhost
+      ? `<span style="font-size: 10px; background: rgba(129, 140, 248, 0.2); color: #818cf8; border: 1px solid rgba(129, 140, 248, 0.4); padding: 2px 7px; border-radius: 4px; font-weight: 700;">👻 Modo Fantasma • Leitura</span>`
+      : `<span style="font-size: 10px; background: #1e293b; color: #818cf8; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;">${node.type}</span>`;
+
     backdrop.innerHTML = `
       <div class="node-expand-modal-card">
         <div class="node-expand-header">
@@ -511,7 +485,7 @@ export class InspectorManager {
             <div>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <h3 id="expandedModalNodeTitle" style="font-size: 15px; font-weight: 700; color: #f8fafc; margin: 0;">${node.data.label || node.type}</h3>
-                <span style="font-size: 10px; background: #1e293b; color: #818cf8; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;">${node.type}</span>
+                ${modalTitleBadge}
               </div>
               <p style="font-size: 11px; color: #94a3b8; margin: 2px 0 0 0;">Configurações expandidas e fluxo de dados estilo N8N</p>
             </div>
@@ -521,48 +495,78 @@ export class InspectorManager {
           </button>
         </div>
         <div class="node-expand-body">
-          <!-- Painel Esquerdo: Explorador N8N de Dados Anteriores e Variáveis -->
+          <!-- Coluna 1: Dados de Entrada (INPUT) -->
           <div id="expandedModalLeftPane" class="node-expand-explorer-pane">
-            <!-- N8NDataExplorer renderizado aqui -->
+            <div class="expand-pane-header">
+              <span class="expand-pane-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                Dados de Entrada (INPUT)
+              </span>
+              <span class="expand-pane-badge">Anteriores & Variáveis</span>
+            </div>
+            <div id="expandedModalLeftContent" style="padding: 14px; flex: 1; overflow-y: auto;">
+              <!-- N8NDataExplorer renderizado aqui -->
+            </div>
           </div>
 
-          <!-- Painel Direito: Configurações do Bloco e Saída -->
-          <div id="expandedModalRightPane" class="node-expand-form-pane">
-            <!-- Abas do painel direito -->
-            <div style="display: flex; gap: 6px; padding: 10px 20px 0 20px; border-bottom: 1px solid #1e293b; background: #0c121e;">
-              <button type="button" id="btnTabExpandedConfig" style="padding: 7px 16px; border: none; border-bottom: 2px solid #3b82f6; background: transparent; color: #60a5fa; font-weight: 700; font-size: 12px; cursor: pointer;">
-                Configurações do Bloco
-              </button>
-              <button type="button" id="btnTabExpandedOutput" style="padding: 7px 16px; border: none; border-bottom: 2px solid transparent; background: transparent; color: #94a3b8; font-weight: 600; font-size: 12px; cursor: pointer;">
-                Dados de Saída ($output)
-              </button>
-            </div>
+          <!-- Resizer 1 (Divisor arrastável entre Entrada e Config) -->
+          <div id="resizerExpandedLeft" class="node-expand-resizer" title="Arraste para redimensionar a seção de Entrada"></div>
 
-            <!-- Tab Content 1: Formulário de Configuração -->
+          <!-- Coluna 2: Configurações do Bloco (CONFIG) -->
+          <div id="expandedModalCenterPane" class="node-expand-form-pane">
+            <div class="expand-pane-header">
+              <span class="expand-pane-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Configurações do Bloco
+              </span>
+              <span id="expandedConfigBadge" class="expand-pane-badge">${node.type}</span>
+            </div>
             <div id="expandedTabContentConfig" style="padding: 20px; flex: 1; overflow-y: auto;">
               <form id="expandedNodeModalForm" class="node-form">
                 <!-- Campos gerados dinamicamente -->
               </form>
             </div>
+          </div>
 
-            <!-- Tab Content 2: Dados de Saída do Bloco -->
-            <div id="expandedTabContentOutput" style="padding: 20px; flex: 1; overflow-y: auto; display: none;">
-              <!-- Container de Saída -->
+          <!-- Resizer 2 (Divisor arrastável entre Config e Saída) -->
+          <div id="resizerExpandedRight" class="node-expand-resizer" title="Arraste para redimensionar a seção de Saída"></div>
+
+          <!-- Coluna 3: Dados de Saída (OUTPUT) -->
+          <div id="expandedModalRightPane" class="node-expand-output-pane">
+            <div class="expand-pane-header">
+              <span class="expand-pane-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                Dados de Saída ($output)
+              </span>
+              <span class="expand-pane-badge" style="color: #34d399; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3);">Resultado</span>
+            </div>
+            <div id="expandedTabContentOutput" style="padding: 16px; flex: 1; overflow-y: auto;">
+              <!-- Container de Saída renderizado por renderNodeOutputPanel -->
             </div>
           </div>
         </div>
         <!-- Botões de Ação do Rodapé -->
-        <div class="node-expand-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-top: 1px solid #1e293b; background: #0b1120;">
-          <button type="button" id="btnDiscardExpandedModal" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; color: #f87171; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); cursor: pointer; border-radius: 6px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            <span>Descartar Alterações</span>
-          </button>
-          <div style="display: flex; gap: 10px;">
-            <button type="button" id="btnDoneExpandedModal" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px; padding: 8px 22px; font-size: 13px; background: #6366f1; border-color: #6366f1; cursor: pointer; border-radius: 6px; font-weight: 600;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span>Concluir e Aplicar</span>
+        <div class="node-expand-footer" style="display: flex; justify-content: ${isGhost ? 'flex-end' : 'space-between'}; align-items: center; gap: 12px; padding: 14px 20px; border-top: 1px solid #1e293b; background: #0b1120;">
+          ${
+            isGhost
+              ? `
+            <button type="button" id="btnCloseExpandedModalFooter" class="btn btn-secondary" style="padding: 8px 22px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px;">
+              Fechar Visualização
             </button>
-          </div>
+          `
+              : `
+            <button type="button" id="btnDiscardExpandedModal" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; color: #f87171; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); cursor: pointer; border-radius: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              <span>Descartar Alterações</span>
+            </button>
+            <div style="display: flex; gap: 10px;">
+              <button type="button" id="btnDoneExpandedModal" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px; padding: 8px 22px; font-size: 13px; background: #6366f1; border-color: #6366f1; cursor: pointer; border-radius: 6px; font-weight: 600;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Concluir e Aplicar</span>
+              </button>
+            </div>
+          `
+          }
         </div>
       </div>
     `;
@@ -574,6 +578,16 @@ export class InspectorManager {
     const formEl = backdrop.querySelector('#expandedNodeModalForm') as HTMLElement;
     this.populatePropertiesForm(formEl, node);
 
+    // Se estiver em Modo Fantasma, bloqueia todos os inputs para somente leitura
+    if (isGhost) {
+      formEl.querySelectorAll('input, select, textarea, button').forEach((el: any) => {
+        el.disabled = true;
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+          el.readOnly = true;
+        }
+      });
+    }
+
     // Rastreia foco em inputs do formulário para permitir inserção de tags via 1 clique
     let lastFocusedInput: HTMLInputElement | HTMLTextAreaElement | null = null;
     formEl.addEventListener('focusin', (e) => {
@@ -584,6 +598,7 @@ export class InspectorManager {
     });
 
     const insertIntoInput = (inputEl: HTMLInputElement | HTMLTextAreaElement, expr: string) => {
+      if (isGhost) return;
       const start = inputEl.selectionStart ?? inputEl.value.length;
       const end = inputEl.selectionEnd ?? inputEl.value.length;
       const val = inputEl.value;
@@ -595,6 +610,11 @@ export class InspectorManager {
     };
 
     const handleInsertExpression = (expr: string) => {
+      if (isGhost) {
+        navigator.clipboard.writeText(expr);
+        this.callbacks.showToast(`Copiado para a área de transferência: ${expr}`, 'success');
+        return;
+      }
       if (lastFocusedInput && document.body.contains(lastFocusedInput)) {
         insertIntoInput(lastFocusedInput, expr);
       } else {
@@ -603,86 +623,135 @@ export class InspectorManager {
       }
     };
 
-    // Suporte a Drag & Drop de variáveis e dados de blocos anteriores diretamente nos inputs
-    formEl.addEventListener('dragover', (e) => {
-      const target = (e.target as HTMLElement)?.closest('input, textarea') as HTMLInputElement | HTMLTextAreaElement | null;
-      if (target) {
-        e.preventDefault();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-        target.classList.add('drag-over-input');
-      } else if (lastFocusedInput && document.body.contains(lastFocusedInput)) {
-        e.preventDefault();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-      }
-    });
-
-    formEl.addEventListener('dragleave', (e) => {
-      const target = (e.target as HTMLElement)?.closest('input, textarea') as HTMLElement | null;
-      if (target) {
-        target.classList.remove('drag-over-input');
-      }
-    });
-
-    formEl.addEventListener('drop', (e) => {
-      const expr = e.dataTransfer?.getData('application/x-n8n-tag') || e.dataTransfer?.getData('text/plain');
-      const target = (e.target as HTMLElement)?.closest('input, textarea') as HTMLInputElement | HTMLTextAreaElement | null;
-      if (target) {
-        target.classList.remove('drag-over-input');
-      }
-      if (expr) {
-        e.preventDefault();
+    // Suporte a Drag & Drop de variáveis e dados de blocos anteriores diretamente nos inputs (desativado em Modo Fantasma)
+    if (!isGhost) {
+      formEl.addEventListener('dragover', (e) => {
+        const target = (e.target as HTMLElement)?.closest('input, textarea') as HTMLInputElement | HTMLTextAreaElement | null;
         if (target) {
-          insertIntoInput(target, expr);
-          this.callbacks.showToast(`Inserido no campo: ${expr}`, 'success');
+          e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+          target.classList.add('drag-over-input');
         } else if (lastFocusedInput && document.body.contains(lastFocusedInput)) {
-          insertIntoInput(lastFocusedInput, expr);
-          this.callbacks.showToast(`Inserido no campo: ${expr}`, 'success');
-        } else {
-          navigator.clipboard.writeText(expr);
-          this.callbacks.showToast(`Copiado para a área de transferência: ${expr}`, 'success');
+          e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
         }
-      }
-    });
+      });
 
-    // Renderiza Explorador N8N de dados anteriores e variáveis
-    const explorerContainer = backdrop.querySelector('#expandedModalLeftPane') as HTMLElement;
+      formEl.addEventListener('dragleave', (e) => {
+        const target = (e.target as HTMLElement)?.closest('input, textarea') as HTMLElement | null;
+        if (target) {
+          target.classList.remove('drag-over-input');
+        }
+      });
+
+      formEl.addEventListener('drop', (e) => {
+        const expr = e.dataTransfer?.getData('application/x-n8n-tag') || e.dataTransfer?.getData('text/plain');
+        const target = (e.target as HTMLElement)?.closest('input, textarea') as HTMLInputElement | HTMLTextAreaElement | null;
+        if (target) {
+          target.classList.remove('drag-over-input');
+        }
+        if (expr) {
+          e.preventDefault();
+          if (target) {
+            insertIntoInput(target, expr);
+            this.callbacks.showToast(`Inserido no campo: ${expr}`, 'success');
+          } else if (lastFocusedInput && document.body.contains(lastFocusedInput)) {
+            insertIntoInput(lastFocusedInput, expr);
+            this.callbacks.showToast(`Inserido no campo: ${expr}`, 'success');
+          } else {
+            navigator.clipboard.writeText(expr);
+            this.callbacks.showToast(`Copiado para a área de transferência: ${expr}`, 'success');
+          }
+        }
+      });
+    }
+
+    // Renderiza Explorador N8N de dados anteriores e variáveis na Coluna Esquerda
+    const explorerContainer = (backdrop.querySelector('#expandedModalLeftContent') ||
+      backdrop.querySelector('#expandedModalLeftPane')) as HTMLElement;
     if (explorerContainer) {
       N8NDataExplorer.render(explorerContainer, {
         graph,
         currentNode: node,
-        runtimeNodeOutputs: this.runtimeNodeOutputs,
+        runtimeNodeOutputs: isGhost && ghostSnap ? { [node.id]: ghostSnap.inputData } : this.runtimeNodeOutputs,
         onInsertExpression: handleInsertExpression,
         onShowToast: (msg, type) => this.callbacks.showToast(msg, type),
       });
     }
 
-    // Abas do painel direito: Configurações vs Saída do Bloco
-    const outputTabContainer = backdrop.querySelector('#expandedTabContentOutput') as HTMLElement;
-    const configTabContainer = backdrop.querySelector('#expandedTabContentConfig') as HTMLElement;
-    const btnTabConfig = backdrop.querySelector('#btnTabExpandedConfig') as HTMLButtonElement;
-    const btnTabOutput = backdrop.querySelector('#btnTabExpandedOutput') as HTMLButtonElement;
+    // Renderiza Dados de Saída ($output) na Coluna Direita (sempre visível ao lado da configuração)
+    const outputContainer = backdrop.querySelector('#expandedTabContentOutput') as HTMLElement;
+    if (outputContainer) {
+      this.renderNodeOutputPanel(outputContainer, node);
+    }
 
-    btnTabConfig?.addEventListener('click', () => {
-      configTabContainer.style.display = 'block';
-      outputTabContainer.style.display = 'none';
-      btnTabConfig.style.borderBottomColor = '#3b82f6';
-      btnTabConfig.style.color = '#60a5fa';
-      btnTabOutput.style.borderBottomColor = 'transparent';
-      btnTabOutput.style.color = '#94a3b8';
-    });
+    // Gerenciamento de Redimensionamento das Colunas (Resizers Arrastáveis)
+    const resizerLeft = backdrop.querySelector('#resizerExpandedLeft') as HTMLElement;
+    const leftPane = backdrop.querySelector('#expandedModalLeftPane') as HTMLElement;
+    if (resizerLeft && leftPane) {
+      resizerLeft.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startWidth = leftPane.getBoundingClientRect().width;
+        resizerLeft.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
 
-    btnTabOutput?.addEventListener('click', () => {
-      configTabContainer.style.display = 'none';
-      outputTabContainer.style.display = 'block';
-      btnTabOutput.style.borderBottomColor = '#3b82f6';
-      btnTabOutput.style.color = '#60a5fa';
-      btnTabConfig.style.borderBottomColor = 'transparent';
-      btnTabConfig.style.color = '#94a3b8';
-      this.renderNodeOutputPanel(outputTabContainer, node);
-    });
+        const onMouseMove = (moveEv: MouseEvent) => {
+          const deltaX = moveEv.clientX - startX;
+          const newWidth = Math.max(220, Math.min(550, startWidth + deltaX));
+          leftPane.style.width = `${newWidth}px`;
+        };
 
-    // Função de descarte: restaura o estado original do nó e atualiza tudo imediatamente
+        const onMouseUp = () => {
+          resizerLeft.classList.remove('resizing');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+      });
+    }
+
+    const resizerRight = backdrop.querySelector('#resizerExpandedRight') as HTMLElement;
+    const rightPane = backdrop.querySelector('#expandedModalRightPane') as HTMLElement;
+    if (resizerRight && rightPane) {
+      resizerRight.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startWidth = rightPane.getBoundingClientRect().width;
+        resizerRight.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        const onMouseMove = (moveEv: MouseEvent) => {
+          const deltaX = startX - moveEv.clientX;
+          const newWidth = Math.max(240, Math.min(650, startWidth + deltaX));
+          rightPane.style.width = `${newWidth}px`;
+        };
+
+        const onMouseUp = () => {
+          resizerRight.classList.remove('resizing');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+      });
+    }
+
+    // Ações de Conclusão / Descarte / Fechar
     const discardChanges = () => {
+      if (isGhost) {
+        this.closeExpandedModal();
+        return;
+      }
       node.data = JSON.parse(JSON.stringify(backupNodeData));
       this.closeExpandedModal();
       this.renderInspector();
@@ -690,8 +759,11 @@ export class InspectorManager {
       this.callbacks.showToast('Alterações no bloco foram descartadas.', 'info');
     };
 
-    // Função de conclusão: confirma as alterações e sincroniza a barra lateral imediatamente
     const commitChanges = () => {
+      if (isGhost) {
+        this.closeExpandedModal();
+        return;
+      }
       changesCommitted = true;
       this.closeExpandedModal();
       this.renderInspector();
@@ -699,37 +771,44 @@ export class InspectorManager {
       this.callbacks.showToast('Alterações no bloco aplicadas com sucesso!', 'success');
     };
 
+    if (isGhost) {
+      backdrop.querySelector('#btnCloseExpandedModalFooter')?.addEventListener('click', () => {
+        this.closeExpandedModal();
+      });
+    } else {
       backdrop.querySelector('#btnDiscardExpandedModal')?.addEventListener('click', discardChanges);
       backdrop.querySelector('#btnDoneExpandedModal')?.addEventListener('click', commitChanges);
-
-      // Fechar pelo botão X ou tecla Escape descarta as alterações; aplicar alterações acontece APENAS via 'Concluir e Aplicar'
-      const handleCloseDialog = () => {
-        if (!changesCommitted) {
-          discardChanges();
-        }
-      };
-
-      backdrop.querySelector('#btnCloseExpandedModal')?.addEventListener('click', handleCloseDialog);
-
-      // Clicar fora do editor (backdrop) não faz NADA por especificação do usuário:
-      // apenas botões configurados devem fechar ou aplicar/descartar alterações
-      backdrop.addEventListener('click', (e) => {
-        if (e.target === backdrop) {
-          e.stopPropagation();
-          // Não fecha nem aplica alterações ao clicar fora
-        }
-      });
-
-      const onKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          handleCloseDialog();
-          window.removeEventListener('keydown', onKeyDown);
-        }
-      };
-      window.addEventListener('keydown', onKeyDown);
-
-      document.body.appendChild(backdrop);
     }
+
+    // Fechar pelo botão X ou tecla Escape
+    const handleCloseDialog = () => {
+      if (isGhost) {
+        this.closeExpandedModal();
+        return;
+      }
+      if (!changesCommitted) {
+        discardChanges();
+      }
+    };
+
+    backdrop.querySelector('#btnCloseExpandedModal')?.addEventListener('click', handleCloseDialog);
+
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        e.stopPropagation();
+      }
+    });
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleCloseDialog();
+        window.removeEventListener('keydown', onKeyDown);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+
+    document.body.appendChild(backdrop);
+  }
 
     /**
      * Fecha o modal expandido se estiver aberto
@@ -780,6 +859,85 @@ export class InspectorManager {
   private renderNodeOutputPanel(container: HTMLElement, node: AnyAutomationNode): void {
     container.innerHTML = '';
     const nodeLabel = node.data?.label || node.type;
+
+    // Se estiver em Modo Fantasma, renderiza os dados da auditoria histórica
+    if (this.isGhostMode) {
+      const snap = this.ghostRunItem?.blockSnapshots?.[node.id];
+      const status = snap?.status || 'skipped';
+      const durationText = snap?.durationMs !== undefined ? `${snap.durationMs}ms` : '—';
+      const statusLabel =
+        status === 'completed'
+          ? '✓ Concluído com Sucesso'
+          : status === 'failed'
+          ? '✕ Falha na Execução'
+          : '⚪ Não Executado';
+      const statusColor =
+        status === 'completed' ? '#10b981' : status === 'failed' ? '#ef4444' : '#64748b';
+
+      const outputData = snap?.outputData !== undefined ? snap.outputData : null;
+      const jsonStr = outputData !== null ? JSON.stringify(outputData, null, 2) : '';
+
+      const panel = document.createElement('div');
+      panel.style.cssText = 'display: flex; flex-direction: column; gap: 12px;';
+      panel.innerHTML = `
+        <div style="background: #090e18; border: 1px solid #1e293b; border-left: 3px solid ${statusColor}; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size: 11px; font-weight: 700; color: #818cf8;">Auditoria Fantasma</span>
+            <span style="font-size: 10px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; border: 1px solid ${statusColor}44; padding: 2px 7px; border-radius: 4px;">
+              ${statusLabel}
+            </span>
+          </div>
+
+          <div style="font-size: 11px; color: #94a3b8;">
+            Duração: <strong style="color: #f1f5f9;">${durationText}</strong> • Bloco: <span style="color: #38bdf8;">${nodeLabel}</span>
+          </div>
+
+          ${
+            snap?.error
+              ? `
+            <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 10px; font-size: 11px; color: #fca5a5; font-family: monospace; word-break: break-all;">
+              ✕ Erro: ${snap.error}
+            </div>
+          `
+              : ''
+          }
+        </div>
+
+        <div style="background: #090e18; border: 1px solid #1e293b; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Dados Produzidos ($output):</label>
+            ${
+              jsonStr
+                ? `<button type="button" id="btnCopyGhostOutput" class="btn btn-secondary" style="font-size: 10px; padding: 3px 8px;">📋 Copiar JSON</button>`
+                : ''
+            }
+          </div>
+
+          ${
+            jsonStr
+              ? `
+            <pre style="
+              width: 100%; box-sizing: border-box; max-height: 380px; overflow-y: auto; font-family: monospace; font-size: 11px; background: #080c14; color: #86efac; border: 1px solid #166534; border-radius: 6px; padding: 12px; line-height: 1.4; margin: 0;
+            ">${jsonStr}</pre>
+          `
+              : `
+            <div style="font-size: 11px; color: #64748b; font-style: italic; padding: 12px 6px; text-align: center;">
+              Nenhum dado de saída foi gerado por este bloco nesta execução.
+            </div>
+          `
+          }
+        </div>
+      `;
+
+      panel.querySelector('#btnCopyGhostOutput')?.addEventListener('click', () => {
+        navigator.clipboard.writeText(jsonStr);
+        this.callbacks.showToast('JSON copiado com sucesso!', 'success');
+      });
+
+      container.appendChild(panel);
+      return;
+    }
+
     const outputResult = N8NDataExplorer.getNodeOutputResult(node, this.runtimeNodeOutputs);
     const isMockEnabled = !!(node.data as any).useMockOutput;
     const hasRuntimeData = outputResult.source === 'runtime';

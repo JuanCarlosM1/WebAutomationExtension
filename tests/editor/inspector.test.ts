@@ -232,11 +232,92 @@ describe('Inspector & Properties Modules', () => {
       expect(form.innerHTML).toContain('Clique no Botão');
     });
 
-    it('setDisableSidebarEditing(true) exibe aviso de bloqueio direcionando para modo expandido', () => {
+    it('setDisableSidebarEditing(true) não altera a barra lateral esquerda nem exibe mensagem de bloqueio', () => {
+      const sidebarLeft = document.getElementById('sidebarLibrary')!;
+      sidebarLeft.classList.remove('collapsed');
+
       inspector.setDisableSidebarEditing(true);
 
-      expect(form.innerHTML).toContain('Edição na Barra Lateral Desativada');
-      expect(form.innerHTML).toContain('Editar no Modo Expandido');
+      // Não deve exibir aviso de bloqueio nem alterar a barra lateral esquerda
+      expect(form.innerHTML).not.toContain('Edição na Barra Lateral Desativada');
+      expect(sidebarLeft.classList.contains('collapsed')).toBe(false);
+    });
+
+    it('openExpandedModal exibe layout com 3 seções (Entrada, Configuração e Saída) com divisores arrastáveis', () => {
+      inspector.openExpandedModal('node_1');
+
+      const backdrop = document.getElementById('expandedNodeModalBackdrop')!;
+      expect(backdrop).toBeDefined();
+
+      const leftPane = backdrop.querySelector('#expandedModalLeftPane');
+      const centerPane = backdrop.querySelector('#expandedModalCenterPane');
+      const rightPane = backdrop.querySelector('#expandedModalRightPane');
+      const resizerLeft = backdrop.querySelector('#resizerExpandedLeft');
+      const resizerRight = backdrop.querySelector('#resizerExpandedRight');
+
+      expect(leftPane).toBeDefined();
+      expect(centerPane).toBeDefined();
+      expect(rightPane).toBeDefined();
+      expect(resizerLeft).toBeDefined();
+      expect(resizerRight).toBeDefined();
+
+      // Saída é uma região lateral com os dados do bloco
+      expect(rightPane?.innerHTML).toContain('Dados de Saída ($output)');
+
+      // Testa redimensionamento via arrasto
+      const startWidth = 340;
+      (leftPane as HTMLElement).style.width = `${startWidth}px`;
+      (leftPane as HTMLElement).getBoundingClientRect = () => ({ width: startWidth } as any);
+      resizerLeft?.dispatchEvent(new MouseEvent('mousedown', { clientX: 100 }));
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 150 }));
+      window.dispatchEvent(new MouseEvent('mouseup'));
+
+      expect(parseInt((leftPane as HTMLElement).style.width)).toBe(390);
+
+      inspector.closeExpandedModal();
+    });
+
+    it('openExpandedModal em Modo Fantasma desabilita todos os inputs e remove botões de salvar/descartar', () => {
+      const ghostRunItem = {
+        blockSnapshots: {
+          node_1: {
+            nodeId: 'node_1',
+            status: 'completed',
+            durationMs: 30,
+            outputData: { resultado: 123 },
+          },
+        },
+      };
+
+      inspector.setGhostMode(true, ghostRunItem);
+      inspector.openExpandedModal('node_1');
+
+      const backdrop = document.getElementById('expandedNodeModalBackdrop')!;
+      expect(backdrop).toBeDefined();
+
+      // Badge no cabeçalho
+      expect(backdrop.innerHTML).toContain('Modo Fantasma • Leitura');
+
+      // Todos os inputs do formulário devem estar desativados
+      const inputs = backdrop.querySelectorAll('#expandedNodeModalForm input, #expandedNodeModalForm textarea, #expandedNodeModalForm select');
+      expect(inputs.length).toBeGreaterThan(0);
+      inputs.forEach((input: any) => {
+        expect(input.disabled || input.readOnly).toBe(true);
+      });
+
+      // Botão de conclusão/descarte não deve estar presente no rodapé
+      expect(backdrop.querySelector('#btnDoneExpandedModal')).toBeNull();
+      expect(backdrop.querySelector('#btnDiscardExpandedModal')).toBeNull();
+
+      // Deve ter botão de fechar visualização
+      const btnClose = backdrop.querySelector('#btnCloseExpandedModalFooter');
+      expect(btnClose).toBeDefined();
+
+      // Dados de saída exibem dados do snapshot histórico
+      expect(backdrop.querySelector('#expandedModalRightPane')?.innerHTML).toContain('123');
+
+      inspector.closeExpandedModal();
+      inspector.setGhostMode(false);
     });
   });
 });

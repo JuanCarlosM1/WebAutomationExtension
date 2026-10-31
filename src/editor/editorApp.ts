@@ -125,7 +125,10 @@ class VisualEditorApp {
       onOpenFlow: (flow) => this.openStudio(flow),
       onViewChange: (view) => this.switchView(view),
       onRunFlowDirectly: (flow) => this.runFlowDirectly(flow),
-      onDebugFlowDirectly: (flow) => this.runFlowDirectly(flow, true),
+      onDebugFlowDirectly: (flow) => {
+        this.openStudio(flow);
+        this.openExpandedDebugModal();
+      },
       showToast: (msg, type) => showToast(msg, type),
     });
 
@@ -237,10 +240,21 @@ class VisualEditorApp {
   }
 
   private openStudio(graph: WebAutomationGraph): void {
-    if (this.isGhostMode) {
-      this.exitGhostMode();
+    const isGhostTab = !!(graph as any).isGhost;
+
+    if (isGhostTab) {
+      this.isGhostMode = true;
+      this.ghostHistoricalRun = (graph as any).ghostHistoricalRun;
+    } else if (this.isGhostMode) {
+      this.exitGhostMode(false);
     }
+
     this.graph = JSON.parse(JSON.stringify(graph));
+    if (isGhostTab) {
+      (this.graph as any).isGhost = true;
+      (this.graph as any).ghostHistoricalRun = (graph as any).ghostHistoricalRun;
+    }
+
     if (this.graph.metadata?.name) {
       this.graph.metadata.name = this.cleanFlowName(this.graph.metadata.name);
     }
@@ -249,14 +263,42 @@ class VisualEditorApp {
     this.tabManager.registerOpenTab(this.graph);
 
     const titleInput = document.getElementById('flowTitleInput') as HTMLInputElement;
-    if (titleInput) titleInput.value = this.cleanFlowName(this.graph.metadata?.name);
+    if (titleInput) {
+      titleInput.value = this.cleanFlowName(this.graph.metadata?.name);
+      titleInput.readOnly = isGhostTab;
+    }
 
-    if (this.graph.metadata?.id) {
+    this.setEditorActionsReadOnly(isGhostTab);
+
+    // Banner de modo fantasma
+    const banner = document.getElementById('ghostModeBanner');
+    const details = document.getElementById('ghostBannerDetails');
+    if (isGhostTab) {
+      if (banner) banner.style.display = 'flex';
+      if (details && this.ghostHistoricalRun) {
+        const execDate = new Date(this.ghostHistoricalRun.timestamp).toLocaleString();
+        const statusText =
+          this.ghostHistoricalRun.status === 'completed'
+            ? '✓ Concluído'
+            : this.ghostHistoricalRun.status === 'failed'
+            ? '✕ Falha'
+            : '⊘ Cancelado';
+        const statusColor = this.ghostHistoricalRun.status === 'completed' ? '#34d399' : '#f87171';
+        details.innerHTML = `Fluxo: <strong style="color: #fff;">${this.ghostHistoricalRun.automationName}</strong> • Executado em: ${execDate} • Duração: <strong>${this.ghostHistoricalRun.durationMs}ms</strong> • Status: <strong style="color: ${statusColor};">${statusText}</strong>`;
+      }
+    } else {
+      if (banner) banner.style.display = 'none';
+    }
+
+    if (this.graph.metadata?.id && !isGhostTab) {
       const newUrl = `${window.location.pathname}?flowId=${encodeURIComponent(this.graph.metadata.id)}`;
       window.history.replaceState({}, '', newUrl);
     }
 
     this.switchView('studio');
+    this.canvasManager.setGhostMode(isGhostTab, this.ghostHistoricalRun);
+    this.inspectorManager.setGhostMode(isGhostTab, this.ghostHistoricalRun);
+
     this.canvasManager.updateCanvasTransform();
     this.canvasManager.render();
     if ((this.graph as any).lastExecutionData?.nodeOutputs) {
@@ -434,9 +476,16 @@ class VisualEditorApp {
   }
 
   public clearLogs(): void {
+    this.logs = [];
     const consoleEl = document.getElementById('logsConsole');
     if (consoleEl) {
       consoleEl.innerHTML = '<div class="log-entry debug">[SISTEMA] Console limpo.</div>';
+    }
+    const modalConsoleEl = document.getElementById('modalLogsConsole');
+    if (modalConsoleEl) {
+      modalConsoleEl.innerHTML = '<div class="log-entry debug">[SISTEMA] Console limpo.</div>';
+      const countBadge = document.getElementById('modalLogsCountBadge');
+      if (countBadge) countBadge.textContent = '0 eventos';
     }
   }
 
@@ -507,58 +556,27 @@ class VisualEditorApp {
   }
 
   public enterGhostMode(historyItem: ExecutionHistoryItem): void {
-    if (!this.isGhostMode) {
-      this.originalEditableGraph = JSON.parse(JSON.stringify(this.graph));
-    }
-    this.isGhostMode = true;
-    this.ghostHistoricalRun = historyItem;
+    const timeStr = new Date(historyItem.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const ghostTabId = `ghost_${historyItem.id}`;
 
-    if (this.currentView !== 'studio') {
-      this.switchView('studio');
-    }
+    // Cria grafo snapshot dedicado para a aba fantasma
+    const ghostGraph: WebAutomationGraph = JSON.parse(JSON.stringify(historyItem.graphSnapshot));
+    ghostGraph.metadata.id = ghostTabId;
+    ghostGraph.metadata.name = `👻 ${this.cleanFlowName(historyItem.automationName)} (${timeStr})`;
+    (ghostGraph as any).isGhost = true;
+    (ghostGraph as any).ghostHistoricalRun = historyItem;
 
-    // Carrega snapshot histórico exato da execução
-    this.graph = JSON.parse(JSON.stringify(historyItem.graphSnapshot));
-
-    // Notifica Canvas e Inspector para bloqueio e badges de auditoria
-    this.canvasManager.setGhostMode(true, historyItem);
-    this.inspectorManager.setGhostMode(true, historyItem);
-
-    // Atualiza Banner do Modo Fantasma
-    const banner = document.getElementById('ghostModeBanner');
-    const details = document.getElementById('ghostBannerDetails');
-    if (banner) banner.style.display = 'flex';
-    if (details) {
-      const execDate = new Date(historyItem.timestamp).toLocaleString();
-      const statusText =
-        historyItem.status === 'completed'
-          ? '✓ Concluído'
-          : historyItem.status === 'failed'
-          ? '✕ Falha'
-          : '⊘ Cancelado';
-      const statusColor = historyItem.status === 'completed' ? '#34d399' : '#f87171';
-      details.innerHTML = `Fluxo: <strong style="color: #fff;">${historyItem.automationName}</strong> • Executado em: ${execDate} • Duração: <strong>${historyItem.durationMs}ms</strong> • Status: <strong style="color: ${statusColor};">${statusText}</strong>`;
-    }
-
-    const titleInput = document.getElementById('flowTitleInput') as HTMLInputElement;
-    if (titleInput) {
-      titleInput.value = `👻 [FANTASMA] ${this.cleanFlowName(historyItem.automationName)}`;
-      titleInput.readOnly = true;
-    }
-
-    this.setEditorActionsReadOnly(true);
-
-    if (historyItem.finalVariables) {
-      this.renderVariables(historyItem.finalVariables);
-    }
+    // Registra como nova aba aberta e abre-a
+    this.tabManager.registerOpenTab(ghostGraph);
+    this.openStudio(ghostGraph);
 
     // Seleciona o primeiro bloco com falha ou o primeiro executado
-    const failedNodeId = Object.keys(historyItem.blockSnapshots).find(
+    const failedNodeId = Object.keys(historyItem.blockSnapshots || {}).find(
       (id) => historyItem.blockSnapshots[id]?.status === 'failed'
     );
     const firstExecNodeId =
       failedNodeId ||
-      Object.keys(historyItem.blockSnapshots).find(
+      Object.keys(historyItem.blockSnapshots || {}).find(
         (id) => historyItem.blockSnapshots[id]?.status === 'completed'
       );
 
@@ -566,18 +584,15 @@ class VisualEditorApp {
       this.selectedNodeId = firstExecNodeId;
       this.canvasManager.setSelectedNodeIds([firstExecNodeId]);
       this.openInspectorSidebar();
-    } else {
-      this.canvasManager.render();
-      this.inspectorManager.renderInspector();
     }
 
-    this.loadScopedHistory();
-    showToast('Modo Fantasma ativado! Inspeção histórica somente leitura.', 'info');
+    showToast('Modo Fantasma aberto em nova aba! Inspeção histórica somente leitura.', 'info');
   }
 
-  public exitGhostMode(): void {
+  public exitGhostMode(closeTab: boolean = true): void {
     if (!this.isGhostMode) return;
     this.isGhostMode = false;
+    const ghostId = this.graph?.metadata?.id;
     this.ghostHistoricalRun = undefined;
 
     const banner = document.getElementById('ghostModeBanner');
@@ -589,14 +604,18 @@ class VisualEditorApp {
     }
 
     this.setEditorActionsReadOnly(false);
+    this.canvasManager.setGhostMode(false);
+    this.inspectorManager.setGhostMode(false);
+
+    if (closeTab && (this.graph as any)?.isGhost && ghostId) {
+      this.tabManager.closeTab(ghostId);
+      return;
+    }
 
     if (this.originalEditableGraph) {
       this.graph = JSON.parse(JSON.stringify(this.originalEditableGraph));
       this.originalEditableGraph = undefined;
     }
-
-    this.canvasManager.setGhostMode(false);
-    this.inspectorManager.setGhostMode(false);
 
     if (titleInput) {
       titleInput.value = this.cleanFlowName(this.graph.metadata?.name);
@@ -865,20 +884,296 @@ class VisualEditorApp {
   }
 
   private appendLog(log: { timestamp: number; level: string; message: string }): void {
-    const consoleEl = document.getElementById('logsConsole');
-    if (!consoleEl) return;
+    this.logs.push(log);
     const time = new Date(log.timestamp).toLocaleTimeString();
-    const entry = document.createElement('div');
-    entry.className = `log-entry ${log.level}`;
-    entry.textContent = `[${time}] [${log.level.toUpperCase()}] ${log.message}`;
-    consoleEl.appendChild(entry);
-    consoleEl.scrollTop = consoleEl.scrollHeight;
+    const entryText = `[${time}] [${log.level.toUpperCase()}] ${log.message}`;
+
+    const consoleEl = document.getElementById('logsConsole');
+    if (consoleEl) {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${log.level}`;
+      entry.textContent = entryText;
+      consoleEl.appendChild(entry);
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    const modalConsoleEl = document.getElementById('modalLogsConsole');
+    if (modalConsoleEl) {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${log.level}`;
+      entry.textContent = entryText;
+      modalConsoleEl.appendChild(entry);
+      modalConsoleEl.scrollTop = modalConsoleEl.scrollHeight;
+      const countBadge = document.getElementById('modalLogsCountBadge');
+      if (countBadge) countBadge.textContent = `${this.logs.length} eventos`;
+    }
   }
 
   private renderVariables(vars: Record<string, any>): void {
+    const jsonStr = JSON.stringify(vars, null, 2);
     const varEl = document.getElementById('variablesList');
-    if (!varEl) return;
-    varEl.innerHTML = `<pre style="font-family: var(--font-mono); font-size: 11px;">${JSON.stringify(vars, null, 2)}</pre>`;
+    if (varEl) {
+      varEl.innerHTML = `<pre style="font-family: var(--font-mono); font-size: 11px;">${jsonStr}</pre>`;
+    }
+    const modalVarEl = document.getElementById('modalVariablesList');
+    if (modalVarEl) {
+      modalVarEl.innerHTML = `<pre style="font-family: var(--font-mono); font-size: 11px; margin: 0; color: #a5f3fc;">${jsonStr}</pre>`;
+    }
+  }
+
+  public openExpandedDebugModal(): void {
+    const existing = document.getElementById('debugModalBackdrop');
+    if (existing) existing.remove();
+
+    const backdrop = document.createElement('div');
+    backdrop.id = 'debugModalBackdrop';
+    backdrop.className = 'flow-modal-backdrop';
+
+    const flowName = this.cleanFlowName(this.graph.metadata?.name);
+
+    backdrop.innerHTML = `
+      <div class="debug-modal-card">
+        <div class="debug-modal-header">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(56, 189, 248, 0.15); display: flex; align-items: center; justify-content: center; color: #38bdf8;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/></svg>
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <h3 style="font-size: 15px; font-weight: 700; color: #f8fafc; margin: 0;">Depuração & Console de Execução</h3>
+                <span style="font-size: 10px; background: #1e293b; color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;">${flowName}</span>
+              </div>
+              <p style="font-size: 11px; color: #94a3b8; margin: 2px 0 0 0;">Ambiente expandido de teste, inspeção de variáveis e logs ao vivo</p>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button id="btnModalRunDebug" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 14px; background: #0284c7; border-color: #0284c7; cursor: pointer;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span>Iniciar Depuração</span>
+            </button>
+            <button id="btnModalStopDebug" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 12px; color: #f87171; border-color: rgba(239, 68, 68, 0.3); cursor: pointer;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+              <span>Parar</span>
+            </button>
+            <button id="btnCloseDebugModal" class="sidebar-toggle-btn" title="Fechar visualização (Esc)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="debug-modal-body">
+          <!-- Coluna Esquerda: Informações da Aba Alvo, Variáveis e Histórico -->
+          <div id="modalDebugLeftPane" class="debug-modal-left-pane">
+            <!-- Card Alvo -->
+            <div style="background: #111827; border: 1px solid #1f293d; border-radius: 8px; padding: 12px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 11px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                  🎯 Página Web Alvo
+                </span>
+                <span id="modalDebugTargetBadge" class="flow-badge" style="font-size: 9px; padding: 1px 5px; background: rgba(56, 189, 248, 0.15); color: #38bdf8;">
+                  ${this.activeWebTabInfo?.tabId ? `Aba #${this.activeWebTabInfo.tabId}` : 'Detectando...'}
+                </span>
+              </div>
+              <div id="modalDebugTargetInfo" style="font-size: 11px; color: #cbd5e1; margin-bottom: 10px; line-height: 1.4; background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; word-break: break-all;">
+                ${
+                  this.activeWebTabInfo?.title
+                    ? `<strong>${this.activeWebTabInfo.title}</strong><br/><span style="color: #64748b; font-size: 10px;">${this.activeWebTabInfo.url}</span>`
+                    : 'Detectando aba web ativa no navegador...'
+                }
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button id="btnModalRefreshTab" class="btn btn-secondary" style="flex: 1; font-size: 10px; padding: 5px 8px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+                  🔄 Atualizar
+                </button>
+                <button id="btnModalFocusTab" class="btn btn-secondary" style="flex: 1; font-size: 10px; padding: 5px 8px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+                  🔍 Focar
+                </button>
+                <button id="btnModalNewTab" class="btn btn-secondary" style="flex: 1; font-size: 10px; padding: 5px 8px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;" title="Abrir nova aba em branco para testar">
+                  ➕ Nova Aba
+                </button>
+              </div>
+            </div>
+
+            <!-- Card Variáveis do Fluxo -->
+            <div style="background: #111827; border: 1px solid #1f293d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; flex: 1; min-height: 180px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 11px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                  📦 Estado das Variáveis
+                </span>
+                <span style="font-size: 10px; color: #64748b;">(JSON em Tempo Real)</span>
+              </div>
+              <div id="modalVariablesList" style="background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 10px; flex: 1; overflow-y: auto; font-family: monospace; font-size: 11px; color: #a5f3fc;">
+                <pre style="margin: 0; font-family: var(--font-mono); font-size: 11px; color: #a5f3fc;">{}</pre>
+              </div>
+            </div>
+          </div>
+
+          <!-- Divisor Resizer -->
+          <div id="resizerDebugModal" class="debug-modal-resizer" title="Arraste para redimensionar o painel"></div>
+
+          <!-- Coluna Direita: Console / Terminal de Logs -->
+          <div id="modalDebugRightPane" class="debug-modal-console-pane">
+            <div style="padding: 10px 16px; background: #0d131f; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 11px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px; text-transform: uppercase;">
+                  🖥️ Console de Execução
+                </span>
+                <span id="modalLogsCountBadge" style="font-size: 10px; color: #94a3b8; background: #1e293b; padding: 2px 6px; border-radius: 4px;">
+                  ${this.logs.length} eventos
+                </span>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="text" id="modalLogSearchInput" placeholder="Filtrar logs..." style="background: #080c14; border: 1px solid #243049; border-radius: 4px; padding: 4px 8px; font-size: 11px; color: #f1f5f9; width: 140px;" />
+                <button id="btnModalClearLogs" class="btn-xs" style="background: #1e293b; border: 1px solid #334155; color: #94a3b8; padding: 3px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;">
+                  Limpar Logs
+                </button>
+              </div>
+            </div>
+
+            <!-- Lista de logs estilo terminal -->
+            <div id="modalLogsConsole" class="console-output" style="flex: 1; padding: 14px; overflow-y: auto; background: #060911; font-family: monospace; font-size: 12px; line-height: 1.5;">
+              <!-- Logs populados aqui -->
+            </div>
+          </div>
+        </div>
+
+        <div class="debug-modal-footer">
+          <div style="font-size: 11px; color: #64748b; display: flex; align-items: center; gap: 12px;">
+            <span>Pressione <strong>Esc</strong> para fechar</span>
+            <span>•</span>
+            <span id="modalDebugStatusText" style="color: #38bdf8;">Pronto para iniciar depuração</span>
+          </div>
+          <button id="btnFooterCloseDebug" class="btn btn-secondary" style="padding: 6px 16px; font-size: 12px; cursor: pointer;">
+            Fechar
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(backdrop);
+
+    // Resizer
+    const resizer = backdrop.querySelector('#resizerDebugModal') as HTMLElement;
+    const leftPane = backdrop.querySelector('#modalDebugLeftPane') as HTMLElement;
+    if (resizer && leftPane) {
+      resizer.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startWidth = leftPane.getBoundingClientRect().width;
+        resizer.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        const onMouseMove = (moveEv: MouseEvent) => {
+          const deltaX = moveEv.clientX - startX;
+          const newWidth = Math.max(260, Math.min(600, startWidth + deltaX));
+          leftPane.style.width = `${newWidth}px`;
+        };
+
+        const onMouseUp = () => {
+          resizer.classList.remove('resizing');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+      });
+    }
+
+    // Popula logs existentes
+    const modalConsole = backdrop.querySelector('#modalLogsConsole') as HTMLElement;
+    if (modalConsole) {
+      if (this.logs.length === 0) {
+        modalConsole.innerHTML = '<div class="log-entry debug">[SISTEMA] Console pronto. Clique em "Iniciar Depuração" para executar na aba web ativa.</div>';
+      } else {
+        this.logs.forEach((l) => {
+          const time = new Date(l.timestamp).toLocaleTimeString();
+          const entry = document.createElement('div');
+          entry.className = `log-entry ${l.level}`;
+          entry.textContent = `[${time}] [${l.level.toUpperCase()}] ${l.message}`;
+          modalConsole.appendChild(entry);
+        });
+        modalConsole.scrollTop = modalConsole.scrollHeight;
+      }
+    }
+
+    // Botões
+    backdrop.querySelector('#btnModalRunDebug')?.addEventListener('click', () => {
+      this.runCurrentFlow(true);
+      const statusText = backdrop.querySelector('#modalDebugStatusText') as HTMLElement;
+      if (statusText) statusText.textContent = 'Depurando na aba ativa...';
+    });
+
+    backdrop.querySelector('#btnModalStopDebug')?.addEventListener('click', () => {
+      if (chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ action: 'CANCEL_AUTOMATION', payload: { automationId: this.graph.metadata?.id } });
+      }
+      const statusText = backdrop.querySelector('#modalDebugStatusText') as HTMLElement;
+      if (statusText) statusText.textContent = 'Execução cancelada.';
+    });
+
+    backdrop.querySelector('#btnModalRefreshTab')?.addEventListener('click', async () => {
+      await this.detectActiveWebTab();
+      const badge = backdrop.querySelector('#modalDebugTargetBadge') as HTMLElement;
+      const info = backdrop.querySelector('#modalDebugTargetInfo') as HTMLElement;
+      if (badge && this.activeWebTabInfo?.tabId) {
+        badge.textContent = `Aba #${this.activeWebTabInfo.tabId}`;
+      }
+      if (info && this.activeWebTabInfo?.title) {
+        info.innerHTML = `<strong>${this.activeWebTabInfo.title}</strong><br/><span style="color: #64748b; font-size: 10px;">${this.activeWebTabInfo.url}</span>`;
+      }
+    });
+
+    backdrop.querySelector('#btnModalFocusTab')?.addEventListener('click', () => {
+      this.focusTargetTab();
+    });
+
+    backdrop.querySelector('#btnModalNewTab')?.addEventListener('click', () => {
+      if (chrome.tabs?.create) {
+        chrome.tabs.create({ url: 'about:blank', active: false }, (t) => {
+          if (t?.id) {
+            this.activeWebTabInfo = { tabId: t.id, title: 'Nova Aba em Branco', url: 'about:blank' };
+            const badge = backdrop.querySelector('#modalDebugTargetBadge') as HTMLElement;
+            const info = backdrop.querySelector('#modalDebugTargetInfo') as HTMLElement;
+            if (badge) badge.textContent = `Aba #${t.id}`;
+            if (info) info.innerHTML = `<strong>Nova Aba em Branco</strong><br/><span style="color: #64748b; font-size: 10px;">about:blank</span>`;
+            showToast('Aba em branco criada e selecionada como alvo.', 'success');
+          }
+        });
+      }
+    });
+
+    backdrop.querySelector('#btnModalClearLogs')?.addEventListener('click', () => {
+      this.clearLogs();
+    });
+
+    const searchInput = backdrop.querySelector('#modalLogSearchInput') as HTMLInputElement;
+    searchInput?.addEventListener('input', () => {
+      const q = searchInput.value.toLowerCase().trim();
+      modalConsole?.querySelectorAll('.log-entry').forEach((el: any) => {
+        el.style.display = !q || el.textContent.toLowerCase().includes(q) ? 'block' : 'none';
+      });
+    });
+
+    const closeModal = () => {
+      backdrop.remove();
+      window.removeEventListener('keydown', onKeyDown);
+    };
+
+    backdrop.querySelector('#btnCloseDebugModal')?.addEventListener('click', closeModal);
+    backdrop.querySelector('#btnFooterCloseDebug')?.addEventListener('click', closeModal);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeModal();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
   }
 
   private initBlockCatalogUI(): void {
@@ -1120,7 +1415,8 @@ class VisualEditorApp {
     });
 
     // Ações de Depuração na Página Web Ativa
-    document.getElementById('btnDebugFlow')?.addEventListener('click', () => this.runCurrentFlow(true));
+    document.getElementById('btnDebugFlow')?.addEventListener('click', () => this.openExpandedDebugModal());
+    document.getElementById('btnExpandDebugModal')?.addEventListener('click', () => this.openExpandedDebugModal());
     document.getElementById('btnRunDebugActiveTab')?.addEventListener('click', () => this.runCurrentFlow(true));
     document.getElementById('btnRefreshTargetTab')?.addEventListener('click', () => this.detectActiveWebTab());
     document.getElementById('btnFocusTargetTab')?.addEventListener('click', () => this.focusTargetTab());

@@ -503,10 +503,10 @@ body {
   background: #0d131f;
   border: 1px solid #3b82f6;
   border-radius: 14px;
-  width: 95%;
-  max-width: 1200px;
-  height: 88vh;
-  max-height: 88vh;
+  width: 96%;
+  max-width: 1480px;
+  height: 90vh;
+  max-height: 90vh;
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(59, 130, 246, 0.25);
   display: flex;
   flex-direction: column;
@@ -522,6 +522,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .node-expand-body {
@@ -531,27 +532,86 @@ body {
   background: #0b0f19;
   display: flex;
   flex-direction: row;
+  min-height: 0;
 }
 
 .node-expand-explorer-pane {
-  width: 380px;
-  min-width: 320px;
-  max-width: 440px;
+  width: 340px;
+  min-width: 240px;
+  max-width: 550px;
   background: #080c14;
-  border-right: 1px solid #1e293b;
-  padding: 16px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .node-expand-form-pane {
   flex: 1;
-  min-width: 0;
+  min-width: 320px;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   background: #0b0f19;
+}
+
+.node-expand-output-pane {
+  width: 360px;
+  min-width: 250px;
+  max-width: 650px;
+  background: #080c14;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.node-expand-resizer {
+  width: 6px;
+  background: #1e293b;
+  cursor: col-resize;
+  transition: background 0.15s ease;
+  position: relative;
+  flex-shrink: 0;
+  z-index: 10;
+  user-select: none;
+}
+
+.node-expand-resizer:hover,
+.node-expand-resizer.resizing {
+  background: #6366f1;
+}
+
+.expand-pane-header {
+  padding: 10px 16px;
+  background: #0d131f;
+  border-bottom: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.expand-pane-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.expand-pane-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
 }
 
 .node-expand-form-pane .node-form {
@@ -1954,6 +2014,93 @@ select {
   justify-content: flex-end;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
+}
+
+/* Modal Expandido de Depuração & Console */
+.debug-modal-card {
+  background: #090d16;
+  border: 1px solid #38bdf8;
+  border-radius: 14px;
+  width: 96vw;
+  max-width: 1400px;
+  height: 90vh;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.9), 0 0 50px rgba(56, 189, 248, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 10000;
+}
+
+.debug-modal-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid #1e293b;
+  background: #0d131f;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.debug-modal-body {
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+  background: #080c14;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+}
+
+.debug-modal-left-pane {
+  width: 380px;
+  min-width: 280px;
+  max-width: 550px;
+  background: #0a0f1d;
+  border-right: 1px solid #1e293b;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 16px;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.debug-modal-resizer {
+  width: 6px;
+  background: #1e293b;
+  cursor: col-resize;
+  transition: background 0.15s ease;
+  position: relative;
+  flex-shrink: 0;
+  z-index: 10;
+  user-select: none;
+}
+
+.debug-modal-resizer:hover,
+.debug-modal-resizer.resizing {
+  background: #38bdf8;
+}
+
+.debug-modal-console-pane {
+  flex: 1;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #060911;
+}
+
+.debug-modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #1e293b;
+  background: #0d131f;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
   flex-shrink: 0;
 }
 
