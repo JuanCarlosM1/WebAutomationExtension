@@ -21015,130 +21015,124 @@ ${es5Code}
     const h2 = (hash2 >>> 0).toString(16).padStart(8, "0");
     return `wa_${h1}${h2}_len${content.length}`;
   }
-  async function executeScriptInPageContext(code, args = []) {
-    return new Promise((resolve) => {
-      const scriptId = getNextScriptId();
-      const checksum = computeScriptChecksum(code);
-      const eventId = "__wa_res_" + scriptId + "_" + Date.now();
-      let finished = false;
-      const cleanup = () => {
-        if (!finished) {
-          finished = true;
-          window.removeEventListener(eventId, onResult);
-        }
-      };
-      const onResult = (e) => {
-        cleanup();
-        const detail = e.detail || {};
-        if (detail.success) {
-          resolve({
-            success: true,
-            data: {
-              scriptId,
-              executed: true,
-              result: detail.result
-            }
-          });
-        } else {
-          resolve({ success: false, error: detail.error });
-        }
-      };
-      window.addEventListener(eventId, onResult);
+  async function executeScriptInPageContext(code, args = [], vars = {}, explicitScriptId) {
+    const scriptId = explicitScriptId || getNextScriptId();
+    const checksum = computeScriptChecksum(code);
+    try {
+      const isExtensionPage = typeof window !== "undefined" && (window.location.protocol === "chrome-extension:" || window.location.protocol === "moz-extension:");
+      const docNonce = typeof document !== "undefined" ? document.querySelector("script[nonce]")?.getAttribute("nonce") || document.currentScript?.nonce : void 0;
+      const scriptEl = document.createElement("script");
+      scriptEl.id = scriptId;
+      if (docNonce) {
+        scriptEl.setAttribute("nonce", docNonce);
+        scriptEl.nonce = docNonce;
+        scriptEl.type = "text/javascript";
+      } else if (isExtensionPage) {
+        scriptEl.type = "text/plain";
+        scriptEl.setAttribute("data-script-type", "javascript");
+      } else {
+        scriptEl.type = "text/javascript";
+      }
+      scriptEl.setAttribute("data-script-id", scriptId);
+      scriptEl.setAttribute("data-script-index", String(scriptDomCounter - 1));
+      scriptEl.setAttribute("data-name", "script" + (scriptDomCounter - 1));
+      scriptEl.setAttribute("data-checksum", checksum);
+      scriptEl.setAttribute("data-injected-at", (/* @__PURE__ */ new Date()).toISOString());
+      scriptEl.setAttribute("data-wa-stage", "injected");
+      scriptEl.classList.add("wa-injected-script", scriptId, "script" + (scriptDomCounter - 1));
+      scriptEl.textContent = `/* WebAutomations Injected Block: ${scriptId} */
+try {
+  (function(args, $args, $vars, window, globalThis, parent, top) {
+    "use strict";
+    ${code}
+  })(${JSON.stringify(args)}, ${JSON.stringify(args)}, ${JSON.stringify(vars)}, undefined, undefined, undefined, undefined);
+} catch(e) {}
+`;
+      const targetParent = document.head || document.documentElement || document.body;
       try {
-        const scriptEl = document.createElement("script");
-        scriptEl.id = scriptId;
-        scriptEl.type = "application/x-webautomations-script";
-        scriptEl.setAttribute("data-script-id", scriptId);
-        scriptEl.setAttribute("data-script-index", String(scriptDomCounter - 1));
-        scriptEl.setAttribute("data-name", "script" + (scriptDomCounter - 1));
-        scriptEl.setAttribute("data-checksum", checksum);
-        scriptEl.setAttribute("data-injected-at", (/* @__PURE__ */ new Date()).toISOString());
-        scriptEl.setAttribute("data-wa-stage", "injected");
-        scriptEl.classList.add("wa-injected-script", scriptId, "script" + (scriptDomCounter - 1));
-        scriptEl.textContent = code;
-        (document.head || document.documentElement || document.body).appendChild(scriptEl);
-        const targetScript = document.getElementById(scriptId);
-        if (!targetScript) {
-          cleanup();
-          resolve({
-            success: false,
-            error: `[WebAutomations] Erro: Elemento de script #${scriptId} n\xE3o foi encontrado no DOM da p\xE1gina antes da execu\xE7\xE3o.`
-          });
-          return;
-        }
-        const injectedCodeInDom = targetScript.textContent || "";
-        const injectedChecksum = targetScript.getAttribute("data-checksum");
-        const codeIsIdentical = injectedCodeInDom === code;
-        const checksumMatches = computeScriptChecksum(injectedCodeInDom) === checksum && injectedChecksum === checksum;
-        if (!codeIsIdentical || !checksumMatches) {
-          targetScript.setAttribute("data-wa-stage", "integrity_violation");
-          targetScript.setAttribute("data-wa-error", "C\xF3digo no DOM difere do c\xF3digo original do fluxo");
-          cleanup();
-          resolve({
-            success: false,
-            error: `[WebAutomations Security] Falha de integridade: O c\xF3digo injetado no DOM (#${scriptId}) n\xE3o corresponde exatamente ao c\xF3digo configurado no fluxo! Execu\xE7\xE3o bloqueada por seguran\xE7a.`
-          });
-          return;
-        }
-        targetScript.setAttribute("data-wa-stage", "verified");
-        if (!document.getElementById("__wa_page_bridge_loader__") && isExtensionContextValid()) {
-          try {
-            const bridgeLoader = document.createElement("script");
-            bridgeLoader.id = "__wa_page_bridge_loader__";
-            bridgeLoader.src = chrome.runtime.getURL("dist/pageScriptBridge.js");
-            bridgeLoader.async = false;
-            (document.head || document.documentElement || document.body).appendChild(bridgeLoader);
-          } catch {
-          }
-        }
-        const dispatchExecution = () => {
-          if (finished)
-            return;
-          window.dispatchEvent(
-            new CustomEvent("__WA_EXECUTE_PAGE_SCRIPT__", {
-              detail: { scriptId, eventId, checksum, expectedCode: code, args }
-            })
-          );
+        targetParent.appendChild(scriptEl);
+      } catch {
+        scriptEl.type = "text/plain";
+        targetParent.appendChild(scriptEl);
+      }
+      const targetScript = document.getElementById(scriptId);
+      if (!targetScript) {
+        return {
+          success: false,
+          error: `[WebAutomations] Erro: Elemento de script #${scriptId} n\xE3o foi encontrado no DOM da p\xE1gina antes da execu\xE7\xE3o.`
         };
-        dispatchExecution();
-      } catch (err) {
-        if (!finished) {
-          cleanup();
-          resolve({ success: false, error: err?.message || String(err) });
+      }
+      const injectedCodeInDom = targetScript.textContent || "";
+      if (!injectedCodeInDom.includes(code)) {
+        targetScript.setAttribute("data-wa-stage", "integrity_violation");
+        targetScript.setAttribute("data-wa-error", "C\xF3digo no DOM difere do c\xF3digo original do fluxo");
+        return {
+          success: false,
+          error: `[WebAutomations Security] Falha de integridade: O c\xF3digo injetado no DOM (#${scriptId}) n\xE3o corresponde exatamente ao c\xF3digo configurado no fluxo! Execu\xE7\xE3o bloqueada por seguran\xE7a.`
+        };
+      }
+      targetScript.setAttribute("data-wa-stage", "executing");
+      let evalRes;
+      try {
+        evalRes = SafeJsEvaluator.evaluate(
+          `"use strict"; return (function(args, $args, $vars, window, globalThis, parent, top) {
+${code}
+})(args, $args, $vars, undefined, undefined, undefined, undefined);`,
+          {
+            args: args || [],
+            $args: args || [],
+            $vars: vars || {},
+            document,
+            chrome: void 0,
+            browser: void 0
+          },
+          true
+        );
+      } catch (evalErr) {
+        try {
+          const fn = new Function(
+            "args",
+            "$args",
+            "$vars",
+            "window",
+            "globalThis",
+            "parent",
+            "top",
+            "document",
+            `"use strict";
+${code}`
+          );
+          evalRes = fn(
+            args,
+            args,
+            vars,
+            void 0,
+            void 0,
+            void 0,
+            void 0,
+            document
+          );
+        } catch {
+          throw evalErr;
         }
       }
-      setTimeout(() => {
-        if (!finished) {
-          cleanup();
-          try {
-            const targetScript = document.getElementById(scriptId);
-            if (!targetScript) {
-              resolve({ success: false, error: `Script #${scriptId} n\xE3o encontrado no DOM para execu\xE7\xE3o de fallback.` });
-              return;
-            }
-            const currentDomCode = targetScript.textContent || "";
-            if (currentDomCode !== code || computeScriptChecksum(currentDomCode) !== checksum) {
-              targetScript.setAttribute("data-wa-stage", "integrity_violation");
-              resolve({ success: false, error: `[WebAutomations Security] Verifica\xE7\xE3o de integridade falhou no script #${scriptId}.` });
-              return;
-            }
-            targetScript.setAttribute("data-wa-stage", "executing");
-            const evalRes = SafeJsEvaluator.evaluate(`(function(args, $args) {
-${currentDomCode}
-})(args, args)`, {
-              args: args || [],
-              $args: args || [],
-              chrome: void 0,
-              browser: void 0
-            });
-            targetScript.setAttribute("data-wa-stage", "executed");
-            resolve({ success: true, data: { scriptId, executed: true, result: evalRes } });
-          } catch (err) {
-            resolve({ success: false, error: err?.message || String(err) });
-          }
+      targetScript.setAttribute("data-wa-stage", "executed");
+      return {
+        success: true,
+        data: {
+          scriptId,
+          executed: true,
+          result: evalRes
         }
-      }, 400);
-    });
+      };
+    } catch (err) {
+      const targetScript = document.getElementById(scriptId);
+      if (targetScript) {
+        targetScript.setAttribute("data-wa-stage", "error");
+        targetScript.setAttribute("data-wa-error", err?.message || String(err));
+      }
+      return { success: false, error: err?.message || String(err) };
+    }
   }
   async function handleDomAction(message) {
     const { action, payload } = message;
@@ -21390,8 +21384,8 @@ ${currentDomCode}
         return { success: true };
       }
       case "INJECT_SCRIPT": {
-        const { code, args } = payload;
-        return await executeScriptInPageContext(code, args || []);
+        const { code, args, vars, scriptId } = payload || {};
+        return await executeScriptInPageContext(code, args || [], vars || {}, scriptId);
       }
       default:
         throw new Error(`A\xE7\xE3o de DOM desconhecida: ${action}`);
@@ -21410,7 +21404,7 @@ ${currentDomCode}
       const list = [];
       for (let i = 0; i < res2.snapshotLength; i++) {
         const node = res2.snapshotItem(i);
-        if (node instanceof Element)
+        if (typeof Element !== "undefined" && node instanceof Element)
           list.push(node);
       }
       return list;

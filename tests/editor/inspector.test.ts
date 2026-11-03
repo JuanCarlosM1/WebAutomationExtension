@@ -243,6 +243,13 @@ describe('Inspector & Properties Modules', () => {
       expect(sidebarLeft.classList.contains('collapsed')).toBe(false);
     });
 
+    it('renderInspector com nó selecionado preenche o formulário sem aviso de barra lateral desativada', () => {
+      selectedNodeId = 'node_1';
+      inspector.renderInspector();
+      expect(form.innerHTML).not.toContain('Edição na Barra Lateral Desativada');
+      expect(form.innerHTML).toContain('Clique no Botão');
+    });
+
     it('openExpandedModal exibe layout com 3 seções (Entrada, Configuração e Saída) com divisores arrastáveis', () => {
       inspector.openExpandedModal('node_1');
 

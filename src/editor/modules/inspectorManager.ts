@@ -97,7 +97,8 @@ export class InspectorManager {
       }
     }
 
-    // 2. Sincroniza a barra lateral (inspector do painel direito)
+    // 2. A barra lateral de propriedades foi removida da interface principal.
+    // Se os elementos existirem (ex: testes legados), sincroniza os dados sem alterar a barra lateral esquerda.
     if (!form || !noSelect) {
       if (this.pendingScrollSelector) {
         const sel = this.pendingScrollSelector;
@@ -108,12 +109,6 @@ export class InspectorManager {
     }
 
     if (selectedIds.length > 1) {
-      if (sidebarRight) sidebarRight.classList.remove('collapsed');
-      if (sidebarLeft) sidebarLeft.classList.add('collapsed');
-      btnActivityBlocks?.classList.remove('active');
-      btnActivityInspector?.classList.add('active');
-      if (resizerLeft) resizerLeft.style.display = 'block';
-
       noSelect.classList.add('hidden');
       form.classList.remove('hidden');
       this.renderMultiSelectionInspector(form, selectedIds);
@@ -129,7 +124,6 @@ export class InspectorManager {
     if (!selectedId) {
       noSelect.classList.remove('hidden');
       form.classList.add('hidden');
-      if (resizerLeft) resizerLeft.style.display = 'block';
 
       if (this.pendingScrollSelector) {
         const sel = this.pendingScrollSelector;
@@ -143,7 +137,6 @@ export class InspectorManager {
     if (!node) {
       noSelect.classList.remove('hidden');
       form.classList.add('hidden');
-      if (resizerLeft) resizerLeft.style.display = 'block';
 
       if (this.pendingScrollSelector) {
         const sel = this.pendingScrollSelector;
@@ -159,12 +152,6 @@ export class InspectorManager {
       }
       return;
     }
-
-    if (sidebarRight) sidebarRight.classList.remove('collapsed');
-    if (sidebarLeft) sidebarLeft.classList.add('collapsed');
-    btnActivityBlocks?.classList.remove('active');
-    btnActivityInspector?.classList.add('active');
-    if (resizerLeft) resizerLeft.style.display = 'block';
 
     noSelect.classList.add('hidden');
     form.classList.remove('hidden');
@@ -878,24 +865,24 @@ export class InspectorManager {
       const jsonStr = outputData !== null ? JSON.stringify(outputData, null, 2) : '';
 
       const panel = document.createElement('div');
-      panel.style.cssText = 'display: flex; flex-direction: column; gap: 12px;';
+      panel.style.cssText = 'display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box;';
       panel.innerHTML = `
-        <div style="background: #090e18; border: 1px solid #1e293b; border-left: 3px solid ${statusColor}; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="background: #090e18; border: 1px solid #1e293b; border-left: 3px solid ${statusColor}; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; width: 100%; box-sizing: border-box;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
             <span style="font-size: 11px; font-weight: 700; color: #818cf8;">Auditoria Fantasma</span>
-            <span style="font-size: 10px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; border: 1px solid ${statusColor}44; padding: 2px 7px; border-radius: 4px;">
+            <span style="align-self: flex-start; font-size: 10px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; border: 1px solid ${statusColor}44; padding: 2px 7px; border-radius: 4px;">
               ${statusLabel}
             </span>
           </div>
 
-          <div style="font-size: 11px; color: #94a3b8;">
+          <div style="font-size: 11px; color: #94a3b8; word-break: break-word;">
             Duração: <strong style="color: #f1f5f9;">${durationText}</strong> • Bloco: <span style="color: #38bdf8;">${nodeLabel}</span>
           </div>
 
           ${
             snap?.error
               ? `
-            <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 10px; font-size: 11px; color: #fca5a5; font-family: monospace; word-break: break-all;">
+            <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 8px; font-size: 11px; color: #fca5a5; font-family: monospace; word-break: break-all;">
               ✕ Erro: ${snap.error}
             </div>
           `
@@ -903,12 +890,12 @@ export class InspectorManager {
           }
         </div>
 
-        <div style="background: #090e18; border: 1px solid #1e293b; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="background: #090e18; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; width: 100%; box-sizing: border-box;">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
             <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Dados Produzidos ($output):</label>
             ${
               jsonStr
-                ? `<button type="button" id="btnCopyGhostOutput" class="btn btn-secondary" style="font-size: 10px; padding: 3px 8px;">📋 Copiar JSON</button>`
+                ? `<button type="button" id="btnCopyGhostOutput" class="btn btn-secondary" style="width: 100%; font-size: 11px; padding: 6px 10px; display: flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box;">📋 Copiar JSON</button>`
                 : ''
             }
           </div>
@@ -917,11 +904,11 @@ export class InspectorManager {
             jsonStr
               ? `
             <pre style="
-              width: 100%; box-sizing: border-box; max-height: 380px; overflow-y: auto; font-family: monospace; font-size: 11px; background: #080c14; color: #86efac; border: 1px solid #166534; border-radius: 6px; padding: 12px; line-height: 1.4; margin: 0;
+              width: 100%; box-sizing: border-box; max-height: 380px; overflow-y: auto; overflow-x: auto; font-family: monospace; font-size: 11px; background: #080c14; color: #86efac; border: 1px solid #166534; border-radius: 6px; padding: 10px; line-height: 1.4; margin: 0; white-space: pre-wrap; word-break: break-all;
             ">${jsonStr}</pre>
           `
               : `
-            <div style="font-size: 11px; color: #64748b; font-style: italic; padding: 12px 6px; text-align: center;">
+            <div style="font-size: 11px; color: #64748b; font-style: italic; padding: 8px 4px; text-align: center;">
               Nenhum dado de saída foi gerado por este bloco nesta execução.
             </div>
           `
@@ -943,16 +930,16 @@ export class InspectorManager {
     const hasRuntimeData = outputResult.source === 'runtime';
 
     const panel = document.createElement('div');
-    panel.style.cssText = 'max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px;';
+    panel.style.cssText = 'width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;';
 
     // Status badge
     let badgeHtml = '';
     if (outputResult.source === 'runtime') {
-      badgeHtml = `<span style="font-size: 10px; background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 2px 8px; border-radius: 4px; font-weight: 600;">🟢 Execução Real</span>`;
+      badgeHtml = `<span style="font-size: 10px; background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 2px 7px; border-radius: 4px; font-weight: 600;">🟢 Execução Real</span>`;
     } else if (outputResult.source === 'mock') {
-      badgeHtml = `<span style="font-size: 10px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; padding: 2px 8px; border-radius: 4px; font-weight: 600;">🟡 Dados Simulados (Mock)</span>`;
+      badgeHtml = `<span style="font-size: 10px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; padding: 2px 7px; border-radius: 4px; font-weight: 600;">🟡 Dados Simulados (Mock)</span>`;
     } else {
-      badgeHtml = `<span style="font-size: 10px; background: rgba(148, 163, 184, 0.15); color: #94a3b8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">⚪ Não Executado (Sem Dados)</span>`;
+      badgeHtml = `<span style="font-size: 10px; background: rgba(148, 163, 184, 0.15); color: #94a3b8; padding: 2px 7px; border-radius: 4px; font-weight: 600;">⚪ Não Executado (Sem Dados)</span>`;
     }
 
     // JSON a exibir
@@ -965,76 +952,80 @@ export class InspectorManager {
     const jsonStr = currentDataToDisplay ? JSON.stringify(currentDataToDisplay, null, 2) : '';
 
     panel.innerHTML = `
-      <div style="background: #090e18; border: 1px solid #1e293b; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 14px;">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 13px; font-weight: 700; color: #f8fafc;">Dados Produzidos por Este Bloco ($output)</span>
+      <div style="background: #090e18; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; width: 100%; box-sizing: border-box;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 12px; font-weight: 700; color: #f8fafc; word-break: break-word;">Dados Produzidos ($output)</span>
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
             ${badgeHtml}
           </div>
-          <button type="button" id="btnCopyNodeExpr" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">
-            📋 Copiar {{ $node["${nodeLabel}"].json }}
-          </button>
         </div>
 
-        <div style="font-size: 11px; color: #94a3b8; line-height: 1.4;">
-          Estes dados representam a saída gerada por este bloco. Blocos subsequentes conectados a ele podem referenciá-lo usando:
-          <code style="background: #1e293b; color: #60a5fa; padding: 2px 5px; border-radius: 4px; font-family: monospace;">{{ $node["${nodeLabel}"].json.campo }}</code>
-          ou <code style="background: #1e293b; color: #34d399; padding: 2px 5px; border-radius: 4px; font-family: monospace;">{{ $json.campo }}</code> (no bloco imediatamente seguinte).
+        <button type="button" id="btnCopyNodeExpr" class="btn btn-secondary" style="width: 100%; font-size: 11px; padding: 6px 10px; display: flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Copiar {{ $node[&quot;${nodeLabel}&quot;].json }}">
+          📋 Copiar Expressão ($node)
+        </button>
+
+        <div style="font-size: 11px; color: #94a3b8; line-height: 1.4; word-break: break-word;">
+          Saída deste bloco. Blocos seguintes acessam via:
+          <code style="display: block; background: #1e293b; color: #60a5fa; padding: 4px 6px; border-radius: 4px; font-family: monospace; word-break: break-all; margin-top: 4px; font-size: 10px;">{{ $node["${nodeLabel}"].json }}</code>
         </div>
 
-        <!-- Opção de Mock (Agora OPCIONAL e não regra) -->
-        <div style="background: #0d1527; border: 1px solid ${isMockEnabled ? '#3b82f6' : '#243049'}; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
-            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;">
-              <input type="checkbox" id="chkUseMockOutput" ${isMockEnabled ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px; accent-color: #3b82f6;" />
-              <span style="font-size: 12px; font-weight: 600; color: #f1f5f9;">Habilitar dados simulados (Mock) para este bloco</span>
-            </label>
-            ${isMockEnabled ? `<button type="button" id="btnResetDefaultMock" class="btn btn-secondary" style="font-size: 10px; padding: 2px 8px;">Restaurar Amostra Padrão</button>` : ''}
+        <!-- Opção de Mock (Agora em layout vertical que não vaza) -->
+        <div style="background: #0d1527; border: 1px solid ${isMockEnabled ? '#3b82f6' : '#243049'}; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px; width: 100%; box-sizing: border-box;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="chkUseMockOutput" ${isMockEnabled ? 'checked' : ''} style="cursor: pointer; width: 15px; height: 15px; accent-color: #3b82f6; flex-shrink: 0; margin-top: 1px;" />
+            <span style="font-size: 11px; font-weight: 600; color: #f1f5f9; line-height: 1.3;">Habilitar dados simulados (Mock)</span>
+          </label>
+          ${
+            isMockEnabled
+              ? `<button type="button" id="btnResetDefaultMock" class="btn btn-secondary" style="width: 100%; font-size: 10px; padding: 4px 8px; box-sizing: border-box;">Restaurar Amostra Padrão</button>`
+              : ''
+          }
+          <div style="font-size: 10px; color: #64748b; line-height: 1.3;">
+            Permite simular dados de saída para testar expressões antes de rodar o fluxo.
           </div>
-          <div style="font-size: 11px; color: #64748b; line-height: 1.4; margin-left: 26px;">
-            Por padrão, o fluxo utiliza apenas resultados de execuções reais. Marque esta opção caso deseje simular dados de saída para testar expressões e variáveis antes de rodar a automação.
-          </div>
         </div>
 
-        ${isMockEnabled ? `
+        ${
+          isMockEnabled
+            ? `
           <!-- Modo Edição de Mock -->
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Editor de Dados Simulados (JSON):</label>
+          <div style="display: flex; flex-direction: column; gap: 8px; width: 100%; box-sizing: border-box;">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Editor Mock (JSON):</label>
               <span style="font-size: 10px; color: #38bdf8;">Blocos seguintes enxergarão esta estrutura</span>
             </div>
             <textarea id="nodeOutputJsonArea" style="
-              width: 100%; box-sizing: border-box; height: 200px; font-family: monospace; font-size: 12px; background: #080c14; color: #a5f3fc; border: 1px solid #243049; border-radius: 6px; padding: 10px; outline: none; line-height: 1.4; resize: vertical;
+              width: 100%; box-sizing: border-box; height: 160px; font-family: monospace; font-size: 11px; background: #080c14; color: #a5f3fc; border: 1px solid #243049; border-radius: 6px; padding: 8px; outline: none; line-height: 1.4; resize: vertical;
             ">${jsonStr}</textarea>
-          </div>
-
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 10px; color: #64748b;">Altere o JSON acima para simular diferentes cenários nos nós subsequentes.</span>
-            <button type="button" id="btnSaveMockOutput" class="btn btn-primary" style="font-size: 11px; padding: 6px 14px;">
+            <button type="button" id="btnSaveMockOutput" class="btn btn-primary" style="width: 100%; font-size: 11px; padding: 7px 10px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 6px;">
               💾 Salvar Dados Simulados
             </button>
           </div>
-        ` : hasRuntimeData ? `
+        `
+            : hasRuntimeData
+            ? `
           <!-- Modo Visualização de Dados Reais -->
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Saída Real da Última Execução (Somente Leitura):</label>
-              <span style="font-size: 10px; color: #34d399;">Gerado durante execução real</span>
+          <div style="display: flex; flex-direction: column; gap: 6px; width: 100%; box-sizing: border-box;">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Saída Real da Última Execução:</label>
+              <span style="font-size: 10px; color: #34d399;">(Somente Leitura)</span>
             </div>
             <pre style="
-              width: 100%; box-sizing: border-box; max-height: 220px; overflow-y: auto; font-family: monospace; font-size: 12px; background: #080c14; color: #86efac; border: 1px solid #166534; border-radius: 6px; padding: 12px; line-height: 1.4; margin: 0;
+              width: 100%; box-sizing: border-box; max-height: 220px; overflow-y: auto; overflow-x: auto; font-family: monospace; font-size: 11px; background: #080c14; color: #86efac; border: 1px solid #166534; border-radius: 6px; padding: 10px; line-height: 1.4; margin: 0; white-space: pre-wrap; word-break: break-all;
             ">${jsonStr}</pre>
           </div>
-        ` : `
+        `
+            : `
           <!-- Modo Sem Dados e Sem Mock -->
-          <div style="background: #080d1a; border: 1px dashed #334155; border-radius: 6px; padding: 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <div style="font-size: 24px;">📊</div>
-            <div style="font-size: 13px; font-weight: 600; color: #cbd5e1;">Nenhum dado real disponível no momento</div>
-            <div style="font-size: 11px; color: #64748b; max-width: 440px; line-height: 1.4;">
-              Execute o fluxo para coletar dados reais deste bloco ou marque a opção <strong>"Habilitar dados simulados (Mock)"</strong> acima para definir uma estrutura de teste.
+          <div style="background: #080d1a; border: 1px dashed #334155; border-radius: 6px; padding: 16px 10px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; box-sizing: border-box;">
+            <div style="font-size: 20px;">📊</div>
+            <div style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Sem dados no momento</div>
+            <div style="font-size: 10px; color: #64748b; line-height: 1.4;">
+              Execute o fluxo ou ative <strong>"Dados simulados (Mock)"</strong> acima.
             </div>
           </div>
-        `}
+        `
+        }
       </div>
     `;
 

@@ -175,7 +175,7 @@
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             Exportar
           </button>
-          <button id="btnDebugFlow" class="btn btn-secondary" title="Depurar na Página Ativa do Navegador">
+          <button id="btnDebugFlow" class="btn btn-secondary" title="Depurar Fluxo (Console e Logs)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="m8 2 1.88 1.88"></path>
               <path d="M14.12 3.88 16 2"></path>
@@ -210,13 +210,6 @@
               <rect x="3" y="14" width="7" height="7"></rect>
             </svg>
             <span class="activity-tooltip">Blocos</span>
-          </button>
-          <button id="btnActivityInspector" class="activity-btn" title="Propriedades do Bloco">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 20h9"></path>
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-            </svg>
-            <span class="activity-tooltip">Propriedades</span>
           </button>
           <button id="btnActivityColors" class="activity-btn" title="Cores do Fluxo">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -321,17 +314,14 @@
           </div>
         </aside>
 
-        <!-- Left Sidebar: Debug & Console (Depuração com Aba em Branco) -->
+        <!-- Left Sidebar: Debug & Console -->
         <aside class="sidebar-debug collapsed" id="sidebarDebug">
           <div class="sidebar-header">
             <div>
               <h3>Depuração & Console</h3>
-              <p>Ambiente de teste com aba em branco</p>
+              <p>Logs em tempo real e histórico de execução</p>
             </div>
             <div style="display: flex; align-items: center; gap: 6px;">
-              <button id="btnExpandDebugModal" class="sidebar-toggle-btn" title="Expandir tela cheia de depuração">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
-              </button>
               <button id="btnToggleSidebarDebug" class="sidebar-toggle-btn" title="Fechar Depuração">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
@@ -339,60 +329,31 @@
           </div>
 
           <div class="debug-sidebar-content" style="padding: 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 14px;">
-            <!-- Painel da Aba Web Ativa (Alvo de Depuração) -->
-            <div class="debug-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 14px;">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                <span style="font-size: 12px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                  Página Web Alvo
-                </span>
-                <span id="debugTargetTabBadge" class="flow-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 10px; padding: 2px 6px;">Detectando...</span>
-              </div>
-              <div id="debugTargetTabInfo" style="font-size: 11px; color: #94a3b8; margin: 0 0 10px; line-height: 1.4; background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; word-break: break-all;">
-                Detectando aba web ativa...
-              </div>
-              <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-                <button id="btnRefreshTargetTab" class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 7px 10px; display: flex; align-items: center; justify-content: center; gap: 6px;" title="Atualizar detecção da aba web ativa">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                  Atualizar Aba
-                </button>
-                <button id="btnFocusTargetTab" class="btn btn-secondary" style="font-size: 11px; padding: 7px 10px; display: none;" title="Focar na aba web ativa">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                  Focar
-                </button>
-              </div>
-              <button id="btnRunDebugActiveTab" class="btn btn-primary" style="width: 100%; font-size: 11px; padding: 8px 10px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <!-- Controles de Depuração -->
+            <div style="display: flex; gap: 8px;">
+              <button id="btnRunDebugActiveTab" class="btn btn-primary" style="flex: 1; font-size: 11px; padding: 8px 10px; display: flex; align-items: center; justify-content: center; gap: 6px;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                Depurar na Página Ativa
+                Iniciar Depuração
+              </button>
+              <button id="btnStopDebugActiveTab" class="btn btn-secondary" style="font-size: 11px; padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #f87171; border-color: rgba(239, 68, 68, 0.3);" title="Interromper execução ativa">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                Parar
               </button>
             </div>
 
             <!-- Console de Logs em Tempo Real -->
-            <div class="debug-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; min-height: 200px;">
+            <div class="debug-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; flex: 1; min-height: 240px;">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                 <span style="font-size: 12px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-                  Console de Execução
+                  <span id="logsConsoleTitleText">Console de Execução</span>
                 </span>
                 <button id="btnClearLogs" class="btn-xs" style="background: #1e293b; border: 1px solid #334155; color: #94a3b8; padding: 3px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;">
                   Limpar Logs
                 </button>
               </div>
-              <div id="logsConsole" class="console-output" style="flex: 1; min-height: 140px; max-height: 240px; overflow-y: auto;">
-                <div class="log-entry debug">[SISTEMA] Console pronto. Clique em "Depurar" para executar na aba ativa.</div>
-              </div>
-            </div>
-
-            <!-- Variáveis de Execução (JSON) -->
-            <div class="debug-card" style="background: #111827; border: 1px solid #1f293d; border-radius: 10px; padding: 14px;">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                <span style="font-size: 12px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-                  Estado das Variáveis
-                </span>
-              </div>
-              <div id="variablesList" style="background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; max-height: 140px; overflow-y: auto;">
-                <span style="font-size: 11px; color: #64748b; font-family: var(--font-mono);">Nenhuma variável registrada ainda.</span>
+              <div id="logsConsole" class="console-output" style="flex: 1; min-height: 180px; max-height: 380px; overflow-y: auto;">
+                <div class="log-entry debug">[SISTEMA] Console pronto. Clique em "Iniciar Depuração" para executar.</div>
               </div>
             </div>
 
@@ -409,33 +370,6 @@
                 <div style="font-size: 11px; color: #64748b; text-align: center; padding: 12px 6px;">Nenhuma execução deste fluxo registrada ainda.</div>
               </div>
             </div>
-          </div>
-        </aside>
-
-        <!-- Left Sidebar: Properties Inspector (Movido para o lado esquerdo junto das outras opções) -->
-        <aside class="sidebar-inspector collapsed" id="sidebarInspector">
-          <div class="sidebar-header">
-            <div>
-              <h3>Propriedades</h3>
-              <p>Configurações do bloco selecionado</p>
-            </div>
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <button id="btnExpandInspectorModal" class="sidebar-toggle-btn" title="Expandir em tela cheia centralizada">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
-              </button>
-              <button id="btnToggleSidebarRight" class="sidebar-toggle-btn" title="Fechar Propriedades">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              </button>
-            </div>
-          </div>
-
-          <div class="tab-content active" id="tabProperties" style="display: block; flex: 1; overflow-y: auto; padding: 16px;">
-            <div id="noSelectionMessage" class="empty-state">
-              <p>Selecione um bloco no canvas para configurar seus parâmetros.</p>
-            </div>
-            <form id="nodePropertiesForm" class="node-form hidden">
-              <!-- Campos gerados dinamicamente -->
-            </form>
           </div>
         </aside>
 
@@ -592,13 +526,6 @@
                 <option value="toggle">Apenas Alternar com Duplo Toque em Shift (Dois Cliques)</option>
               </select>
               <span class="desc" style="font-size: 11px; color: #64748b; margin-top: 4px;">Permite gerar a área arrastando com Shift pressionado, alternando o modo de dois cliques ao apertar Shift duas vezes rapidamente, ou ambos simultaneamente.</span>
-            </div>
-            <div class="form-group" style="grid-column: span 2;">
-              <label class="form-check" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 8px;">
-                <input type="checkbox" id="settingsDisableSidebarEditing" style="accent-color: #6366f1;" />
-                <span style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Desativar edição de blocos na barra lateral esquerda (apenas modo expandido)</span>
-              </label>
-              <span class="desc" style="font-size: 11px; color: #64748b; margin-top: 4px;">Quando ativado, os blocos só podem ser configurados e editados pelo modal expandido. A barra lateral esquerda não exibirá campos editáveis, focando no editor expandido.</span>
             </div>
           </div>
         </section>

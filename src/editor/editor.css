@@ -1633,13 +1633,65 @@ select {
 }
 
 .log-entry {
-  line-height: 1.4;
+  line-height: 1.5;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 3px 0;
 }
 
-.log-entry.info { color: #38bdf8; }
-.log-entry.warn { color: #fbbf24; }
-.log-entry.error { color: #f87171; }
-.log-entry.debug { color: #94a3b8; }
+.log-timestamp {
+  color: #64748b;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.log-level-tag {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.log-entry.info .log-level-tag { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+.log-entry.warn .log-level-tag { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+.log-entry.error .log-level-tag { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+.log-entry.debug .log-level-tag { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+
+.log-block-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.12);
+  border: 1px solid rgba(192, 132, 252, 0.3);
+  padding: 1px 6px;
+  border-radius: 4px;
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.log-block-badge:hover {
+  background: rgba(192, 132, 252, 0.25);
+  border-color: #c084fc;
+  color: #f3e8ff;
+}
+
+.log-message-text {
+  flex: 1;
+  word-break: break-word;
+}
+
+.log-entry.info .log-message-text { color: #38bdf8; }
+.log-entry.warn .log-message-text { color: #fbbf24; }
+.log-entry.error .log-message-text { color: #f87171; }
+.log-entry.debug .log-message-text { color: #cbd5e1; }
 
 .hidden {
   display: none !important;
@@ -2714,3 +2766,65 @@ body.canvas-marquee-active * {
 
 
 
+
+
+/* ==========================================================================
+   Balão Flutuante (Tooltip Interativo e Explicativo Moderno)
+   ========================================================================== */
+.app-floating-tooltip {
+  position: fixed;
+  z-index: 9999999;
+  pointer-events: none;
+  background: rgba(11, 17, 32, 0.96);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.75), 0 0 15px rgba(99, 102, 241, 0.2);
+  padding: 10px 14px;
+  max-width: 280px;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+  transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-floating-tooltip.tooltip-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.floating-tooltip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.floating-tooltip-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.2px;
+}
+
+.floating-tooltip-shortcut {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.floating-tooltip-desc {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.4;
+  word-break: break-word;
+}

@@ -3,7 +3,7 @@
  */
 
 import { WebAutomationGraph } from '../../../../BibliotecaDeDev/src/types/schema';
-import { DEFAULT_AUTOMATION } from '../../defaultAutomation';
+import { DEFAULT_AUTOMATION, ALL_BLOCKS_TEST_AUTOMATION } from '../../defaultAutomation';
 import { DialogMenu } from './dialogUtils';
 
 export interface WorkflowTabManagerCallbacks {
@@ -17,12 +17,55 @@ export interface WorkflowTabManagerCallbacks {
 export class WorkflowTabManager {
   private savedAutomations: WebAutomationGraph[] = [];
   private openTabs: WebAutomationGraph[] = [];
-  private activeTabId: string = 'dashboard';
-  private isSettingsTabOpen = false;
-  private isDashboardTabOpen = true;
+  /**
+   * Ordem visual de todas as abas abertas (Início, fluxos e Configurações).
+   * Abas de Início usam ids com prefixo `home_`, a aba de configurações usa `settings`
+   * e as abas de fluxo usam o próprio `metadata.id` do fluxo.
+   */
+  private tabOrder: string[] = [];
+  private activeTabId: string = '';
+  private homeTabCounter = 0;
+  private preserveHomeOnNextOpen = false;
 
   constructor(private callbacks: WorkflowTabManagerCallbacks) {
+    // Ao abrir o Visual Flow, a página inicial é sempre uma aba de Início
+    const homeId = this.createHomeTabId();
+    this.tabOrder.push(homeId);
+    this.activeTabId = homeId;
     this.initTabsUI();
+  }
+
+  public static readonly HOME_TAB_PREFIX = 'home_';
+
+  public isHomeTabId(id: string | undefined): boolean {
+    return !!id && id.startsWith(WorkflowTabManager.HOME_TAB_PREFIX);
+  }
+
+  public isHomeTabActive(): boolean {
+    return this.isHomeTabId(this.activeTabId);
+  }
+
+  public getTabOrder(): string[] {
+    return [...this.tabOrder];
+  }
+
+  public getHomeTabIds(): string[] {
+    return this.tabOrder.filter((id) => this.isHomeTabId(id));
+  }
+
+  private createHomeTabId(): string {
+    this.homeTabCounter += 1;
+    return `${WorkflowTabManager.HOME_TAB_PREFIX}${this.homeTabCounter}`;
+  }
+
+  /** Insere uma nova aba logo após a aba ativa (ou no final, se não houver aba ativa). */
+  private insertTabAfterActive(id: string): void {
+    const activeIdx = this.tabOrder.indexOf(this.activeTabId);
+    if (activeIdx === -1) {
+      this.tabOrder.push(id);
+    } else {
+      this.tabOrder.splice(activeIdx + 1, 0, id);
+    }
   }
 
   public cleanFlowName(name?: string): string {
@@ -45,57 +88,84 @@ export class WorkflowTabManager {
     return this.activeTabId;
   }
 
+  /**
+   * Define a aba ativa. O valor especial `'dashboard'` significa "qualquer aba de Início":
+   * mantém a aba de Início ativa, ativa a última aba de Início existente ou cria uma nova.
+   */
   public setActiveTabId(id: string): void {
-    this.activeTabId = id;
-    this.renderTabs();
-  }
-
-  public openDashboardTab(): void {
-    this.isDashboardTabOpen = true;
-    this.activeTabId = 'dashboard';
-    this.callbacks.onViewChange('dashboard');
-    this.renderTabs();
-  }
-
-  public closeDashboardTab(): void {
-    this.isDashboardTabOpen = false;
-    if (this.activeTabId === 'dashboard') {
-      if (this.openTabs.length > 0) {
-        const next = this.openTabs[this.openTabs.length - 1];
-        this.callbacks.onOpenFlow(next);
-      } else if (this.isSettingsTabOpen) {
-        this.openSettingsTab();
+    if (id === 'dashboard') {
+      if (!this.isHomeTabActive()) {
+        const homes = this.getHomeTabIds();
+        if (homes.length > 0) {
+          this.activeTabId = homes[homes.length - 1];
+        } else {
+          const homeId = this.createHomeTabId();
+          this.insertTabAfterActive(homeId);
+          this.activeTabId = homeId;
+        }
       }
+    } else {
+      this.activeTabId = id;
     }
     this.renderTabs();
   }
 
+  /** Abre sempre uma NOVA aba de Início (comportamento do botão "+"). */
+  public openNewHomeTab(): string {
+    const homeId = this.createHomeTabId();
+    this.insertTabAfterActive(homeId);
+    this.activeTabId = homeId;
+    this.callbacks.onViewChange('dashboard');
+    this.renderTabs();
+    return homeId;
+  }
+
+  /**
+   * Ativa uma aba de Início. Sem id, mantém a aba de Início ativa ou ativa a última existente;
+   * se não houver nenhuma, cria uma nova.
+   */
+  public openDashboardTab(homeId?: string): void {
+    if (homeId && this.tabOrder.includes(homeId) && this.isHomeTabId(homeId)) {
+      this.activeTabId = homeId;
+    } else if (!this.isHomeTabActive()) {
+      const homes = this.getHomeTabIds();
+      if (homes.length > 0) {
+        this.activeTabId = homes[homes.length - 1];
+      } else {
+        const newId = this.createHomeTabId();
+        this.insertTabAfterActive(newId);
+        this.activeTabId = newId;
+      }
+    }
+    this.callbacks.onViewChange('dashboard');
+    this.renderTabs();
+  }
+
+  /** Fecha uma aba de Início (por padrão a aba de Início ativa). */
+  public closeDashboardTab(homeId?: string): void {
+    const target = homeId || (this.isHomeTabActive() ? this.activeTabId : this.getHomeTabIds().pop());
+    if (!target) return;
+    this.closeTabById(target);
+  }
+
   public openSettingsTab(): void {
-    this.isSettingsTabOpen = true;
+    if (!this.tabOrder.includes('settings')) {
+      this.insertTabAfterActive('settings');
+    }
     this.activeTabId = 'settings';
     this.callbacks.onViewChange('settings');
     this.renderTabs();
   }
 
   public closeSettingsTab(): void {
-    this.isSettingsTabOpen = false;
-    if (this.activeTabId === 'settings') {
-      if (this.openTabs.length > 0) {
-        const next = this.openTabs[this.openTabs.length - 1];
-        this.callbacks.onOpenFlow(next);
-      } else if (this.isDashboardTabOpen) {
-        this.openDashboardTab();
-      } else {
-        this.openDashboardTab();
-      }
-    }
-    this.renderTabs();
+    this.closeTabById('settings');
   }
 
   public registerOpenTab(graph: WebAutomationGraph): void {
     if (graph.metadata?.name) {
       graph.metadata.name = this.cleanFlowName(graph.metadata.name);
     }
+    const flowId = graph.metadata?.id || 'studio';
     const existing = this.openTabs.find((t) => t.metadata?.id === graph.metadata?.id);
     if (!existing) {
       this.openTabs.push(graph);
@@ -103,7 +173,18 @@ export class WorkflowTabManager {
       const idx = this.openTabs.indexOf(existing);
       this.openTabs[idx] = graph;
     }
-    this.activeTabId = graph.metadata?.id || 'studio';
+
+    if (!this.tabOrder.includes(flowId)) {
+      if (this.isHomeTabActive() && !this.preserveHomeOnNextOpen) {
+        // Assim como a "nova aba" de um navegador, a aba de Início ativa é substituída pelo fluxo aberto
+        const homeIdx = this.tabOrder.indexOf(this.activeTabId);
+        this.tabOrder.splice(homeIdx, 1, flowId);
+      } else {
+        this.insertTabAfterActive(flowId);
+      }
+    }
+
+    this.activeTabId = flowId;
     this.renderTabs();
   }
 
@@ -126,6 +207,15 @@ export class WorkflowTabManager {
     this.renderTabs();
   }
 
+  private isPageReload(): boolean {
+    try {
+      const entries = (performance?.getEntriesByType?.('navigation') || []) as PerformanceNavigationTiming[];
+      return entries.length > 0 && entries[0].type === 'reload';
+    } catch {
+      return false;
+    }
+  }
+
   public async loadFromStorage(checkUrlParam: boolean = true): Promise<void> {
     if (chrome.storage?.local) {
       const data = await chrome.storage.local.get('web_automations');
@@ -137,19 +227,38 @@ export class WorkflowTabManager {
       if (this.savedAutomations.length === 0) {
         const def = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
         def.metadata.name = this.cleanFlowName(def.metadata.name);
-        this.savedAutomations = [def];
+        const allBlocks = JSON.parse(JSON.stringify(ALL_BLOCKS_TEST_AUTOMATION));
+        allBlocks.metadata.name = this.cleanFlowName(allBlocks.metadata.name);
+        this.savedAutomations = [def, allBlocks];
+        await chrome.storage.local.set({ web_automations: this.savedAutomations });
+      } else if (!this.savedAutomations.some((a) => a.metadata.id === ALL_BLOCKS_TEST_AUTOMATION.metadata.id)) {
+        const allBlocks = JSON.parse(JSON.stringify(ALL_BLOCKS_TEST_AUTOMATION));
+        allBlocks.metadata.name = this.cleanFlowName(allBlocks.metadata.name);
+        this.savedAutomations.push(allBlocks);
         await chrome.storage.local.set({ web_automations: this.savedAutomations });
       }
     } else {
       const def = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
       def.metadata.name = this.cleanFlowName(def.metadata.name);
-      this.savedAutomations = [def];
+      const allBlocks = JSON.parse(JSON.stringify(ALL_BLOCKS_TEST_AUTOMATION));
+      allBlocks.metadata.name = this.cleanFlowName(allBlocks.metadata.name);
+      this.savedAutomations = [def, allBlocks];
     }
 
     this.renderDashboard();
     this.renderTabs();
 
     if (checkUrlParam) {
+      // Ao recarregar a página, o Visual Flow sempre volta para a aba de Início.
+      // Links explícitos (ex.: "Editar" no popup ou atalho de configurações) continuam sendo atendidos.
+      if (this.isPageReload()) {
+        if (window.location.search) {
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+        this.callbacks.onViewChange('dashboard');
+        return;
+      }
+
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab');
       if (tabParam === 'settings') {
@@ -161,7 +270,10 @@ export class WorkflowTabManager {
       if (flowId) {
         const matched = this.savedAutomations.find((a) => a.metadata?.id === flowId);
         if (matched) {
+          // Link direto: mantém a aba de Início e abre o fluxo em uma nova aba ao lado
+          this.preserveHomeOnNextOpen = true;
           this.callbacks.onOpenFlow(matched);
+          this.preserveHomeOnNextOpen = false;
           return;
         } else {
           this.callbacks.showToast('Fluxo solicitado não foi encontrado no armazenamento.', 'error');
@@ -170,110 +282,145 @@ export class WorkflowTabManager {
     }
   }
 
+  private createHomeTabElement(homeId: string): HTMLElement {
+    const homeTab = document.createElement('div');
+    const isHomeActive = this.activeTabId === homeId;
+    homeTab.className = `app-tab-item tab-home ${isHomeActive ? 'active' : ''}`;
+    homeTab.dataset.tabId = homeId;
+    homeTab.title = 'Início (Gerenciador de Fluxos)';
+    homeTab.innerHTML = `
+      <span class="tab-home-icon" style="display:inline-flex;align-items:center;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </span>
+      <span class="tab-label">Início</span>
+      <span class="app-tab-close" data-id="${homeId}" title="Fechar aba Início">✕</span>
+    `;
+
+    homeTab.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).classList.contains('app-tab-close')) return;
+      this.openDashboardTab(homeId);
+    });
+
+    homeTab.querySelector('.app-tab-close')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.closeDashboardTab(homeId);
+    });
+
+    return homeTab;
+  }
+
+  private createFlowTabElement(flow: WebAutomationGraph): HTMLElement {
+    const tabEl = document.createElement('div');
+    const isActive = this.activeTabId === flow.metadata?.id;
+    const isGhost = !!(flow as any).isGhost;
+    tabEl.className = `app-tab-item ${isActive ? 'active' : ''} ${isGhost ? 'tab-ghost' : ''}`;
+    tabEl.dataset.tabId = flow.metadata?.id || '';
+    const titleClean = this.cleanFlowName(flow.metadata?.name);
+    tabEl.title = isGhost ? `[Fantasma] ${titleClean}` : titleClean;
+
+    tabEl.innerHTML = `
+      <span class="tab-label" style="${isGhost ? 'color: #c7d2fe; display: flex; align-items: center; gap: 4px;' : ''}">${titleClean}</span>
+      <span class="app-tab-close" data-id="${flow.metadata?.id}" title="Fechar aba">✕</span>
+    `;
+
+    tabEl.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).classList.contains('app-tab-close')) return;
+      this.callbacks.onOpenFlow(flow);
+    });
+
+    tabEl.querySelector('.app-tab-close')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.closeTab(flow.metadata?.id);
+    });
+
+    return tabEl;
+  }
+
+  private createSettingsTabElement(): HTMLElement {
+    const settingsTab = document.createElement('div');
+    const isSettingsActive = this.activeTabId === 'settings';
+    settingsTab.className = `app-tab-item ${isSettingsActive ? 'active' : ''}`;
+    settingsTab.dataset.tabId = 'settings';
+    settingsTab.title = 'Configurações do Visual Flow Studio';
+    settingsTab.innerHTML = `
+      <span class="tab-label">⚙️ Configurações</span>
+      <span class="app-tab-close" data-id="settings" title="Fechar aba">✕</span>
+    `;
+
+    settingsTab.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).classList.contains('app-tab-close')) return;
+      this.openSettingsTab();
+    });
+
+    settingsTab.querySelector('.app-tab-close')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.closeSettingsTab();
+    });
+
+    return settingsTab;
+  }
+
   public renderTabs(): void {
     const container = document.getElementById('workflowTabsContainer');
     if (!container) return;
     container.innerHTML = '';
 
-    // 1. Aba Início dinâmica
-    if (this.isDashboardTabOpen) {
-      const homeTab = document.createElement('div');
-      const isHomeActive = this.activeTabId === 'dashboard';
-      homeTab.className = `app-tab-item tab-home ${isHomeActive ? 'active' : ''}`;
-      homeTab.title = 'Início (Gerenciador de Fluxos)';
-      homeTab.innerHTML = `
-        <span class="tab-home-icon" style="display:inline-flex;align-items:center;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        </span>
-        <span class="tab-label">Início</span>
-        <span class="app-tab-close" data-id="dashboard" title="Fechar aba Início">✕</span>
-      `;
-
-      homeTab.addEventListener('click', (e) => {
-        if ((e.target as HTMLElement).classList.contains('app-tab-close')) return;
-        this.openDashboardTab();
-      });
-
-      homeTab.querySelector('.app-tab-close')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.closeDashboardTab();
-      });
-
-      container.appendChild(homeTab);
-    }
-
-    // 2. Abas de Workflows Abertos
-    this.openTabs.forEach((flow) => {
-      const tabEl = document.createElement('div');
-      const isActive = this.activeTabId === flow.metadata?.id;
-      const isGhost = !!(flow as any).isGhost;
-      tabEl.className = `app-tab-item ${isActive ? 'active' : ''} ${isGhost ? 'tab-ghost' : ''}`;
-      const titleClean = this.cleanFlowName(flow.metadata?.name);
-      tabEl.title = isGhost ? `[Fantasma] ${titleClean}` : titleClean;
-
-      tabEl.innerHTML = `
-        <span class="tab-label" style="${isGhost ? 'color: #c7d2fe; display: flex; align-items: center; gap: 4px;' : ''}">${titleClean}</span>
-        <span class="app-tab-close" data-id="${flow.metadata?.id}" title="Fechar aba">✕</span>
-      `;
-
-      tabEl.addEventListener('click', (e) => {
-        if ((e.target as HTMLElement).classList.contains('app-tab-close')) return;
-        this.callbacks.onOpenFlow(flow);
-      });
-
-      tabEl.querySelector('.app-tab-close')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.closeTab(flow.metadata?.id);
-      });
-
-      container.appendChild(tabEl);
+    // Todas as abas (Início, fluxos e Configurações) seguem a mesma ordem livre — nenhuma é fixa
+    this.tabOrder.forEach((id) => {
+      if (this.isHomeTabId(id)) {
+        container.appendChild(this.createHomeTabElement(id));
+      } else if (id === 'settings') {
+        container.appendChild(this.createSettingsTabElement());
+      } else {
+        const flow = this.openTabs.find((t) => t.metadata?.id === id);
+        if (flow) container.appendChild(this.createFlowTabElement(flow));
+      }
     });
+  }
 
-    // 3. Aba de Configurações interna do Visual Flow
-    if (this.isSettingsTabOpen) {
-      const settingsTab = document.createElement('div');
-      const isSettingsActive = this.activeTabId === 'settings';
-      settingsTab.className = `app-tab-item ${isSettingsActive ? 'active' : ''}`;
-      settingsTab.title = 'Configurações do Visual Flow Studio';
-      settingsTab.innerHTML = `
-        <span class="tab-label">⚙️ Configurações</span>
-        <span class="app-tab-close" data-id="settings" title="Fechar aba">✕</span>
-      `;
-
-      settingsTab.addEventListener('click', (e) => {
-        if ((e.target as HTMLElement).classList.contains('app-tab-close')) return;
-        this.openSettingsTab();
-      });
-
-      settingsTab.querySelector('.app-tab-close')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.closeSettingsTab();
-      });
-
-      container.appendChild(settingsTab);
+  /** Ativa a aba indicada disparando a troca de visão correspondente. */
+  private activateTab(id: string): void {
+    if (this.isHomeTabId(id)) {
+      this.openDashboardTab(id);
+    } else if (id === 'settings') {
+      this.openSettingsTab();
+    } else {
+      const flow = this.openTabs.find((t) => t.metadata?.id === id);
+      if (flow) this.callbacks.onOpenFlow(flow);
     }
   }
 
-  public closeTab(flowId: string): void {
-    const idx = this.openTabs.findIndex((t) => t.metadata?.id === flowId);
-    if (idx === -1) return;
+  /**
+   * Fecha qualquer aba pelo id. Se a aba fechada era a ativa, ativa a vizinha.
+   * Se todas as abas forem fechadas, uma nova aba de Início é aberta automaticamente.
+   */
+  private closeTabById(id: string): void {
+    const orderIdx = this.tabOrder.indexOf(id);
+    if (orderIdx === -1) return;
 
-    this.openTabs.splice(idx, 1);
+    this.tabOrder.splice(orderIdx, 1);
+    if (!this.isHomeTabId(id) && id !== 'settings') {
+      const flowIdx = this.openTabs.findIndex((t) => t.metadata?.id === id);
+      if (flowIdx >= 0) this.openTabs.splice(flowIdx, 1);
+    }
 
-    if (this.activeTabId === flowId) {
-      if (this.openTabs.length > 0) {
-        const nextFlow = this.openTabs[Math.max(0, idx - 1)];
-        this.callbacks.onOpenFlow(nextFlow);
-      } else if (this.isDashboardTabOpen) {
-        this.openDashboardTab();
-      } else if (this.isSettingsTabOpen) {
-        this.openSettingsTab();
-      } else {
-        this.openDashboardTab();
-      }
+    if (this.tabOrder.length === 0) {
+      this.activeTabId = '';
+      this.openNewHomeTab();
+      return;
+    }
+
+    if (this.activeTabId === id) {
+      const nextId = this.tabOrder[Math.max(0, orderIdx - 1)];
+      this.activateTab(nextId);
     }
 
     this.renderTabs();
+  }
+
+  public closeTab(flowId: string): void {
+    if (!this.openTabs.some((t) => t.metadata?.id === flowId)) return;
+    this.closeTabById(flowId);
   }
 
   public renderDashboard(filterQuery: string = ''): void {

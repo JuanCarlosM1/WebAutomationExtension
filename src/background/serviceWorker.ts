@@ -672,7 +672,14 @@ class ExtensionController {
       initialVariables,
       finalVariables: ctx.state ? ctx.state.getAll() : {},
       blockSnapshots,
-      logs: ctx.logs || [],
+      logs: (ctx.logs || []).map((l) => ({
+        timestamp: l.timestamp || Date.now(),
+        level: l.level || 'info',
+        message: l.message || '',
+        nodeId: l.nodeId,
+        nodeTitle: l.nodeTitle,
+        nodeDescription: l.nodeDescription,
+      })),
     };
 
     // Salvar e propagar para UI (Dashboard e Studio)

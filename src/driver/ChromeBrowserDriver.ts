@@ -8,6 +8,8 @@ import { SafeJsEvaluator } from '../utils/safeJsEvaluator';
 export class ChromeBrowserDriver implements IBrowserDriver {
   private activeTabId?: number;
 
+  private scriptCounter: number = 0;
+
   constructor(initialTabId?: number) {
     this.activeTabId = initialTabId;
   }
@@ -18,12 +20,16 @@ export class ChromeBrowserDriver implements IBrowserDriver {
 
   private isStudioPage(url?: string): boolean {
     if (!url) return false;
+    const isExtensionUrl = url.startsWith('chrome-extension://') || url.startsWith('moz-extension://');
+    if (!isExtensionUrl) return false;
     return url.includes('editor.html') || url.includes('settings.html') || url.includes('analyzer.html');
   }
 
   private isRestrictedTab(tab?: chrome.tabs.Tab | null): boolean {
-    if (!tab?.url) return false;
+    if (!tab?.url) return true;
     return (
+      tab.url === 'about:blank' ||
+      tab.url.startsWith('about:') ||
       tab.url.startsWith('chrome-extension://') ||
       tab.url.startsWith('chrome://') ||
       tab.url.startsWith('edge://') ||
@@ -71,7 +77,7 @@ export class ChromeBrowserDriver implements IBrowserDriver {
     }
 
     if (chrome.tabs?.create) {
-      const newTab = await chrome.tabs.create({ url: 'about:blank', active: false });
+      const newTab = await chrome.tabs.create({ url: 'https://example.com', active: false });
       this.activeTabId = newTab.id!;
       return newTab.id!;
     }
@@ -528,46 +534,288 @@ export class ChromeBrowserDriver implements IBrowserDriver {
     return res?.result || [];
   }
 
-  public async injectScript(code: string, context: 'content_script' | 'background', args: any[] = []): Promise<any> {
+  public async injectScript(
+    code: string,
+    context: 'content_script' | 'background',
+    args: any[] = [],
+    vars: Record<string, any> = {}
+  ): Promise<any> {
+    const serializeFunctions = (data: any): any => {
+      if (typeof data === 'function') {
+        return {
+          __wa_func: true,
+          name: data.name || '',
+          code: data.toString(),
+        };
+      }
+      if (typeof Element !== 'undefined' && data instanceof Element) {
+        return {
+          tagName: data.tagName,
+          id: data.id,
+          className: data.className,
+          textContent: data.textContent?.slice(0, 500) || '',
+        };
+      }
+      if (Array.isArray(data)) {
+        return data.map(serializeFunctions);
+      }
+      if (data && typeof data === 'object') {
+        const out: Record<string, any> = {};
+        for (const [k, v] of Object.entries(data)) {
+          out[k] = serializeFunctions(v);
+        }
+        return out;
+      }
+      return data;
+    };
+
+    const deserializeFunctions = (data: any): any => {
+      if (data && typeof data === 'object' && data.__wa_func && data.code) {
+        try {
+          const trimmed = data.code.trim();
+          return new Function(`return (${trimmed});`)();
+        } catch {
+          return data;
+        }
+      }
+      if (Array.isArray(data)) {
+        return data.map(deserializeFunctions);
+      }
+      if (data && typeof data === 'object') {
+        const out: Record<string, any> = {};
+        for (const [k, v] of Object.entries(data)) {
+          out[k] = deserializeFunctions(v);
+        }
+        return out;
+      }
+      return data;
+    };
+
+    const createScopeVars = (dArgs: any[], dVars: Record<string, any>) => {
+      const scopeVars: Record<string, any> = {
+        args: dArgs,
+        $args: dArgs,
+        $vars: dVars,
+        chrome: undefined,
+        browser: undefined,
+        document: typeof document !== 'undefined' ? document : undefined,
+      };
+      if (Array.isArray(dArgs)) {
+        dArgs.forEach((val, idx) => {
+          scopeVars[`arg${idx}`] = val;
+        });
+      }
+      return scopeVars;
+    };
+
     if (context === 'background') {
-      const fn = new Function(...args.map((_, i) => `arg${i}`), code);
-      return fn(...args);
+      const deserializedArgs = deserializeFunctions(serializeFunctions(args));
+      const deserializedVars = deserializeFunctions(serializeFunctions(vars));
+      const evalRes = SafeJsEvaluator.evaluate(
+        `"use strict"; return (function(args, $args, $vars, window, globalThis, parent, top) {\n${code}\n})(args, $args, $vars, undefined, undefined, undefined, undefined);`,
+        createScopeVars(deserializedArgs, deserializedVars),
+        true
+      );
+      return evalRes !== undefined ? deserializeFunctions(evalRes) : { success: true, executed: true };
     }
 
     const tabId = await this.getTargetTabId();
-    const tab = await chrome.tabs.get(tabId).catch(() => null);
-    const isExtensionPage = !tab?.url || this.isRestrictedTab(tab);
+    const scriptId = `script${String(this.scriptCounter++).padStart(3, '0')}`;
+    const serializedArgs = serializeFunctions(args);
+    const serializedVars = serializeFunctions(vars);
 
-    if (isExtensionPage) {
-      const evalRes = SafeJsEvaluator.evaluate(`(function(args, $args) {\n${code}\n})(args, args)`, {
-        args,
-        $args: args,
-        chrome: undefined,
-        browser: undefined,
-      });
-      return evalRes !== undefined ? evalRes : { success: true, executed: true };
+    // 1. Tenta enviar para o contentDriver ativo na aba
+    if (chrome.tabs?.sendMessage) {
+      try {
+        const resp = await new Promise<any>((resolve, reject) => {
+          chrome.tabs.sendMessage(
+            tabId,
+            { action: 'INJECT_SCRIPT', payload: { code, args: serializedArgs, vars: serializedVars, scriptId } },
+            (response) => {
+              if (chrome.runtime?.lastError) {
+                return reject(new Error(chrome.runtime.lastError.message));
+              }
+              resolve(response);
+            }
+          );
+        });
+        if (resp?.success && resp.data) {
+          return deserializeFunctions(resp.data.result !== undefined ? resp.data.result : { success: true, executed: true });
+        }
+      } catch {
+        // Fallback para scripting.executeScript se o content script ainda não estiver ativo
+      }
     }
 
-    // Injeta e executa diretamente os códigos JS escritos pelo usuário na página web (world: MAIN)
+    // 2. Injeção direta e execução no contexto da página alvo via executeScript
     const [result] = await chrome.scripting.executeScript({
       target: { tabId },
-      world: 'MAIN',
-      func: (scriptCode: string, scriptArgs: any[]) => {
+      func: (
+        scriptCode: string,
+        userArgs: any[],
+        userVars: Record<string, any>,
+        targetScriptId: string
+      ) => {
         try {
-          const fn = new Function('args', scriptCode);
-          return fn(scriptArgs);
+          const targetParent = document.head || document.documentElement || document.body;
+
+          // Cria a tag <script> real no DOM da página com proteção de CSP para Manifest V3
+          let scriptEl = document.getElementById(targetScriptId) as HTMLScriptElement | null;
+          if (!scriptEl) {
+            scriptEl = document.createElement('script');
+            scriptEl.id = targetScriptId;
+
+            const isExt = typeof window !== 'undefined' &&
+              (window.location.protocol === 'chrome-extension:' || window.location.protocol === 'moz-extension:');
+            const docNonce = typeof document !== 'undefined'
+              ? (document.querySelector('script[nonce]')?.getAttribute('nonce') || (document.currentScript as any)?.nonce)
+              : undefined;
+
+            if (docNonce) {
+              scriptEl.setAttribute('nonce', docNonce);
+              scriptEl.nonce = docNonce;
+              scriptEl.type = 'text/javascript';
+            } else if (isExt) {
+              scriptEl.type = 'text/plain';
+              scriptEl.setAttribute('data-script-type', 'javascript');
+            } else {
+              scriptEl.type = 'text/javascript';
+            }
+
+            scriptEl.className = `wa-injected-script ${targetScriptId}`;
+            scriptEl.setAttribute('data-script-id', targetScriptId);
+            scriptEl.setAttribute('data-injected-at', new Date().toISOString());
+            scriptEl.setAttribute('data-wa-stage', 'executing');
+
+            scriptEl.textContent =
+              `/* WebAutomations Injected Block: ${targetScriptId} */\n` +
+              `try {\n` +
+              `  (function(args, $args, $vars, window, globalThis, parent, top) {\n` +
+              `    "use strict";\n` +
+              `    ${scriptCode}\n` +
+              `  })(${JSON.stringify(userArgs)}, ${JSON.stringify(userArgs)}, ${JSON.stringify(userVars)}, undefined, undefined, undefined, undefined);\n` +
+              `} catch(e) {}\n`;
+
+            if (targetParent) {
+              try {
+                targetParent.appendChild(scriptEl);
+              } catch {
+                scriptEl.type = 'text/plain';
+                targetParent.appendChild(scriptEl);
+              }
+            }
+          }
+
+          // Deserializa funções passadas por outros blocos via args/$vars
+          const deserialize = (val: any): any => {
+            if (val && typeof val === 'object' && val.__wa_func && val.code) {
+              try {
+                return new Function(`return (${val.code.trim()});`)();
+              } catch {
+                return val;
+              }
+            }
+            if (Array.isArray(val)) return val.map(deserialize);
+            if (val && typeof val === 'object') {
+              const o: Record<string, any> = {};
+              for (const [k, v] of Object.entries(val)) {
+                o[k] = deserialize(v);
+              }
+              return o;
+            }
+            return val;
+          };
+
+          // Executa no contexto da página com document real e window isolado (undefined)
+          const scopeArgs = deserialize(Array.isArray(userArgs) ? userArgs : []);
+          const scopeVars = deserialize(userVars || {});
+
+          const fn = new Function(
+            'args', '$args', '$vars', 'window', 'globalThis', 'parent', 'top', 'document',
+            `"use strict";\n${scriptCode}`
+          );
+
+          const evalResult = fn(
+            scopeArgs,
+            scopeArgs,
+            scopeVars,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            document
+          );
+
+          if (scriptEl) {
+            scriptEl.setAttribute('data-wa-stage', 'executed');
+          }
+
+          // Serializa funções e elementos para retorno à automação
+          const serialize = (val: any): any => {
+            if (typeof val === 'function') {
+              return { __wa_func: true, name: val.name || '', code: val.toString() };
+            }
+            if (typeof Element !== 'undefined' && val instanceof Element) {
+              return {
+                tagName: val.tagName,
+                id: val.id,
+                className: val.className,
+                textContent: val.textContent?.slice(0, 500) || '',
+              };
+            }
+            if (Array.isArray(val)) return val.map(serialize);
+            if (val && typeof val === 'object') {
+              const o: Record<string, any> = {};
+              for (const [k, v] of Object.entries(val)) {
+                o[k] = serialize(v);
+              }
+              return o;
+            }
+            return val;
+          };
+
+          return { success: true, result: serialize(evalResult) };
         } catch (err: any) {
-          return { __isError: true, message: err?.message || String(err), stack: err?.stack };
+          const s = document.getElementById(targetScriptId);
+          if (s) {
+            s.setAttribute('data-wa-stage', 'error');
+            s.setAttribute('data-error', err?.message || String(err));
+          }
+          return { __isError: true, message: err?.message || String(err) };
         }
       },
-      args: [code, args],
+      args: [code, serializedArgs, serializedVars, scriptId],
     });
 
     const res = result?.result;
     if (res && (res as any).__isError) {
       throw new Error((res as any).message);
     }
-    return res;
+
+    if (res && (res as any).result !== undefined) {
+      return deserializeFunctions((res as any).result);
+    }
+
+    const deserializedArgs = deserializeFunctions(serializedArgs);
+    const deserializedVars = deserializeFunctions(serializedVars);
+    try {
+      const evalRes = SafeJsEvaluator.evaluate(
+        `"use strict"; return (function(args, $args, $vars, window, globalThis, parent, top) {\n${code}\n})(args, $args, $vars, undefined, undefined, undefined, undefined);`,
+        createScopeVars(deserializedArgs, deserializedVars),
+        true
+      );
+
+      return evalRes !== undefined ? deserializeFunctions(evalRes) : { success: true, executed: true };
+    } catch (err: any) {
+      if (typeof document !== 'undefined') {
+        const lastScript = document.querySelector('script.wa-injected-script:last-of-type') || document.querySelector('script[data-wa-stage="executed"]:last-of-type');
+        if (lastScript) {
+          lastScript.setAttribute('data-wa-stage', 'error');
+          lastScript.setAttribute('data-error', err?.message || String(err));
+        }
+      }
+      throw err;
+    }
   }
 
   public async injectHtml(html: string, targetSelector: string, position: string, selectorType?: 'css' | 'xpath'): Promise<void> {

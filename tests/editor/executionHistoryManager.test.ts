@@ -119,6 +119,23 @@ describe('ExecutionHistoryManager', () => {
       expect(fakeStorage.web_automations_history).toHaveLength(100);
       expect(fakeStorage.web_automations_history[0].id).toBe('item_101');
     });
+
+    it('preserva integralmente a lista de logs com níveis, timestamps e títulos dos blocos', async () => {
+      const logs = [
+        { timestamp: 1000, level: 'info', message: 'Iniciando fluxo' },
+        { timestamp: 1050, level: 'debug', message: 'Executando nó', nodeId: 'node_1', nodeTitle: 'Início', nodeDescription: 'Ponto de partida' },
+        { timestamp: 1100, level: 'error', message: 'Falha na execução: Element is not defined', nodeId: 'node_js', nodeTitle: 'Injetar JS' },
+      ];
+      const itemWithLogs = createMockItem({ id: 'run_with_logs', logs });
+      await ExecutionHistoryManager.save(itemWithLogs);
+
+      const saved = await ExecutionHistoryManager.getById('run_with_logs');
+      expect(saved).toBeDefined();
+      expect(saved?.logs).toHaveLength(3);
+      expect(saved?.logs[0].level).toBe('info');
+      expect(saved?.logs[1].nodeTitle).toBe('Início');
+      expect(saved?.logs[2].message).toBe('Falha na execução: Element is not defined');
+    });
   });
 
   describe('delete, clearAll e clearForAutomation', () => {

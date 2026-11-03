@@ -10012,6 +10012,255 @@ var DEFAULT_AUTOMATION = {
   ],
   viewport: { x: 0, y: 0, zoom: 1 }
 };
+var ALL_BLOCKS_TEST_AUTOMATION = {
+  schemaVersion: "1.0.0",
+  metadata: {
+    id: "auto_test_all_blocks_showcase",
+    name: "Teste de Todos os Blocos",
+    description: "Fluxo completo de teste contendo todos os 27 tipos de blocos dispon\xEDveis no cat\xE1logo.",
+    version: "1.0.0",
+    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    tags: ["teste", "completo", "todos-os-blocos", "catalogo"]
+  },
+  settings: {
+    stopOnError: false,
+    defaultTimeoutMs: 1e4,
+    logLevel: "debug",
+    parallelBranchesEnabled: false
+  },
+  variables: {
+    contador: 5,
+    urlTeste: "https://example.com",
+    termoBusca: "Automa\xE7\xE3o Web",
+    resultadoExtraido: "",
+    itensLista: []
+  },
+  nodes: [
+    {
+      id: "node_start",
+      type: "start",
+      category: "flow_logic",
+      position: { x: 40, y: 80 },
+      data: { label: "1. In\xEDcio", triggerType: "manual" }
+    },
+    {
+      id: "node_note",
+      type: "note",
+      category: "flow_logic",
+      position: { x: 40, y: 220 },
+      data: { label: "Nota Informativa", noteText: "Fluxo contendo todos os 27 blocos do sistema para testes e valida\xE7\xE3o." }
+    },
+    {
+      id: "node_set_var",
+      type: "set_variable",
+      category: "data_network",
+      position: { x: 260, y: 80 },
+      data: { label: "2. Definir Vari\xE1vel", varName: "contador", evaluationType: "literal", valueExpression: "5" }
+    },
+    {
+      id: "node_delay",
+      type: "delay",
+      category: "flow_logic",
+      position: { x: 480, y: 80 },
+      data: { label: "3. Aguardar (Delay)", durationMs: 500 }
+    },
+    {
+      id: "node_navigate",
+      type: "navigate",
+      category: "browser_navigation",
+      position: { x: 700, y: 80 },
+      data: { label: "4. Navegar", url: "https://example.com", waitUntil: "domcontentloaded", timeoutMs: 1e4 }
+    },
+    {
+      id: "node_tab_action",
+      type: "tab_action",
+      category: "browser_navigation",
+      position: { x: 920, y: 80 },
+      data: { label: "5. A\xE7\xE3o de Aba", action: "query_tab", active: true, queryType: "url", queryValue: "example.com" }
+    },
+    {
+      id: "node_history_nav",
+      type: "history_navigation",
+      category: "browser_navigation",
+      position: { x: 1140, y: 80 },
+      data: { label: "6. Hist\xF3rico Navegador", action: "reload" }
+    },
+    {
+      id: "node_inject_html",
+      type: "inject_html",
+      category: "injection_customization",
+      position: { x: 1140, y: 240 },
+      data: {
+        label: "7. Injetar HTML",
+        html: '<div id="test-sandbox" style="padding:10px;background:#1e293b;color:#fff;"><button id="test-btn">Clique Teste</button><input id="test-input" placeholder="Digite aqui" /></div>',
+        targetSelector: "body",
+        position: "beforeend"
+      }
+    },
+    {
+      id: "node_inject_css",
+      type: "inject_css",
+      category: "injection_customization",
+      position: { x: 920, y: 240 },
+      data: { label: "8. Injetar CSS", css: "#test-sandbox { border: 2px solid #6366f1; border-radius: 8px; }" }
+    },
+    {
+      id: "node_inject_js",
+      type: "inject_javascript",
+      category: "injection_customization",
+      position: { x: 700, y: 240 },
+      data: { label: "9. Injetar JS", code: 'console.log("Teste WebAutomations executando com sucesso!"); return { ok: true };' }
+    },
+    {
+      id: "node_web_component",
+      type: "web_component",
+      category: "injection_customization",
+      position: { x: 480, y: 240 },
+      data: { label: "10. Web Component", tagName: "custom-automation-widget", template: "<div>Widget Ativo</div>" }
+    },
+    {
+      id: "node_wait_el",
+      type: "wait_for_element",
+      category: "dom_interaction",
+      position: { x: 260, y: 240 },
+      data: { label: "11. Esperar Elemento", selector: "body", selectorType: "css", state: "visible", timeoutMs: 5e3 }
+    },
+    {
+      id: "node_hover",
+      type: "hover_focus",
+      category: "dom_interaction",
+      position: { x: 40, y: 400 },
+      data: { label: "12. Foco / Hover", selector: "h1", selectorType: "css", action: "hover", timeoutMs: 3e3 }
+    },
+    {
+      id: "node_type_input",
+      type: "type_input",
+      category: "dom_interaction",
+      position: { x: 260, y: 400 },
+      data: { label: "13. Digitar Input", selector: "input", selectorType: "css", text: "Teste de Digita\xE7\xE3o", mode: "instant", timeoutMs: 3e3 }
+    },
+    {
+      id: "node_press_key",
+      type: "press_key",
+      category: "dom_interaction",
+      position: { x: 480, y: 400 },
+      data: { label: "14. Pressionar Tecla", key: "Enter", selector: "body", selectorType: "css" }
+    },
+    {
+      id: "node_click",
+      type: "click_element",
+      category: "dom_interaction",
+      position: { x: 700, y: 400 },
+      data: { label: "15. Clicar Elemento", selector: "a, button", selectorType: "css", clickType: "single", timeoutMs: 3e3 }
+    },
+    {
+      id: "node_scroll",
+      type: "scroll",
+      category: "dom_interaction",
+      position: { x: 920, y: 400 },
+      data: { label: "16. Rolar P\xE1gina", target: "bottom", deltaY: 300, smooth: true }
+    },
+    {
+      id: "node_extract",
+      type: "extract_data",
+      category: "data_network",
+      position: { x: 1140, y: 400 },
+      data: { label: "17. Extrair Dados", selector: "h1", selectorType: "css", extractType: "innerText", saveToVar: "resultadoExtraido" }
+    },
+    {
+      id: "node_scrape_list",
+      type: "scrape_list",
+      category: "data_network",
+      position: { x: 1140, y: 560 },
+      data: { label: "18. Scrape de Lista", selector: "p", selectorType: "css", fields: [{ name: "texto", subSelector: "", extractType: "innerText", attributeName: "" }], saveToVar: "itensLista", maxItems: 10 }
+    },
+    {
+      id: "node_http_request",
+      type: "http_request",
+      category: "data_network",
+      position: { x: 920, y: 560 },
+      data: { label: "19. Requisi\xE7\xE3o HTTP", url: "https://httpbin.org/get", method: "GET", responseType: "json", saveResponseToVar: "httpResp" }
+    },
+    {
+      id: "node_export_file",
+      type: "export_file",
+      category: "data_network",
+      position: { x: 700, y: 560 },
+      data: { label: "20. Exportar Arquivo", format: "json", fileName: "dados_teste.json", dataExpression: "{{itensLista}}" }
+    },
+    {
+      id: "node_if_exists",
+      type: "if_element_exists",
+      category: "flow_logic",
+      position: { x: 480, y: 560 },
+      data: { label: "21. Elemento Existe?", selector: "h1", selectorType: "css", timeoutMs: 2e3 }
+    },
+    {
+      id: "node_switch",
+      type: "switch",
+      category: "flow_logic",
+      position: { x: 260, y: 560 },
+      data: { label: "22. Switch Condicional", expression: "{{contador}}", cases: [{ value: "5", label: "Caso 5" }, { value: "10", label: "Caso 10" }], defaultCaseEnabled: true }
+    },
+    {
+      id: "node_for_loop",
+      type: "for_loop",
+      category: "flow_logic",
+      position: { x: 40, y: 560 },
+      data: { label: "23. Loop For", loopType: "count", countExpression: 3, itemVarName: "i", indexVarName: "idx", maxIterations: 10 }
+    },
+    {
+      id: "node_while_loop",
+      type: "while_loop",
+      category: "flow_logic",
+      position: { x: 40, y: 720 },
+      data: { label: "24. Loop While", conditionExpression: "{{contador}} < 3", maxIterations: 5 }
+    },
+    {
+      id: "node_try_catch",
+      type: "try_catch",
+      category: "flow_logic",
+      position: { x: 260, y: 720 },
+      data: { label: "25. Try / Catch", continueOnCatch: true, saveErrorToVar: "ultimoErro" }
+    },
+    {
+      id: "node_group",
+      type: "group",
+      category: "flow_logic",
+      position: { x: 480, y: 720 },
+      data: { label: "26. Grupo de A\xE7\xF5es", collapsed: false, color: "#3b82f6" }
+    }
+  ],
+  edges: [
+    { id: "e1", source: "node_start", target: "node_set_var" },
+    { id: "e2", source: "node_set_var", target: "node_delay" },
+    { id: "e3", source: "node_delay", target: "node_navigate" },
+    { id: "e4", source: "node_navigate", target: "node_tab_action" },
+    { id: "e5", source: "node_tab_action", target: "node_history_nav" },
+    { id: "e6", source: "node_history_nav", target: "node_inject_html" },
+    { id: "e7", source: "node_inject_html", target: "node_inject_css" },
+    { id: "e8", source: "node_inject_css", target: "node_inject_js" },
+    { id: "e9", source: "node_inject_js", target: "node_web_component" },
+    { id: "e10", source: "node_web_component", target: "node_wait_el" },
+    { id: "e11", source: "node_wait_el", target: "node_hover" },
+    { id: "e12", source: "node_hover", target: "node_type_input" },
+    { id: "e13", source: "node_type_input", target: "node_press_key" },
+    { id: "e14", source: "node_press_key", target: "node_click" },
+    { id: "e15", source: "node_click", target: "node_scroll" },
+    { id: "e16", source: "node_scroll", target: "node_extract" },
+    { id: "e17", source: "node_extract", target: "node_scrape_list" },
+    { id: "e18", source: "node_scrape_list", target: "node_http_request" },
+    { id: "e19", source: "node_http_request", target: "node_export_file" },
+    { id: "e20", source: "node_export_file", target: "node_if_exists" },
+    { id: "e21", source: "node_if_exists", target: "node_switch" },
+    { id: "e22", source: "node_switch", target: "node_for_loop" },
+    { id: "e23", source: "node_for_loop", target: "node_while_loop" },
+    { id: "e24", source: "node_while_loop", target: "node_try_catch" },
+    { id: "e25", source: "node_try_catch", target: "node_group" }
+  ],
+  viewport: { x: 0, y: 0, zoom: 0.8 }
+};
 
 // node_modules/buble/dist/buble-browser.es.js
 var import_acorn = __toESM(require_acorn());
@@ -27482,14 +27731,6 @@ var InspectorManager = class {
       return;
     }
     if (selectedIds.length > 1) {
-      if (sidebarRight)
-        sidebarRight.classList.remove("collapsed");
-      if (sidebarLeft)
-        sidebarLeft.classList.add("collapsed");
-      btnActivityBlocks?.classList.remove("active");
-      btnActivityInspector?.classList.add("active");
-      if (resizerLeft)
-        resizerLeft.style.display = "block";
       noSelect.classList.add("hidden");
       form.classList.remove("hidden");
       this.renderMultiSelectionInspector(form, selectedIds);
@@ -27503,8 +27744,6 @@ var InspectorManager = class {
     if (!selectedId) {
       noSelect.classList.remove("hidden");
       form.classList.add("hidden");
-      if (resizerLeft)
-        resizerLeft.style.display = "block";
       if (this.pendingScrollSelector) {
         const sel = this.pendingScrollSelector;
         this.pendingScrollSelector = void 0;
@@ -27516,8 +27755,6 @@ var InspectorManager = class {
     if (!node) {
       noSelect.classList.remove("hidden");
       form.classList.add("hidden");
-      if (resizerLeft)
-        resizerLeft.style.display = "block";
       if (this.pendingScrollSelector) {
         const sel = this.pendingScrollSelector;
         this.pendingScrollSelector = void 0;
@@ -27531,14 +27768,6 @@ var InspectorManager = class {
       }
       return;
     }
-    if (sidebarRight)
-      sidebarRight.classList.remove("collapsed");
-    if (sidebarLeft)
-      sidebarLeft.classList.add("collapsed");
-    btnActivityBlocks?.classList.remove("active");
-    btnActivityInspector?.classList.add("active");
-    if (resizerLeft)
-      resizerLeft.style.display = "block";
     noSelect.classList.add("hidden");
     form.classList.remove("hidden");
     if (this.isGhostMode) {
@@ -28188,39 +28417,39 @@ var InspectorManager = class {
       const outputData = snap?.outputData !== void 0 ? snap.outputData : null;
       const jsonStr2 = outputData !== null ? JSON.stringify(outputData, null, 2) : "";
       const panel2 = document.createElement("div");
-      panel2.style.cssText = "display: flex; flex-direction: column; gap: 12px;";
+      panel2.style.cssText = "display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box;";
       panel2.innerHTML = `
-        <div style="background: #090e18; border: 1px solid #1e293b; border-left: 3px solid ${statusColor}; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="background: #090e18; border: 1px solid #1e293b; border-left: 3px solid ${statusColor}; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; width: 100%; box-sizing: border-box;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
             <span style="font-size: 11px; font-weight: 700; color: #818cf8;">Auditoria Fantasma</span>
-            <span style="font-size: 10px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; border: 1px solid ${statusColor}44; padding: 2px 7px; border-radius: 4px;">
+            <span style="align-self: flex-start; font-size: 10px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; border: 1px solid ${statusColor}44; padding: 2px 7px; border-radius: 4px;">
               ${statusLabel}
             </span>
           </div>
 
-          <div style="font-size: 11px; color: #94a3b8;">
+          <div style="font-size: 11px; color: #94a3b8; word-break: break-word;">
             Dura\xE7\xE3o: <strong style="color: #f1f5f9;">${durationText}</strong> \u2022 Bloco: <span style="color: #38bdf8;">${nodeLabel}</span>
           </div>
 
           ${snap?.error ? `
-            <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 10px; font-size: 11px; color: #fca5a5; font-family: monospace; word-break: break-all;">
+            <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 8px; font-size: 11px; color: #fca5a5; font-family: monospace; word-break: break-all;">
               \u2715 Erro: ${snap.error}
             </div>
           ` : ""}
         </div>
 
-        <div style="background: #090e18; border: 1px solid #1e293b; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="background: #090e18; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; width: 100%; box-sizing: border-box;">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
             <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Dados Produzidos ($output):</label>
-            ${jsonStr2 ? `<button type="button" id="btnCopyGhostOutput" class="btn btn-secondary" style="font-size: 10px; padding: 3px 8px;">\u{1F4CB} Copiar JSON</button>` : ""}
+            ${jsonStr2 ? `<button type="button" id="btnCopyGhostOutput" class="btn btn-secondary" style="width: 100%; font-size: 11px; padding: 6px 10px; display: flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box;">\u{1F4CB} Copiar JSON</button>` : ""}
           </div>
 
           ${jsonStr2 ? `
             <pre style="
-              width: 100%; box-sizing: border-box; max-height: 380px; overflow-y: auto; font-family: monospace; font-size: 11px; background: #080c14; color: #86efac; border: 1px solid #166534; border-radius: 6px; padding: 12px; line-height: 1.4; margin: 0;
+              width: 100%; box-sizing: border-box; max-height: 380px; overflow-y: auto; overflow-x: auto; font-family: monospace; font-size: 11px; background: #080c14; color: #86efac; border: 1px solid #166534; border-radius: 6px; padding: 10px; line-height: 1.4; margin: 0; white-space: pre-wrap; word-break: break-all;
             ">${jsonStr2}</pre>
           ` : `
-            <div style="font-size: 11px; color: #64748b; font-style: italic; padding: 12px 6px; text-align: center;">
+            <div style="font-size: 11px; color: #64748b; font-style: italic; padding: 8px 4px; text-align: center;">
               Nenhum dado de sa\xEDda foi gerado por este bloco nesta execu\xE7\xE3o.
             </div>
           `}
@@ -28237,14 +28466,14 @@ var InspectorManager = class {
     const isMockEnabled = !!node.data.useMockOutput;
     const hasRuntimeData = outputResult.source === "runtime";
     const panel = document.createElement("div");
-    panel.style.cssText = "max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px;";
+    panel.style.cssText = "width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;";
     let badgeHtml = "";
     if (outputResult.source === "runtime") {
-      badgeHtml = `<span style="font-size: 10px; background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 2px 8px; border-radius: 4px; font-weight: 600;">\u{1F7E2} Execu\xE7\xE3o Real</span>`;
+      badgeHtml = `<span style="font-size: 10px; background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 2px 7px; border-radius: 4px; font-weight: 600;">\u{1F7E2} Execu\xE7\xE3o Real</span>`;
     } else if (outputResult.source === "mock") {
-      badgeHtml = `<span style="font-size: 10px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; padding: 2px 8px; border-radius: 4px; font-weight: 600;">\u{1F7E1} Dados Simulados (Mock)</span>`;
+      badgeHtml = `<span style="font-size: 10px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; padding: 2px 7px; border-radius: 4px; font-weight: 600;">\u{1F7E1} Dados Simulados (Mock)</span>`;
     } else {
-      badgeHtml = `<span style="font-size: 10px; background: rgba(148, 163, 184, 0.15); color: #94a3b8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">\u26AA N\xE3o Executado (Sem Dados)</span>`;
+      badgeHtml = `<span style="font-size: 10px; background: rgba(148, 163, 184, 0.15); color: #94a3b8; padding: 2px 7px; border-radius: 4px; font-weight: 600;">\u26AA N\xE3o Executado (Sem Dados)</span>`;
     }
     let currentDataToDisplay = outputResult.data;
     if (isMockEnabled && node.data.outputData !== void 0) {
@@ -28254,73 +28483,67 @@ var InspectorManager = class {
     }
     const jsonStr = currentDataToDisplay ? JSON.stringify(currentDataToDisplay, null, 2) : "";
     panel.innerHTML = `
-      <div style="background: #090e18; border: 1px solid #1e293b; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 14px;">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 13px; font-weight: 700; color: #f8fafc;">Dados Produzidos por Este Bloco ($output)</span>
+      <div style="background: #090e18; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; width: 100%; box-sizing: border-box;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 12px; font-weight: 700; color: #f8fafc; word-break: break-word;">Dados Produzidos ($output)</span>
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
             ${badgeHtml}
           </div>
-          <button type="button" id="btnCopyNodeExpr" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">
-            \u{1F4CB} Copiar {{ $node["${nodeLabel}"].json }}
-          </button>
         </div>
 
-        <div style="font-size: 11px; color: #94a3b8; line-height: 1.4;">
-          Estes dados representam a sa\xEDda gerada por este bloco. Blocos subsequentes conectados a ele podem referenci\xE1-lo usando:
-          <code style="background: #1e293b; color: #60a5fa; padding: 2px 5px; border-radius: 4px; font-family: monospace;">{{ $node["${nodeLabel}"].json.campo }}</code>
-          ou <code style="background: #1e293b; color: #34d399; padding: 2px 5px; border-radius: 4px; font-family: monospace;">{{ $json.campo }}</code> (no bloco imediatamente seguinte).
+        <button type="button" id="btnCopyNodeExpr" class="btn btn-secondary" style="width: 100%; font-size: 11px; padding: 6px 10px; display: flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Copiar {{ $node[&quot;${nodeLabel}&quot;].json }}">
+          \u{1F4CB} Copiar Express\xE3o ($node)
+        </button>
+
+        <div style="font-size: 11px; color: #94a3b8; line-height: 1.4; word-break: break-word;">
+          Sa\xEDda deste bloco. Blocos seguintes acessam via:
+          <code style="display: block; background: #1e293b; color: #60a5fa; padding: 4px 6px; border-radius: 4px; font-family: monospace; word-break: break-all; margin-top: 4px; font-size: 10px;">{{ $node["${nodeLabel}"].json }}</code>
         </div>
 
-        <!-- Op\xE7\xE3o de Mock (Agora OPCIONAL e n\xE3o regra) -->
-        <div style="background: #0d1527; border: 1px solid ${isMockEnabled ? "#3b82f6" : "#243049"}; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
-            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;">
-              <input type="checkbox" id="chkUseMockOutput" ${isMockEnabled ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px; accent-color: #3b82f6;" />
-              <span style="font-size: 12px; font-weight: 600; color: #f1f5f9;">Habilitar dados simulados (Mock) para este bloco</span>
-            </label>
-            ${isMockEnabled ? `<button type="button" id="btnResetDefaultMock" class="btn btn-secondary" style="font-size: 10px; padding: 2px 8px;">Restaurar Amostra Padr\xE3o</button>` : ""}
-          </div>
-          <div style="font-size: 11px; color: #64748b; line-height: 1.4; margin-left: 26px;">
-            Por padr\xE3o, o fluxo utiliza apenas resultados de execu\xE7\xF5es reais. Marque esta op\xE7\xE3o caso deseje simular dados de sa\xEDda para testar express\xF5es e vari\xE1veis antes de rodar a automa\xE7\xE3o.
+        <!-- Op\xE7\xE3o de Mock (Agora em layout vertical que n\xE3o vaza) -->
+        <div style="background: #0d1527; border: 1px solid ${isMockEnabled ? "#3b82f6" : "#243049"}; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px; width: 100%; box-sizing: border-box;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="chkUseMockOutput" ${isMockEnabled ? "checked" : ""} style="cursor: pointer; width: 15px; height: 15px; accent-color: #3b82f6; flex-shrink: 0; margin-top: 1px;" />
+            <span style="font-size: 11px; font-weight: 600; color: #f1f5f9; line-height: 1.3;">Habilitar dados simulados (Mock)</span>
+          </label>
+          ${isMockEnabled ? `<button type="button" id="btnResetDefaultMock" class="btn btn-secondary" style="width: 100%; font-size: 10px; padding: 4px 8px; box-sizing: border-box;">Restaurar Amostra Padr\xE3o</button>` : ""}
+          <div style="font-size: 10px; color: #64748b; line-height: 1.3;">
+            Permite simular dados de sa\xEDda para testar express\xF5es antes de rodar o fluxo.
           </div>
         </div>
 
         ${isMockEnabled ? `
           <!-- Modo Edi\xE7\xE3o de Mock -->
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Editor de Dados Simulados (JSON):</label>
+          <div style="display: flex; flex-direction: column; gap: 8px; width: 100%; box-sizing: border-box;">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Editor Mock (JSON):</label>
               <span style="font-size: 10px; color: #38bdf8;">Blocos seguintes enxergar\xE3o esta estrutura</span>
             </div>
             <textarea id="nodeOutputJsonArea" style="
-              width: 100%; box-sizing: border-box; height: 200px; font-family: monospace; font-size: 12px; background: #080c14; color: #a5f3fc; border: 1px solid #243049; border-radius: 6px; padding: 10px; outline: none; line-height: 1.4; resize: vertical;
+              width: 100%; box-sizing: border-box; height: 160px; font-family: monospace; font-size: 11px; background: #080c14; color: #a5f3fc; border: 1px solid #243049; border-radius: 6px; padding: 8px; outline: none; line-height: 1.4; resize: vertical;
             ">${jsonStr}</textarea>
-          </div>
-
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 10px; color: #64748b;">Altere o JSON acima para simular diferentes cen\xE1rios nos n\xF3s subsequentes.</span>
-            <button type="button" id="btnSaveMockOutput" class="btn btn-primary" style="font-size: 11px; padding: 6px 14px;">
+            <button type="button" id="btnSaveMockOutput" class="btn btn-primary" style="width: 100%; font-size: 11px; padding: 7px 10px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 6px;">
               \u{1F4BE} Salvar Dados Simulados
             </button>
           </div>
         ` : hasRuntimeData ? `
           <!-- Modo Visualiza\xE7\xE3o de Dados Reais -->
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Sa\xEDda Real da \xDAltima Execu\xE7\xE3o (Somente Leitura):</label>
-              <span style="font-size: 10px; color: #34d399;">Gerado durante execu\xE7\xE3o real</span>
+          <div style="display: flex; flex-direction: column; gap: 6px; width: 100%; box-sizing: border-box;">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <label style="font-size: 11px; font-weight: 600; color: #cbd5e1;">Sa\xEDda Real da \xDAltima Execu\xE7\xE3o:</label>
+              <span style="font-size: 10px; color: #34d399;">(Somente Leitura)</span>
             </div>
             <pre style="
-              width: 100%; box-sizing: border-box; max-height: 220px; overflow-y: auto; font-family: monospace; font-size: 12px; background: #080c14; color: #86efac; border: 1px solid #166534; border-radius: 6px; padding: 12px; line-height: 1.4; margin: 0;
+              width: 100%; box-sizing: border-box; max-height: 220px; overflow-y: auto; overflow-x: auto; font-family: monospace; font-size: 11px; background: #080c14; color: #86efac; border: 1px solid #166534; border-radius: 6px; padding: 10px; line-height: 1.4; margin: 0; white-space: pre-wrap; word-break: break-all;
             ">${jsonStr}</pre>
           </div>
         ` : `
           <!-- Modo Sem Dados e Sem Mock -->
-          <div style="background: #080d1a; border: 1px dashed #334155; border-radius: 6px; padding: 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <div style="font-size: 24px;">\u{1F4CA}</div>
-            <div style="font-size: 13px; font-weight: 600; color: #cbd5e1;">Nenhum dado real dispon\xEDvel no momento</div>
-            <div style="font-size: 11px; color: #64748b; max-width: 440px; line-height: 1.4;">
-              Execute o fluxo para coletar dados reais deste bloco ou marque a op\xE7\xE3o <strong>"Habilitar dados simulados (Mock)"</strong> acima para definir uma estrutura de teste.
+          <div style="background: #080d1a; border: 1px dashed #334155; border-radius: 6px; padding: 16px 10px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; box-sizing: border-box;">
+            <div style="font-size: 20px;">\u{1F4CA}</div>
+            <div style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Sem dados no momento</div>
+            <div style="font-size: 10px; color: #64748b; line-height: 1.4;">
+              Execute o fluxo ou ative <strong>"Dados simulados (Mock)"</strong> acima.
             </div>
           </div>
         `}
@@ -30213,16 +30436,51 @@ var CanvasManager = class {
 };
 
 // src/editor/modules/tabManager.ts
-var WorkflowTabManager = class {
+var WorkflowTabManager = class _WorkflowTabManager {
   constructor(callbacks) {
     this.callbacks = callbacks;
+    const homeId = this.createHomeTabId();
+    this.tabOrder.push(homeId);
+    this.activeTabId = homeId;
     this.initTabsUI();
   }
   savedAutomations = [];
   openTabs = [];
-  activeTabId = "dashboard";
-  isSettingsTabOpen = false;
-  isDashboardTabOpen = true;
+  /**
+   * Ordem visual de todas as abas abertas (Início, fluxos e Configurações).
+   * Abas de Início usam ids com prefixo `home_`, a aba de configurações usa `settings`
+   * e as abas de fluxo usam o próprio `metadata.id` do fluxo.
+   */
+  tabOrder = [];
+  activeTabId = "";
+  homeTabCounter = 0;
+  preserveHomeOnNextOpen = false;
+  static HOME_TAB_PREFIX = "home_";
+  isHomeTabId(id) {
+    return !!id && id.startsWith(_WorkflowTabManager.HOME_TAB_PREFIX);
+  }
+  isHomeTabActive() {
+    return this.isHomeTabId(this.activeTabId);
+  }
+  getTabOrder() {
+    return [...this.tabOrder];
+  }
+  getHomeTabIds() {
+    return this.tabOrder.filter((id) => this.isHomeTabId(id));
+  }
+  createHomeTabId() {
+    this.homeTabCounter += 1;
+    return `${_WorkflowTabManager.HOME_TAB_PREFIX}${this.homeTabCounter}`;
+  }
+  /** Insere uma nova aba logo após a aba ativa (ou no final, se não houver aba ativa). */
+  insertTabAfterActive(id) {
+    const activeIdx = this.tabOrder.indexOf(this.activeTabId);
+    if (activeIdx === -1) {
+      this.tabOrder.push(id);
+    } else {
+      this.tabOrder.splice(activeIdx + 1, 0, id);
+    }
+  }
   cleanFlowName(name) {
     return (name || "Sem T\xEDtulo").replace(/\.(webautomation\.json|json)$/i, "").trim() || "Sem T\xEDtulo";
   }
@@ -30238,52 +30496,79 @@ var WorkflowTabManager = class {
   getActiveTabId() {
     return this.activeTabId;
   }
+  /**
+   * Define a aba ativa. O valor especial `'dashboard'` significa "qualquer aba de Início":
+   * mantém a aba de Início ativa, ativa a última aba de Início existente ou cria uma nova.
+   */
   setActiveTabId(id) {
-    this.activeTabId = id;
-    this.renderTabs();
-  }
-  openDashboardTab() {
-    this.isDashboardTabOpen = true;
-    this.activeTabId = "dashboard";
-    this.callbacks.onViewChange("dashboard");
-    this.renderTabs();
-  }
-  closeDashboardTab() {
-    this.isDashboardTabOpen = false;
-    if (this.activeTabId === "dashboard") {
-      if (this.openTabs.length > 0) {
-        const next = this.openTabs[this.openTabs.length - 1];
-        this.callbacks.onOpenFlow(next);
-      } else if (this.isSettingsTabOpen) {
-        this.openSettingsTab();
+    if (id === "dashboard") {
+      if (!this.isHomeTabActive()) {
+        const homes = this.getHomeTabIds();
+        if (homes.length > 0) {
+          this.activeTabId = homes[homes.length - 1];
+        } else {
+          const homeId = this.createHomeTabId();
+          this.insertTabAfterActive(homeId);
+          this.activeTabId = homeId;
+        }
       }
+    } else {
+      this.activeTabId = id;
     }
     this.renderTabs();
   }
+  /** Abre sempre uma NOVA aba de Início (comportamento do botão "+"). */
+  openNewHomeTab() {
+    const homeId = this.createHomeTabId();
+    this.insertTabAfterActive(homeId);
+    this.activeTabId = homeId;
+    this.callbacks.onViewChange("dashboard");
+    this.renderTabs();
+    return homeId;
+  }
+  /**
+   * Ativa uma aba de Início. Sem id, mantém a aba de Início ativa ou ativa a última existente;
+   * se não houver nenhuma, cria uma nova.
+   */
+  openDashboardTab(homeId) {
+    if (homeId && this.tabOrder.includes(homeId) && this.isHomeTabId(homeId)) {
+      this.activeTabId = homeId;
+    } else if (!this.isHomeTabActive()) {
+      const homes = this.getHomeTabIds();
+      if (homes.length > 0) {
+        this.activeTabId = homes[homes.length - 1];
+      } else {
+        const newId = this.createHomeTabId();
+        this.insertTabAfterActive(newId);
+        this.activeTabId = newId;
+      }
+    }
+    this.callbacks.onViewChange("dashboard");
+    this.renderTabs();
+  }
+  /** Fecha uma aba de Início (por padrão a aba de Início ativa). */
+  closeDashboardTab(homeId) {
+    const target2 = homeId || (this.isHomeTabActive() ? this.activeTabId : this.getHomeTabIds().pop());
+    if (!target2)
+      return;
+    this.closeTabById(target2);
+  }
   openSettingsTab() {
-    this.isSettingsTabOpen = true;
+    if (!this.tabOrder.includes("settings")) {
+      this.insertTabAfterActive("settings");
+    }
     this.activeTabId = "settings";
     this.callbacks.onViewChange("settings");
     this.renderTabs();
   }
   closeSettingsTab() {
-    this.isSettingsTabOpen = false;
-    if (this.activeTabId === "settings") {
-      if (this.openTabs.length > 0) {
-        const next = this.openTabs[this.openTabs.length - 1];
-        this.callbacks.onOpenFlow(next);
-      } else if (this.isDashboardTabOpen) {
-        this.openDashboardTab();
-      } else {
-        this.openDashboardTab();
-      }
-    }
-    this.renderTabs();
+    this.closeTabById("settings");
   }
   registerOpenTab(graph) {
     if (graph.metadata?.name) {
       graph.metadata.name = this.cleanFlowName(graph.metadata.name);
     }
+    const flowId = graph.metadata?.id || "studio";
     const existing = this.openTabs.find((t) => t.metadata?.id === graph.metadata?.id);
     if (!existing) {
       this.openTabs.push(graph);
@@ -30291,7 +30576,15 @@ var WorkflowTabManager = class {
       const idx = this.openTabs.indexOf(existing);
       this.openTabs[idx] = graph;
     }
-    this.activeTabId = graph.metadata?.id || "studio";
+    if (!this.tabOrder.includes(flowId)) {
+      if (this.isHomeTabActive() && !this.preserveHomeOnNextOpen) {
+        const homeIdx = this.tabOrder.indexOf(this.activeTabId);
+        this.tabOrder.splice(homeIdx, 1, flowId);
+      } else {
+        this.insertTabAfterActive(flowId);
+      }
+    }
+    this.activeTabId = flowId;
     this.renderTabs();
   }
   updateFlowInTabsAndSaved(graph) {
@@ -30312,6 +30605,14 @@ var WorkflowTabManager = class {
     }
     this.renderTabs();
   }
+  isPageReload() {
+    try {
+      const entries = performance?.getEntriesByType?.("navigation") || [];
+      return entries.length > 0 && entries[0].type === "reload";
+    } catch {
+      return false;
+    }
+  }
   async loadFromStorage(checkUrlParam = true) {
     if (chrome.storage?.local) {
       const data2 = await chrome.storage.local.get("web_automations");
@@ -30323,17 +30624,33 @@ var WorkflowTabManager = class {
       if (this.savedAutomations.length === 0) {
         const def = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
         def.metadata.name = this.cleanFlowName(def.metadata.name);
-        this.savedAutomations = [def];
+        const allBlocks = JSON.parse(JSON.stringify(ALL_BLOCKS_TEST_AUTOMATION));
+        allBlocks.metadata.name = this.cleanFlowName(allBlocks.metadata.name);
+        this.savedAutomations = [def, allBlocks];
+        await chrome.storage.local.set({ web_automations: this.savedAutomations });
+      } else if (!this.savedAutomations.some((a) => a.metadata.id === ALL_BLOCKS_TEST_AUTOMATION.metadata.id)) {
+        const allBlocks = JSON.parse(JSON.stringify(ALL_BLOCKS_TEST_AUTOMATION));
+        allBlocks.metadata.name = this.cleanFlowName(allBlocks.metadata.name);
+        this.savedAutomations.push(allBlocks);
         await chrome.storage.local.set({ web_automations: this.savedAutomations });
       }
     } else {
       const def = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
       def.metadata.name = this.cleanFlowName(def.metadata.name);
-      this.savedAutomations = [def];
+      const allBlocks = JSON.parse(JSON.stringify(ALL_BLOCKS_TEST_AUTOMATION));
+      allBlocks.metadata.name = this.cleanFlowName(allBlocks.metadata.name);
+      this.savedAutomations = [def, allBlocks];
     }
     this.renderDashboard();
     this.renderTabs();
     if (checkUrlParam) {
+      if (this.isPageReload()) {
+        if (window.location.search) {
+          window.history.replaceState({}, "", window.location.pathname);
+        }
+        this.callbacks.onViewChange("dashboard");
+        return;
+      }
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get("tab");
       if (tabParam === "settings") {
@@ -30344,7 +30661,9 @@ var WorkflowTabManager = class {
       if (flowId) {
         const matched = this.savedAutomations.find((a) => a.metadata?.id === flowId);
         if (matched) {
+          this.preserveHomeOnNextOpen = true;
           this.callbacks.onOpenFlow(matched);
+          this.preserveHomeOnNextOpen = false;
           return;
         } else {
           this.callbacks.showToast("Fluxo solicitado n\xE3o foi encontrado no armazenamento.", "error");
@@ -30352,95 +30671,132 @@ var WorkflowTabManager = class {
       }
     }
   }
+  createHomeTabElement(homeId) {
+    const homeTab = document.createElement("div");
+    const isHomeActive = this.activeTabId === homeId;
+    homeTab.className = `app-tab-item tab-home ${isHomeActive ? "active" : ""}`;
+    homeTab.dataset.tabId = homeId;
+    homeTab.title = "In\xEDcio (Gerenciador de Fluxos)";
+    homeTab.innerHTML = `
+      <span class="tab-home-icon" style="display:inline-flex;align-items:center;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </span>
+      <span class="tab-label">In\xEDcio</span>
+      <span class="app-tab-close" data-id="${homeId}" title="Fechar aba In\xEDcio">\u2715</span>
+    `;
+    homeTab.addEventListener("click", (e) => {
+      if (e.target.classList.contains("app-tab-close"))
+        return;
+      this.openDashboardTab(homeId);
+    });
+    homeTab.querySelector(".app-tab-close")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.closeDashboardTab(homeId);
+    });
+    return homeTab;
+  }
+  createFlowTabElement(flow) {
+    const tabEl = document.createElement("div");
+    const isActive = this.activeTabId === flow.metadata?.id;
+    const isGhost = !!flow.isGhost;
+    tabEl.className = `app-tab-item ${isActive ? "active" : ""} ${isGhost ? "tab-ghost" : ""}`;
+    tabEl.dataset.tabId = flow.metadata?.id || "";
+    const titleClean = this.cleanFlowName(flow.metadata?.name);
+    tabEl.title = isGhost ? `[Fantasma] ${titleClean}` : titleClean;
+    tabEl.innerHTML = `
+      <span class="tab-label" style="${isGhost ? "color: #c7d2fe; display: flex; align-items: center; gap: 4px;" : ""}">${titleClean}</span>
+      <span class="app-tab-close" data-id="${flow.metadata?.id}" title="Fechar aba">\u2715</span>
+    `;
+    tabEl.addEventListener("click", (e) => {
+      if (e.target.classList.contains("app-tab-close"))
+        return;
+      this.callbacks.onOpenFlow(flow);
+    });
+    tabEl.querySelector(".app-tab-close")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.closeTab(flow.metadata?.id);
+    });
+    return tabEl;
+  }
+  createSettingsTabElement() {
+    const settingsTab = document.createElement("div");
+    const isSettingsActive = this.activeTabId === "settings";
+    settingsTab.className = `app-tab-item ${isSettingsActive ? "active" : ""}`;
+    settingsTab.dataset.tabId = "settings";
+    settingsTab.title = "Configura\xE7\xF5es do Visual Flow Studio";
+    settingsTab.innerHTML = `
+      <span class="tab-label">\u2699\uFE0F Configura\xE7\xF5es</span>
+      <span class="app-tab-close" data-id="settings" title="Fechar aba">\u2715</span>
+    `;
+    settingsTab.addEventListener("click", (e) => {
+      if (e.target.classList.contains("app-tab-close"))
+        return;
+      this.openSettingsTab();
+    });
+    settingsTab.querySelector(".app-tab-close")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.closeSettingsTab();
+    });
+    return settingsTab;
+  }
   renderTabs() {
     const container = document.getElementById("workflowTabsContainer");
     if (!container)
       return;
     container.innerHTML = "";
-    if (this.isDashboardTabOpen) {
-      const homeTab = document.createElement("div");
-      const isHomeActive = this.activeTabId === "dashboard";
-      homeTab.className = `app-tab-item tab-home ${isHomeActive ? "active" : ""}`;
-      homeTab.title = "In\xEDcio (Gerenciador de Fluxos)";
-      homeTab.innerHTML = `
-        <span class="tab-home-icon" style="display:inline-flex;align-items:center;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        </span>
-        <span class="tab-label">In\xEDcio</span>
-        <span class="app-tab-close" data-id="dashboard" title="Fechar aba In\xEDcio">\u2715</span>
-      `;
-      homeTab.addEventListener("click", (e) => {
-        if (e.target.classList.contains("app-tab-close"))
-          return;
-        this.openDashboardTab();
-      });
-      homeTab.querySelector(".app-tab-close")?.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.closeDashboardTab();
-      });
-      container.appendChild(homeTab);
-    }
-    this.openTabs.forEach((flow) => {
-      const tabEl = document.createElement("div");
-      const isActive = this.activeTabId === flow.metadata?.id;
-      const isGhost = !!flow.isGhost;
-      tabEl.className = `app-tab-item ${isActive ? "active" : ""} ${isGhost ? "tab-ghost" : ""}`;
-      const titleClean = this.cleanFlowName(flow.metadata?.name);
-      tabEl.title = isGhost ? `[Fantasma] ${titleClean}` : titleClean;
-      tabEl.innerHTML = `
-        <span class="tab-label" style="${isGhost ? "color: #c7d2fe; display: flex; align-items: center; gap: 4px;" : ""}">${titleClean}</span>
-        <span class="app-tab-close" data-id="${flow.metadata?.id}" title="Fechar aba">\u2715</span>
-      `;
-      tabEl.addEventListener("click", (e) => {
-        if (e.target.classList.contains("app-tab-close"))
-          return;
-        this.callbacks.onOpenFlow(flow);
-      });
-      tabEl.querySelector(".app-tab-close")?.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.closeTab(flow.metadata?.id);
-      });
-      container.appendChild(tabEl);
+    this.tabOrder.forEach((id) => {
+      if (this.isHomeTabId(id)) {
+        container.appendChild(this.createHomeTabElement(id));
+      } else if (id === "settings") {
+        container.appendChild(this.createSettingsTabElement());
+      } else {
+        const flow = this.openTabs.find((t) => t.metadata?.id === id);
+        if (flow)
+          container.appendChild(this.createFlowTabElement(flow));
+      }
     });
-    if (this.isSettingsTabOpen) {
-      const settingsTab = document.createElement("div");
-      const isSettingsActive = this.activeTabId === "settings";
-      settingsTab.className = `app-tab-item ${isSettingsActive ? "active" : ""}`;
-      settingsTab.title = "Configura\xE7\xF5es do Visual Flow Studio";
-      settingsTab.innerHTML = `
-        <span class="tab-label">\u2699\uFE0F Configura\xE7\xF5es</span>
-        <span class="app-tab-close" data-id="settings" title="Fechar aba">\u2715</span>
-      `;
-      settingsTab.addEventListener("click", (e) => {
-        if (e.target.classList.contains("app-tab-close"))
-          return;
-        this.openSettingsTab();
-      });
-      settingsTab.querySelector(".app-tab-close")?.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.closeSettingsTab();
-      });
-      container.appendChild(settingsTab);
+  }
+  /** Ativa a aba indicada disparando a troca de visão correspondente. */
+  activateTab(id) {
+    if (this.isHomeTabId(id)) {
+      this.openDashboardTab(id);
+    } else if (id === "settings") {
+      this.openSettingsTab();
+    } else {
+      const flow = this.openTabs.find((t) => t.metadata?.id === id);
+      if (flow)
+        this.callbacks.onOpenFlow(flow);
     }
   }
-  closeTab(flowId) {
-    const idx = this.openTabs.findIndex((t) => t.metadata?.id === flowId);
-    if (idx === -1)
+  /**
+   * Fecha qualquer aba pelo id. Se a aba fechada era a ativa, ativa a vizinha.
+   * Se todas as abas forem fechadas, uma nova aba de Início é aberta automaticamente.
+   */
+  closeTabById(id) {
+    const orderIdx = this.tabOrder.indexOf(id);
+    if (orderIdx === -1)
       return;
-    this.openTabs.splice(idx, 1);
-    if (this.activeTabId === flowId) {
-      if (this.openTabs.length > 0) {
-        const nextFlow = this.openTabs[Math.max(0, idx - 1)];
-        this.callbacks.onOpenFlow(nextFlow);
-      } else if (this.isDashboardTabOpen) {
-        this.openDashboardTab();
-      } else if (this.isSettingsTabOpen) {
-        this.openSettingsTab();
-      } else {
-        this.openDashboardTab();
-      }
+    this.tabOrder.splice(orderIdx, 1);
+    if (!this.isHomeTabId(id) && id !== "settings") {
+      const flowIdx = this.openTabs.findIndex((t) => t.metadata?.id === id);
+      if (flowIdx >= 0)
+        this.openTabs.splice(flowIdx, 1);
+    }
+    if (this.tabOrder.length === 0) {
+      this.activeTabId = "";
+      this.openNewHomeTab();
+      return;
+    }
+    if (this.activeTabId === id) {
+      const nextId = this.tabOrder[Math.max(0, orderIdx - 1)];
+      this.activateTab(nextId);
     }
     this.renderTabs();
+  }
+  closeTab(flowId) {
+    if (!this.openTabs.some((t) => t.metadata?.id === flowId))
+      return;
+    this.closeTabById(flowId);
   }
   renderDashboard(filterQuery = "") {
     const grid = document.getElementById("automationsGrid");
@@ -31090,6 +31446,201 @@ var ExecutionHistoryManager = class {
   }
 };
 
+// src/editor/modules/tooltipManager.ts
+var TooltipManager = class {
+  tooltipEl = null;
+  currentTarget = null;
+  hideTimeout = null;
+  constructor() {
+    this.createTooltipElement();
+    this.initEventListeners();
+  }
+  createTooltipElement() {
+    if (document.getElementById("appFloatingTooltip")) {
+      this.tooltipEl = document.getElementById("appFloatingTooltip");
+      return;
+    }
+    const el = document.createElement("div");
+    el.id = "appFloatingTooltip";
+    el.className = "app-floating-tooltip";
+    el.setAttribute("role", "tooltip");
+    el.style.display = "none";
+    el.innerHTML = `
+      <div class="floating-tooltip-header">
+        <span class="floating-tooltip-title"></span>
+        <span class="floating-tooltip-shortcut"></span>
+      </div>
+      <div class="floating-tooltip-desc"></div>
+      <div class="floating-tooltip-arrow"></div>
+    `;
+    document.body.appendChild(el);
+    this.tooltipEl = el;
+  }
+  initEventListeners() {
+    document.body.addEventListener(
+      "mouseenter",
+      (e) => {
+        const target2 = e.target?.closest?.(
+          "[data-tooltip-desc], [data-tooltip], [title], .activity-btn, .sidebar-toggle-btn, #btnDebugFlow, #btnRunFlow, #btnSaveFlow, #btnClearCanvas, #btnExportJson, #btnTabNewFlow"
+        );
+        if (!target2)
+          return;
+        if (target2.hasAttribute("title") && target2.getAttribute("title")) {
+          const titleVal = target2.getAttribute("title") || "";
+          if (!target2.hasAttribute("data-tooltip-desc")) {
+            target2.setAttribute("data-tooltip-desc", titleVal);
+          }
+          target2.setAttribute("data-original-title", titleVal);
+          target2.removeAttribute("title");
+        }
+        this.show(target2);
+      },
+      true
+    );
+    document.body.addEventListener(
+      "mouseleave",
+      (e) => {
+        const target2 = e.target;
+        if (target2 === this.currentTarget) {
+          this.hide();
+        }
+      },
+      true
+    );
+    window.addEventListener("scroll", () => this.hide(), true);
+    document.addEventListener("click", () => this.hide(), true);
+  }
+  show(element) {
+    if (!this.tooltipEl)
+      return;
+    clearTimeout(this.hideTimeout);
+    const desc = element.getAttribute("data-tooltip-desc") || element.getAttribute("data-tooltip") || element.getAttribute("data-original-title");
+    if (!desc || !desc.trim())
+      return;
+    this.currentTarget = element;
+    const title = element.getAttribute("data-tooltip-title") || this.inferTitle(element);
+    const shortcut = element.getAttribute("data-tooltip-shortcut") || this.inferShortcut(element, desc);
+    const titleEl = this.tooltipEl.querySelector(".floating-tooltip-title");
+    const shortcutEl = this.tooltipEl.querySelector(".floating-tooltip-shortcut");
+    const descEl = this.tooltipEl.querySelector(".floating-tooltip-desc");
+    if (titleEl) {
+      if (title) {
+        titleEl.textContent = title;
+        titleEl.style.display = "block";
+      } else {
+        titleEl.style.display = "none";
+      }
+    }
+    if (shortcutEl) {
+      if (shortcut) {
+        shortcutEl.textContent = shortcut;
+        shortcutEl.style.display = "inline-block";
+      } else {
+        shortcutEl.style.display = "none";
+      }
+    }
+    if (descEl) {
+      descEl.textContent = desc;
+    }
+    this.tooltipEl.style.display = "flex";
+    this.tooltipEl.classList.remove("tooltip-visible");
+    requestAnimationFrame(() => {
+      this.positionTooltip(element);
+      this.tooltipEl?.classList.add("tooltip-visible");
+    });
+  }
+  hide() {
+    if (!this.tooltipEl || !this.currentTarget)
+      return;
+    if (this.currentTarget.hasAttribute("data-original-title")) {
+      const orig = this.currentTarget.getAttribute("data-original-title") || "";
+      this.currentTarget.setAttribute("title", orig);
+    }
+    this.currentTarget = null;
+    this.tooltipEl.classList.remove("tooltip-visible");
+    this.hideTimeout = setTimeout(() => {
+      if (this.tooltipEl && !this.currentTarget) {
+        this.tooltipEl.style.display = "none";
+      }
+    }, 150);
+  }
+  positionTooltip(target2) {
+    if (!this.tooltipEl)
+      return;
+    const rect = target2.getBoundingClientRect();
+    const tooltipRect = this.tooltipEl.getBoundingClientRect();
+    let top = 0;
+    let left = 0;
+    let placement = "bottom";
+    if (target2.closest(".activity-bar-left") || rect.left < 80) {
+      placement = "right";
+      left = rect.right + 10;
+      top = rect.top + rect.height / 2 - tooltipRect.height / 2;
+    } else if (rect.top - tooltipRect.height - 10 > 0) {
+      placement = "top";
+      top = rect.top - tooltipRect.height - 8;
+      left = rect.left + rect.width / 2 - tooltipRect.width / 2;
+    } else {
+      placement = "bottom";
+      top = rect.bottom + 8;
+      left = rect.left + rect.width / 2 - tooltipRect.width / 2;
+    }
+    left = Math.max(12, Math.min(window.innerWidth - tooltipRect.width - 12, left));
+    top = Math.max(8, Math.min(window.innerHeight - tooltipRect.height - 8, top));
+    this.tooltipEl.style.top = `${Math.round(top)}px`;
+    this.tooltipEl.style.left = `${Math.round(left)}px`;
+    this.tooltipEl.dataset.placement = placement;
+  }
+  inferTitle(element) {
+    const text = element.textContent?.trim();
+    if (text && text.length < 25 && !text.includes("\n")) {
+      return text;
+    }
+    const id = element.id || "";
+    if (id === "btnClearCanvas")
+      return "Limpar Canvas";
+    if (id === "btnSaveFlow")
+      return "Salvar Fluxo";
+    if (id === "btnExportJson")
+      return "Exportar Automa\xE7\xE3o";
+    if (id === "btnDebugFlow")
+      return "Depurar Fluxo";
+    if (id === "btnRunFlow")
+      return "Executar Fluxo";
+    if (id === "btnTabNewFlow")
+      return "Nova Aba de In\xEDcio";
+    if (id === "btnActivityBlocks")
+      return "Biblioteca de Blocos";
+    if (id === "btnActivityColors")
+      return "Cores do Fluxo";
+    if (id === "btnActivityVariables")
+      return "Vari\xE1veis do Fluxo";
+    if (id === "btnActivityDebug")
+      return "Console & Depura\xE7\xE3o";
+    if (id === "btnActivityAnalyzer")
+      return "Analisador HTML";
+    if (id === "btnActivitySettings")
+      return "Configura\xE7\xF5es";
+    if (id === "btnExpandDebugModal")
+      return "Expandir Depura\xE7\xE3o";
+    if (id === "btnRunDebugActiveTab")
+      return "Depurar na P\xE1gina Ativa";
+    return "";
+  }
+  inferShortcut(element, desc) {
+    const id = element.id || "";
+    if (id === "btnSaveFlow" || desc.includes("Ctrl+S"))
+      return "Ctrl+S";
+    if (id === "btnCloseDebugModal" || id === "btnCloseExpandedModal")
+      return "Esc";
+    if (id === "btnTabNewFlow")
+      return "+";
+    if (desc.includes("Delete"))
+      return "Del";
+    return "";
+  }
+};
+
 // src/editor/editorApp.ts
 StateManager.customEvaluator = (code, vars) => SafeJsEvaluator.evaluate(code, vars, true);
 var VisualEditorApp = class {
@@ -31101,12 +31652,18 @@ var VisualEditorApp = class {
   ghostHistoricalRun;
   originalEditableGraph;
   activeWebTabInfo;
+  logs = [];
+  tabExecutionLogs = /* @__PURE__ */ new Map();
+  lastLogKey = "";
+  lastLogTime = 0;
   colorPickerManager;
   inspectorManager;
   canvasManager;
   tabManager;
   variablesManager;
+  tooltipManager;
   constructor() {
+    this.logs = [];
     this.graph = JSON.parse(JSON.stringify(DEFAULT_AUTOMATION));
     this.graph.metadata.name = this.cleanFlowName(this.graph.metadata.name);
     this.colorPickerManager = new ColorPickerManager(
@@ -31150,13 +31707,7 @@ var VisualEditorApp = class {
       },
       onNodeSelect: (nodeId) => {
         this.selectedNodeId = nodeId;
-        const selectedCount = this.canvasManager.getSelectedNodeIds().length;
-        if (nodeId || selectedCount > 0) {
-          this.openInspectorSidebar();
-        } else {
-          this.inspectorManager.renderInspector();
-          this.ensureSidebarOpen();
-        }
+        this.inspectorManager.renderInspector();
       },
       showToast: (msg, type) => showToast(msg, type),
       showModalDialog: (title, msg, icon) => showModalDialog(title, msg, icon),
@@ -31180,7 +31731,7 @@ var VisualEditorApp = class {
       onRunFlowDirectly: (flow) => this.runFlowDirectly(flow),
       onDebugFlowDirectly: (flow) => {
         this.openStudio(flow);
-        this.openExpandedDebugModal();
+        this.openDebugSidebar();
       },
       showToast: (msg, type) => showToast(msg, type)
     });
@@ -31192,6 +31743,7 @@ var VisualEditorApp = class {
       },
       showToast: (msg, type) => showToast(msg, type)
     });
+    this.tooltipManager = new TooltipManager();
     this.initBlockCatalogUI();
     this.initGlobalEvents();
     this.initSettingsEvents();
@@ -31352,6 +31904,13 @@ var VisualEditorApp = class {
     this.tabManager.renderTabs();
     this.loadScopedHistory();
     this.detectActiveWebTab();
+    if (isGhostTab && this.ghostHistoricalRun) {
+      this.renderLogsToConsole(this.ghostHistoricalRun.logs || [], true, this.ghostHistoricalRun);
+    } else {
+      const flowId = this.graph.metadata?.id;
+      const savedLogs = (flowId ? this.tabExecutionLogs.get(flowId) : void 0) || this.logs || [];
+      this.renderLogsToConsole(savedLogs, false);
+    }
   }
   createNewFlow() {
     const savedList = this.tabManager.getSavedAutomations();
@@ -31508,16 +32067,18 @@ var VisualEditorApp = class {
   }
   clearLogs() {
     this.logs = [];
+    this.lastLogKey = "";
+    this.lastLogTime = 0;
+    if (!this.tabExecutionLogs)
+      this.tabExecutionLogs = /* @__PURE__ */ new Map();
+    const activeFlowId = this.graph?.metadata?.id;
+    if (activeFlowId && !this.isGhostMode) {
+      this.tabExecutionLogs.set(activeFlowId, []);
+    }
     const consoleEl = document.getElementById("logsConsole");
     if (consoleEl) {
-      consoleEl.innerHTML = '<div class="log-entry debug">[SISTEMA] Console limpo.</div>';
-    }
-    const modalConsoleEl = document.getElementById("modalLogsConsole");
-    if (modalConsoleEl) {
-      modalConsoleEl.innerHTML = '<div class="log-entry debug">[SISTEMA] Console limpo.</div>';
-      const countBadge = document.getElementById("modalLogsCountBadge");
-      if (countBadge)
-        countBadge.textContent = "0 eventos";
+      const msg = this.isGhostMode ? "[HIST\xD3RICO FANTASMA] Visualiza\xE7\xE3o de logs limpa." : "[SISTEMA] Console limpo.";
+      consoleEl.innerHTML = `<div class="log-entry debug">${msg}</div>`;
     }
   }
   async runCurrentFlow(isDebug = false, explicitTabId) {
@@ -31525,9 +32086,12 @@ var VisualEditorApp = class {
       showToast("A automa\xE7\xE3o est\xE1 em Modo Fantasma (Somente Leitura). Saia do modo fantasma para executar.", "warning");
       return;
     }
+    this.clearLogs();
+    if (!explicitTabId && !this.activeWebTabInfo?.tabId) {
+      await this.detectActiveWebTab();
+    }
     if (isDebug) {
       this.openDebugSidebar();
-      await this.detectActiveWebTab();
       const targetLabel = this.activeWebTabInfo?.title ? `na aba "${this.activeWebTabInfo.title}"` : "na aba web ativa";
       this.appendLog({
         timestamp: Date.now(),
@@ -31591,6 +32155,8 @@ var VisualEditorApp = class {
     ghostGraph.ghostHistoricalRun = historyItem;
     this.tabManager.registerOpenTab(ghostGraph);
     this.openStudio(ghostGraph);
+    this.openDebugSidebar();
+    this.renderLogsToConsole(historyItem.logs || [], true, historyItem);
     const failedNodeId = Object.keys(historyItem.blockSnapshots || {}).find(
       (id) => historyItem.blockSnapshots[id]?.status === "failed"
     );
@@ -31600,7 +32166,7 @@ var VisualEditorApp = class {
     if (firstExecNodeId) {
       this.selectedNodeId = firstExecNodeId;
       this.canvasManager.setSelectedNodeIds([firstExecNodeId]);
-      this.openInspectorSidebar();
+      this.inspectorManager.renderInspector();
     }
     showToast("Modo Fantasma aberto em nova aba! Inspe\xE7\xE3o hist\xF3rica somente leitura.", "info");
   }
@@ -31634,6 +32200,8 @@ var VisualEditorApp = class {
     this.canvasManager.render();
     this.inspectorManager.renderInspector();
     this.loadScopedHistory();
+    const flowId = this.graph?.metadata?.id;
+    this.renderLogsToConsole((flowId ? this.tabExecutionLogs.get(flowId) : void 0) || this.logs || [], false);
     showToast("Saiu do Modo Fantasma. Editor liberado para modifica\xE7\xF5es.", "info");
   }
   setEditorActionsReadOnly(readOnly) {
@@ -31693,7 +32261,7 @@ var VisualEditorApp = class {
               ${dateStr} ${timeStr}
             </div>
             <div style="font-size: 10px; color: #64748b;">
-              ${item.durationMs}ms \u2022 <span style="text-transform: capitalize;">${item.triggerType}</span>
+              ${item.durationMs}ms \u2022 <span style="text-transform: capitalize;">${item.triggerType}</span> \u2022 <span style="color: #818cf8;">${(item.logs || []).length} logs</span>
             </div>
           </div>
         </div>
@@ -31827,6 +32395,7 @@ var VisualEditorApp = class {
         <div style="display: flex; align-items: center; gap: 16px; font-size: 11px; color: #94a3b8; flex-wrap: wrap;">
           <div>Data/Hora: <strong style="color: #cbd5e1;">${fullDate}</strong></div>
           <div>Dura\xE7\xE3o: <strong style="color: #cbd5e1;">${item.durationMs}ms</strong></div>
+          <div>Logs Gravados: <strong style="color: #818cf8;">${(item.logs || []).length} logs</strong></div>
           ${item.targetTabTitle ? `<div>P\xE1gina: <span style="color: #38bdf8;">${item.targetTabTitle}</span></div>` : ""}
           ${item.targetTabUrl ? `<div style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #64748b;">${item.targetTabUrl}</div>` : ""}
         </div>
@@ -31865,272 +32434,99 @@ var VisualEditorApp = class {
     document.getElementById(`rendered_${nodeId}`)?.classList.remove("active-executing");
   }
   appendLog(log) {
-    this.logs.push(log);
-    const time = new Date(log.timestamp).toLocaleTimeString();
-    const entryText = `[${time}] [${log.level.toUpperCase()}] ${log.message}`;
+    if (!this.logs)
+      this.logs = [];
+    const cleanedMessage = (log.message || "").replace(/\s*\(ID:\s*[^)]+\)/gi, "").replace(/\s*\[(node_[^\]]+|[0-9a-f-]{36})\]/gi, "");
+    let title = log.nodeTitle;
+    let desc = log.nodeDescription;
+    if (!title && log.nodeId) {
+      const node = this.graph.nodes.find((n2) => n2.id === log.nodeId);
+      if (node) {
+        title = node.data?.label || BLOCK_CATALOG?.[node.type]?.name || node.type;
+        desc = node.data?.description || BLOCK_CATALOG?.[node.type]?.description || "";
+      }
+    }
+    const dedupeKey = `${log.level}:${log.nodeId || ""}:${title || ""}:${cleanedMessage}`;
+    const now = Date.now();
+    if (dedupeKey === this.lastLogKey && now - this.lastLogTime < 350) {
+      return;
+    }
+    this.lastLogKey = dedupeKey;
+    this.lastLogTime = now;
+    const logItem = {
+      timestamp: log.timestamp || now,
+      level: log.level,
+      message: cleanedMessage,
+      nodeId: log.nodeId,
+      nodeTitle: title,
+      nodeDescription: desc
+    };
+    this.logs.push(logItem);
+    if (!this.tabExecutionLogs) {
+      this.tabExecutionLogs = /* @__PURE__ */ new Map();
+    }
+    const activeFlowId = this.graph?.metadata?.id;
+    if (activeFlowId && !this.isGhostMode) {
+      if (!this.tabExecutionLogs.has(activeFlowId)) {
+        this.tabExecutionLogs.set(activeFlowId, []);
+      }
+      this.tabExecutionLogs.get(activeFlowId).push(logItem);
+    }
     const consoleEl = document.getElementById("logsConsole");
     if (consoleEl) {
       const entry = document.createElement("div");
       entry.className = `log-entry ${log.level}`;
-      entry.textContent = entryText;
+      const time = new Date(log.timestamp).toLocaleTimeString();
+      const timeSpan = `<span class="log-timestamp">[${time}]</span>`;
+      const levelSpan = `<span class="log-level-tag">${log.level.toUpperCase()}</span>`;
+      const blockBadge = title ? `<span class="log-block-badge" title="${desc || title}" data-tooltip-desc="${desc || ""}">${title}</span>` : "";
+      const textSpan = `<span class="log-message-text">${cleanedMessage}</span>`;
+      entry.innerHTML = `${timeSpan} ${levelSpan} ${blockBadge} ${textSpan}`;
       consoleEl.appendChild(entry);
       consoleEl.scrollTop = consoleEl.scrollHeight;
     }
-    const modalConsoleEl = document.getElementById("modalLogsConsole");
-    if (modalConsoleEl) {
-      const entry = document.createElement("div");
-      entry.className = `log-entry ${log.level}`;
-      entry.textContent = entryText;
-      modalConsoleEl.appendChild(entry);
-      modalConsoleEl.scrollTop = modalConsoleEl.scrollHeight;
-      const countBadge = document.getElementById("modalLogsCountBadge");
-      if (countBadge)
-        countBadge.textContent = `${this.logs.length} eventos`;
-    }
   }
-  renderVariables(vars) {
-    const jsonStr = JSON.stringify(vars, null, 2);
-    const varEl = document.getElementById("variablesList");
-    if (varEl) {
-      varEl.innerHTML = `<pre style="font-family: var(--font-mono); font-size: 11px;">${jsonStr}</pre>`;
-    }
-    const modalVarEl = document.getElementById("modalVariablesList");
-    if (modalVarEl) {
-      modalVarEl.innerHTML = `<pre style="font-family: var(--font-mono); font-size: 11px; margin: 0; color: #a5f3fc;">${jsonStr}</pre>`;
-    }
-  }
-  openExpandedDebugModal() {
-    const existing = document.getElementById("debugModalBackdrop");
-    if (existing)
-      existing.remove();
-    const backdrop = document.createElement("div");
-    backdrop.id = "debugModalBackdrop";
-    backdrop.className = "flow-modal-backdrop";
-    const flowName = this.cleanFlowName(this.graph.metadata?.name);
-    backdrop.innerHTML = `
-      <div class="debug-modal-card">
-        <div class="debug-modal-header">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(56, 189, 248, 0.15); display: flex; align-items: center; justify-content: center; color: #38bdf8;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/></svg>
-            </div>
-            <div>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <h3 style="font-size: 15px; font-weight: 700; color: #f8fafc; margin: 0;">Depura\xE7\xE3o & Console de Execu\xE7\xE3o</h3>
-                <span style="font-size: 10px; background: #1e293b; color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;">${flowName}</span>
-              </div>
-              <p style="font-size: 11px; color: #94a3b8; margin: 2px 0 0 0;">Ambiente expandido de teste, inspe\xE7\xE3o de vari\xE1veis e logs ao vivo</p>
-            </div>
-          </div>
-
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <button id="btnModalRunDebug" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 14px; background: #0284c7; border-color: #0284c7; cursor: pointer;">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              <span>Iniciar Depura\xE7\xE3o</span>
-            </button>
-            <button id="btnModalStopDebug" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 12px; color: #f87171; border-color: rgba(239, 68, 68, 0.3); cursor: pointer;">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-              <span>Parar</span>
-            </button>
-            <button id="btnCloseDebugModal" class="sidebar-toggle-btn" title="Fechar visualiza\xE7\xE3o (Esc)">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-          </div>
-        </div>
-
-        <div class="debug-modal-body">
-          <!-- Coluna Esquerda: Informa\xE7\xF5es da Aba Alvo, Vari\xE1veis e Hist\xF3rico -->
-          <div id="modalDebugLeftPane" class="debug-modal-left-pane">
-            <!-- Card Alvo -->
-            <div style="background: #111827; border: 1px solid #1f293d; border-radius: 8px; padding: 12px;">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                <span style="font-size: 11px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
-                  \u{1F3AF} P\xE1gina Web Alvo
-                </span>
-                <span id="modalDebugTargetBadge" class="flow-badge" style="font-size: 9px; padding: 1px 5px; background: rgba(56, 189, 248, 0.15); color: #38bdf8;">
-                  ${this.activeWebTabInfo?.tabId ? `Aba #${this.activeWebTabInfo.tabId}` : "Detectando..."}
-                </span>
-              </div>
-              <div id="modalDebugTargetInfo" style="font-size: 11px; color: #cbd5e1; margin-bottom: 10px; line-height: 1.4; background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; word-break: break-all;">
-                ${this.activeWebTabInfo?.title ? `<strong>${this.activeWebTabInfo.title}</strong><br/><span style="color: #64748b; font-size: 10px;">${this.activeWebTabInfo.url}</span>` : "Detectando aba web ativa no navegador..."}
-              </div>
-              <div style="display: flex; gap: 6px;">
-                <button id="btnModalRefreshTab" class="btn btn-secondary" style="flex: 1; font-size: 10px; padding: 5px 8px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
-                  \u{1F504} Atualizar
-                </button>
-                <button id="btnModalFocusTab" class="btn btn-secondary" style="flex: 1; font-size: 10px; padding: 5px 8px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
-                  \u{1F50D} Focar
-                </button>
-                <button id="btnModalNewTab" class="btn btn-secondary" style="flex: 1; font-size: 10px; padding: 5px 8px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;" title="Abrir nova aba em branco para testar">
-                  \u2795 Nova Aba
-                </button>
-              </div>
-            </div>
-
-            <!-- Card Vari\xE1veis do Fluxo -->
-            <div style="background: #111827; border: 1px solid #1f293d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; flex: 1; min-height: 180px;">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                <span style="font-size: 11px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
-                  \u{1F4E6} Estado das Vari\xE1veis
-                </span>
-                <span style="font-size: 10px; color: #64748b;">(JSON em Tempo Real)</span>
-              </div>
-              <div id="modalVariablesList" style="background: #090d16; border: 1px solid #1e293b; border-radius: 6px; padding: 10px; flex: 1; overflow-y: auto; font-family: monospace; font-size: 11px; color: #a5f3fc;">
-                <pre style="margin: 0; font-family: var(--font-mono); font-size: 11px; color: #a5f3fc;">{}</pre>
-              </div>
-            </div>
-          </div>
-
-          <!-- Divisor Resizer -->
-          <div id="resizerDebugModal" class="debug-modal-resizer" title="Arraste para redimensionar o painel"></div>
-
-          <!-- Coluna Direita: Console / Terminal de Logs -->
-          <div id="modalDebugRightPane" class="debug-modal-console-pane">
-            <div style="padding: 10px 16px; background: #0d131f; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 8px;">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 11px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px; text-transform: uppercase;">
-                  \u{1F5A5}\uFE0F Console de Execu\xE7\xE3o
-                </span>
-                <span id="modalLogsCountBadge" style="font-size: 10px; color: #94a3b8; background: #1e293b; padding: 2px 6px; border-radius: 4px;">
-                  ${this.logs.length} eventos
-                </span>
-              </div>
-
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <input type="text" id="modalLogSearchInput" placeholder="Filtrar logs..." style="background: #080c14; border: 1px solid #243049; border-radius: 4px; padding: 4px 8px; font-size: 11px; color: #f1f5f9; width: 140px;" />
-                <button id="btnModalClearLogs" class="btn-xs" style="background: #1e293b; border: 1px solid #334155; color: #94a3b8; padding: 3px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;">
-                  Limpar Logs
-                </button>
-              </div>
-            </div>
-
-            <!-- Lista de logs estilo terminal -->
-            <div id="modalLogsConsole" class="console-output" style="flex: 1; padding: 14px; overflow-y: auto; background: #060911; font-family: monospace; font-size: 12px; line-height: 1.5;">
-              <!-- Logs populados aqui -->
-            </div>
-          </div>
-        </div>
-
-        <div class="debug-modal-footer">
-          <div style="font-size: 11px; color: #64748b; display: flex; align-items: center; gap: 12px;">
-            <span>Pressione <strong>Esc</strong> para fechar</span>
-            <span>\u2022</span>
-            <span id="modalDebugStatusText" style="color: #38bdf8;">Pronto para iniciar depura\xE7\xE3o</span>
-          </div>
-          <button id="btnFooterCloseDebug" class="btn btn-secondary" style="padding: 6px 16px; font-size: 12px; cursor: pointer;">
-            Fechar
-          </button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(backdrop);
-    const resizer = backdrop.querySelector("#resizerDebugModal");
-    const leftPane = backdrop.querySelector("#modalDebugLeftPane");
-    if (resizer && leftPane) {
-      resizer.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        const startX = e.clientX;
-        const startWidth = leftPane.getBoundingClientRect().width;
-        resizer.classList.add("resizing");
-        document.body.style.cursor = "col-resize";
-        document.body.style.userSelect = "none";
-        const onMouseMove = (moveEv) => {
-          const deltaX = moveEv.clientX - startX;
-          const newWidth = Math.max(260, Math.min(600, startWidth + deltaX));
-          leftPane.style.width = `${newWidth}px`;
-        };
-        const onMouseUp = () => {
-          resizer.classList.remove("resizing");
-          document.body.style.cursor = "";
-          document.body.style.userSelect = "";
-          window.removeEventListener("mousemove", onMouseMove);
-          window.removeEventListener("mouseup", onMouseUp);
-        };
-        window.addEventListener("mousemove", onMouseMove);
-        window.addEventListener("mouseup", onMouseUp);
-      });
-    }
-    const modalConsole = backdrop.querySelector("#modalLogsConsole");
-    if (modalConsole) {
-      if (this.logs.length === 0) {
-        modalConsole.innerHTML = '<div class="log-entry debug">[SISTEMA] Console pronto. Clique em "Iniciar Depura\xE7\xE3o" para executar na aba web ativa.</div>';
+  renderLogsToConsole(logs, isGhost = false, ghostRun) {
+    const consoleEl = document.getElementById("logsConsole");
+    const titleTextEl = document.getElementById("logsConsoleTitleText");
+    if (titleTextEl) {
+      if (isGhost && ghostRun) {
+        const timeStr = new Date(ghostRun.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        titleTextEl.innerHTML = `Console \u2022 \u{1F47B} Fantasma (${timeStr})`;
       } else {
-        this.logs.forEach((l) => {
-          const time = new Date(l.timestamp).toLocaleTimeString();
-          const entry = document.createElement("div");
-          entry.className = `log-entry ${l.level}`;
-          entry.textContent = `[${time}] [${l.level.toUpperCase()}] ${l.message}`;
-          modalConsole.appendChild(entry);
-        });
-        modalConsole.scrollTop = modalConsole.scrollHeight;
+        titleTextEl.textContent = "Console de Execu\xE7\xE3o";
       }
     }
-    backdrop.querySelector("#btnModalRunDebug")?.addEventListener("click", () => {
-      this.runCurrentFlow(true);
-      const statusText = backdrop.querySelector("#modalDebugStatusText");
-      if (statusText)
-        statusText.textContent = "Depurando na aba ativa...";
-    });
-    backdrop.querySelector("#btnModalStopDebug")?.addEventListener("click", () => {
-      if (chrome.runtime?.sendMessage) {
-        chrome.runtime.sendMessage({ action: "CANCEL_AUTOMATION", payload: { automationId: this.graph.metadata?.id } });
+    if (!consoleEl)
+      return;
+    consoleEl.innerHTML = "";
+    if (!logs || logs.length === 0) {
+      const emptyMsg = isGhost ? "[HIST\xD3RICO FANTASMA] Nenhum log foi gravado nesta execu\xE7\xE3o." : '[SISTEMA] Console pronto. Clique em "Iniciar Depura\xE7\xE3o" para executar.';
+      consoleEl.innerHTML = `<div class="log-entry debug">${emptyMsg}</div>`;
+      return;
+    }
+    logs.forEach((log) => {
+      const cleanedMessage = (log.message || "").replace(/\s*\(ID:\s*[^)]+\)/gi, "").replace(/\s*\[(node_[^\]]+|[0-9a-f-]{36})\]/gi, "");
+      let title = log.nodeTitle;
+      let desc = log.nodeDescription;
+      if (!title && log.nodeId) {
+        const node = this.graph.nodes.find((n2) => n2.id === log.nodeId);
+        if (node) {
+          title = node.data?.label || BLOCK_CATALOG?.[node.type]?.name || node.type;
+          desc = node.data?.description || BLOCK_CATALOG?.[node.type]?.description || "";
+        }
       }
-      const statusText = backdrop.querySelector("#modalDebugStatusText");
-      if (statusText)
-        statusText.textContent = "Execu\xE7\xE3o cancelada.";
+      const entry = document.createElement("div");
+      entry.className = `log-entry ${log.level || "info"}`;
+      const time = log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : "";
+      const timeSpan = time ? `<span class="log-timestamp">[${time}]</span>` : "";
+      const levelSpan = `<span class="log-level-tag">${(log.level || "INFO").toUpperCase()}</span>`;
+      const blockBadge = title ? `<span class="log-block-badge" title="${desc || title}" data-tooltip-desc="${desc || ""}">${title}</span>` : "";
+      const textSpan = `<span class="log-message-text">${cleanedMessage}</span>`;
+      entry.innerHTML = `${timeSpan} ${levelSpan} ${blockBadge} ${textSpan}`;
+      consoleEl.appendChild(entry);
     });
-    backdrop.querySelector("#btnModalRefreshTab")?.addEventListener("click", async () => {
-      await this.detectActiveWebTab();
-      const badge = backdrop.querySelector("#modalDebugTargetBadge");
-      const info = backdrop.querySelector("#modalDebugTargetInfo");
-      if (badge && this.activeWebTabInfo?.tabId) {
-        badge.textContent = `Aba #${this.activeWebTabInfo.tabId}`;
-      }
-      if (info && this.activeWebTabInfo?.title) {
-        info.innerHTML = `<strong>${this.activeWebTabInfo.title}</strong><br/><span style="color: #64748b; font-size: 10px;">${this.activeWebTabInfo.url}</span>`;
-      }
-    });
-    backdrop.querySelector("#btnModalFocusTab")?.addEventListener("click", () => {
-      this.focusTargetTab();
-    });
-    backdrop.querySelector("#btnModalNewTab")?.addEventListener("click", () => {
-      if (chrome.tabs?.create) {
-        chrome.tabs.create({ url: "about:blank", active: false }, (t) => {
-          if (t?.id) {
-            this.activeWebTabInfo = { tabId: t.id, title: "Nova Aba em Branco", url: "about:blank" };
-            const badge = backdrop.querySelector("#modalDebugTargetBadge");
-            const info = backdrop.querySelector("#modalDebugTargetInfo");
-            if (badge)
-              badge.textContent = `Aba #${t.id}`;
-            if (info)
-              info.innerHTML = `<strong>Nova Aba em Branco</strong><br/><span style="color: #64748b; font-size: 10px;">about:blank</span>`;
-            showToast("Aba em branco criada e selecionada como alvo.", "success");
-          }
-        });
-      }
-    });
-    backdrop.querySelector("#btnModalClearLogs")?.addEventListener("click", () => {
-      this.clearLogs();
-    });
-    const searchInput = backdrop.querySelector("#modalLogSearchInput");
-    searchInput?.addEventListener("input", () => {
-      const q = searchInput.value.toLowerCase().trim();
-      modalConsole?.querySelectorAll(".log-entry").forEach((el) => {
-        el.style.display = !q || el.textContent.toLowerCase().includes(q) ? "block" : "none";
-      });
-    });
-    const closeModal = () => {
-      backdrop.remove();
-      window.removeEventListener("keydown", onKeyDown);
-    };
-    backdrop.querySelector("#btnCloseDebugModal")?.addEventListener("click", closeModal);
-    backdrop.querySelector("#btnFooterCloseDebug")?.addEventListener("click", closeModal);
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") {
-        closeModal();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
+    consoleEl.scrollTop = consoleEl.scrollHeight;
   }
   initBlockCatalogUI() {
     const container = document.getElementById("categoriesContainer");
@@ -32169,7 +32565,7 @@ var VisualEditorApp = class {
   initGlobalEvents() {
     document.getElementById("btnCreateNewFlow")?.addEventListener("click", () => this.createNewFlow());
     document.getElementById("btnTabNewFlow")?.addEventListener("click", () => {
-      this.tabManager.openDashboardTab();
+      this.tabManager.openNewHomeTab();
     });
     document.getElementById("btnDashboardImport")?.addEventListener("click", () => {
       document.getElementById("jsonFileInput")?.click();
@@ -32340,13 +32736,17 @@ var VisualEditorApp = class {
       document.querySelectorAll(".graph-node").forEach((el) => el.classList.remove("selected"));
       this.openBlocksSidebar();
     });
-    document.getElementById("btnDebugFlow")?.addEventListener("click", () => this.openExpandedDebugModal());
-    document.getElementById("btnExpandDebugModal")?.addEventListener("click", () => this.openExpandedDebugModal());
+    document.getElementById("btnDebugFlow")?.addEventListener("click", () => this.openDebugSidebar());
     document.getElementById("btnRunDebugActiveTab")?.addEventListener("click", () => this.runCurrentFlow(true));
-    document.getElementById("btnRefreshTargetTab")?.addEventListener("click", () => this.detectActiveWebTab());
-    document.getElementById("btnFocusTargetTab")?.addEventListener("click", () => this.focusTargetTab());
     document.getElementById("btnClearLogs")?.addEventListener("click", () => this.clearLogs());
     document.getElementById("btnExitGhostMode")?.addEventListener("click", () => this.exitGhostMode());
+    document.getElementById("btnStopDebugActiveTab")?.addEventListener("click", () => {
+      if (chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ action: "CANCEL_AUTOMATION", payload: { automationId: this.graph.metadata?.id } });
+      }
+      showToast("Solicita\xE7\xE3o de cancelamento enviada.", "info");
+      this.appendLog({ timestamp: Date.now(), level: "warn", message: "Depura\xE7\xE3o interrompida pelo usu\xE1rio." });
+    });
     document.getElementById("dashTabFlows")?.addEventListener("click", () => this.switchDashboardTab("flows"));
     document.getElementById("dashTabHistory")?.addEventListener("click", () => this.switchDashboardTab("history"));
     document.getElementById("btnRefreshGlobalHistory")?.addEventListener("click", () => this.renderGlobalHistory());
@@ -32432,12 +32832,22 @@ var VisualEditorApp = class {
         }
       } else if (msg.type === "NODE_ERROR") {
         this.unhighlightActiveNode(msg.nodeId);
-        this.appendLog({ timestamp: Date.now(), level: "error", message: `Erro no bloco [${msg.nodeId}]: ${msg.error}` });
+        const node = this.graph.nodes.find((n2) => n2.id === msg.nodeId);
+        const nodeTitle = node?.data?.label || BLOCK_CATALOG?.[node?.type || ""]?.name || "Bloco";
+        const nodeDesc = node?.data?.description || BLOCK_CATALOG?.[node?.type || ""]?.description || "";
+        this.appendLog({
+          timestamp: Date.now(),
+          level: "error",
+          message: `Falha na execu\xE7\xE3o: ${msg.error}`,
+          nodeId: msg.nodeId,
+          nodeTitle,
+          nodeDescription: nodeDesc
+        });
         showToast(`Erro no bloco: ${msg.error}`, "error");
       } else if (msg.type === "LOG") {
         this.appendLog(msg.log);
       } else if (msg.type === "STATUS_CHANGE") {
-        this.appendLog({ timestamp: Date.now(), level: "info", message: `Status alterado para: ${msg.status}` });
+        this.appendLog({ timestamp: Date.now(), level: "info", message: `Status da automa\xE7\xE3o: ${msg.status}` });
       } else if (msg.type === "EXECUTION_RECORDED") {
         this.loadScopedHistory();
         this.renderGlobalHistory();
@@ -32472,32 +32882,7 @@ var VisualEditorApp = class {
       resizerLeft.style.display = "block";
   }
   openInspectorSidebar() {
-    if (this.currentView === "settings")
-      return;
-    const sidebarLeft = document.getElementById("sidebarLibrary");
-    const sidebarRight = document.getElementById("sidebarInspector");
-    const sidebarColors = document.getElementById("sidebarColors");
-    const sidebarVariables = document.getElementById("sidebarVariables");
-    const sidebarDebug = document.getElementById("sidebarDebug");
-    const resizerLeft = document.getElementById("resizerLeft");
-    const btnActivityBlocks = document.getElementById("btnActivityBlocks");
-    const btnActivityInspector = document.getElementById("btnActivityInspector");
-    const btnActivityColors = document.getElementById("btnActivityColors");
-    const btnActivityVariables = document.getElementById("btnActivityVariables");
-    const btnActivityDebug = document.getElementById("btnActivityDebug");
-    sidebarRight?.classList.remove("collapsed");
-    btnActivityInspector?.classList.add("active");
-    sidebarLeft?.classList.add("collapsed");
-    btnActivityBlocks?.classList.remove("active");
-    sidebarColors?.classList.add("collapsed");
-    btnActivityColors?.classList.remove("active");
-    sidebarVariables?.classList.add("collapsed");
-    btnActivityVariables?.classList.remove("active");
-    sidebarDebug?.classList.add("collapsed");
-    btnActivityDebug?.classList.remove("active");
     this.inspectorManager.renderInspector();
-    if (resizerLeft)
-      resizerLeft.style.display = "block";
   }
   openColorsSidebar() {
     if (this.currentView === "settings")
@@ -32581,6 +32966,12 @@ var VisualEditorApp = class {
     btnActivityVariables?.classList.remove("active");
     this.detectActiveWebTab();
     this.loadScopedHistory();
+    if (this.isGhostMode && this.ghostHistoricalRun) {
+      this.renderLogsToConsole(this.ghostHistoricalRun.logs || [], true, this.ghostHistoricalRun);
+    } else {
+      const flowId = this.graph?.metadata?.id;
+      this.renderLogsToConsole((flowId ? this.tabExecutionLogs.get(flowId) : void 0) || this.logs || [], false);
+    }
     if (resizerLeft)
       resizerLeft.style.display = "block";
   }
@@ -32777,9 +33168,15 @@ var VisualEditorApp = class {
     });
   }
 };
-window.addEventListener("DOMContentLoaded", () => {
-  new VisualEditorApp();
-});
+if (typeof window !== "undefined") {
+  window.VisualEditorApp = VisualEditorApp;
+  window.addEventListener("DOMContentLoaded", () => {
+    new VisualEditorApp();
+  });
+}
+export {
+  VisualEditorApp
+};
 /*! Bundled license information:
 
 regjsgen/regjsgen.js:

@@ -21082,8 +21082,22 @@ ${es5Code}
         let executed = false;
         let result = void 0;
         try {
-          const body = `"use strict"; return (async function(args, $args, WebAutomations, $wa, chrome, browser) {
+          const funcNames = Array.from(new Set(Array.from(injectedCode.matchAll(/(?:^|\n|\r|;)\s*function\s+([a-zA-Z0-9_$]+)\s*\(/g)).map((m) => m[1])));
+          const varNames = Array.from(new Set(Array.from(injectedCode.matchAll(/(?:^|\n|\r|;)\s*var\s+([a-zA-Z0-9_$]+)\s*=/g)).map((m) => m[1])));
+          let exportCode = "";
+          for (const fnName of funcNames) {
+            exportCode += `
+try { if (typeof ${fnName} === 'function') window['${fnName}'] = ${fnName}; } catch (_) {}`;
+          }
+          for (const vn of varNames) {
+            exportCode += `
+try { if (typeof ${vn} !== 'undefined') window['${vn}'] = ${vn}; } catch (_) {}`;
+          }
+          win.args = safeArgs;
+          win.$args = safeArgs;
+          const body = `return (async function(args, $args, WebAutomations, $wa, chrome, browser) {
 ${injectedCode}
+${exportCode}
 }).call(window, safeArgs, safeArgs, WebAutomationsHelper, WebAutomationsHelper, undefined, undefined);`;
           const fn = new Function("safeArgs", "WebAutomationsHelper", body);
           result = await fn(safeArgs, WebAutomationsHelper);
@@ -21107,7 +21121,7 @@ ${injectedCode}
         }
         scriptEl.setAttribute("data-wa-stage", "executed");
         let sanitizedResult = result;
-        if (result instanceof Element) {
+        if (typeof Element !== "undefined" && result instanceof Element) {
           sanitizedResult = {
             tagName: result.tagName,
             id: result.id,

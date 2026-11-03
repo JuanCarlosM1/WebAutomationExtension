@@ -9918,11 +9918,13 @@ var ExecutionContext = class {
     this.driver = driver;
     this.events = events;
   }
-  log(level, message, nodeId, payload) {
+  log(level, message, nodeId, payload, nodeTitle, nodeDescription) {
     const logItem = {
       timestamp: Date.now(),
       level,
       nodeId,
+      nodeTitle,
+      nodeDescription,
       message,
       payload
     };
@@ -10043,8 +10045,10 @@ var ExecutionEngine = class {
       await this.executeForLoop(node, graph, context);
       return;
     }
+    const nodeTitle = node.data?.label || node.type;
+    const nodeDescription = node.data?.description || "";
     context.events.onNodeStart?.(node);
-    context.log("debug", `Executando n\xF3 [${node.type}] (ID: ${node.id})`, node.id);
+    context.log("debug", `Executando n\xF3 "${nodeTitle}"`, node.id, void 0, nodeTitle, nodeDescription);
     const startTime = Date.now();
     let result;
     try {
@@ -10074,7 +10078,7 @@ var ExecutionEngine = class {
       context.state.recordNodeOutput(node.id, node.data?.label, outputData);
       context.nodeResults.set(node.id, result);
       context.events.onNodeError?.(node, error);
-      context.log("error", `Erro no n\xF3 [${node.id}]: ${error.message}`, node.id);
+      context.log("error", `Erro no n\xF3 "${nodeTitle}": ${error.message}`, node.id, void 0, nodeTitle, nodeDescription);
       if (graph.settings?.stopOnError !== false) {
         throw error;
       }
@@ -10100,8 +10104,10 @@ var ExecutionEngine = class {
   async executeTryCatch(node, graph, context) {
     const data2 = node.data;
     const errorVar = data2.errorVarName || "lastError";
+    const tryTitle = node.data?.label || "Try / Catch";
+    const tryDesc = node.data?.description || "Executa o bloco e captura poss\xEDveis erros";
     context.events.onNodeStart?.(node);
-    context.log("info", "Entrando no bloco Try / Catch...", node.id);
+    context.log("info", `Entrando no bloco "${tryTitle}"...`, node.id, void 0, tryTitle, tryDesc);
     const tryNodes = this.getNextNodes(node.id, graph, "try_body");
     const catchNodes = this.getNextNodes(node.id, graph, "catch_branch");
     const defaultNodes = this.getNextNodes(node.id, graph, "default");
@@ -10115,7 +10121,7 @@ var ExecutionEngine = class {
       succeeded = false;
       const errorMsg = err?.message || String(err);
       caughtError = errorMsg;
-      context.log("warn", `Exce\xE7\xE3o capturada no Try/Catch: ${errorMsg}`, node.id);
+      context.log("warn", `Exce\xE7\xE3o capturada no Try/Catch: ${errorMsg}`, node.id, void 0, tryTitle, tryDesc);
       context.state.set(errorVar, errorMsg);
       for (const cNode of catchNodes) {
         await this.traverseNode(cNode, graph, context);
@@ -10170,18 +10176,22 @@ var ExecutionEngine = class {
           data2.rightOperand
         );
       }
+      const whileTitle = node.data?.label || "While";
+      const whileDesc = node.data?.description || "Executa o loop enquanto a condi\xE7\xE3o for verdadeira";
       if (!conditionPassed) {
-        context.log("info", `Loop While finalizado (condi\xE7\xE3o falsa na itera\xE7\xE3o ${iteration}).`, node.id);
+        context.log("info", `Loop While finalizado (condi\xE7\xE3o falsa na itera\xE7\xE3o ${iteration}).`, node.id, void 0, whileTitle, whileDesc);
         break;
       }
       iteration++;
-      context.log("debug", `Executando itera\xE7\xE3o #${iteration} do Loop While`, node.id);
+      context.log("debug", `Executando itera\xE7\xE3o #${iteration} do Loop While`, node.id, void 0, whileTitle, whileDesc);
       for (const bNode of bodyNodes) {
         await this.traverseNode(bNode, graph, context);
       }
     }
     if (iteration >= maxIterations) {
-      context.log("warn", `Loop While atingiu o limite de seguran\xE7a de ${maxIterations} itera\xE7\xF5es.`, node.id);
+      const whileTitle = node.data?.label || "While";
+      const whileDesc = node.data?.description || "Executa o loop enquanto a condi\xE7\xE3o for verdadeira";
+      context.log("warn", `Loop While atingiu o limite de seguran\xE7a de ${maxIterations} itera\xE7\xF5es.`, node.id, void 0, whileTitle, whileDesc);
     }
     const whileOutput = {
       completed: true,
@@ -10229,8 +10239,10 @@ var ExecutionEngine = class {
       const resolvedArray = typeof data2.arrayExpression === "string" ? context.state.resolvePath(data2.arrayExpression.replace(/[{}]/g, "").trim()) || [] : [];
       itemsToIterate = Array.isArray(resolvedArray) ? resolvedArray.slice(0, maxIterations) : [];
     }
+    const forTitle = node.data?.label || "For Loop";
+    const forDesc = node.data?.description || "Executa o loop por um n\xFAmero determinado de itera\xE7\xF5es";
     context.events.onNodeStart?.(node);
-    context.log("info", `Iniciando Loop For com ${itemsToIterate.length} itera\xE7\xF5es...`, node.id);
+    context.log("info", `Iniciando Loop For com ${itemsToIterate.length} itera\xE7\xF5es...`, node.id, void 0, forTitle, forDesc);
     const bodyNodes = this.getNextNodes(node.id, graph, "loop_body");
     const doneNodes = this.getNextNodes(node.id, graph, "loop_done");
     for (let i = 0; i < itemsToIterate.length; i++) {
@@ -10240,7 +10252,7 @@ var ExecutionEngine = class {
       const currentItem = itemsToIterate[i];
       context.state.set(indexVar, i);
       context.state.set(itemVar, currentItem);
-      context.log("debug", `Loop For: itera\xE7\xE3o ${i + 1}/${itemsToIterate.length}`, node.id);
+      context.log("debug", `Loop For: itera\xE7\xE3o ${i + 1}/${itemsToIterate.length}`, node.id, void 0, forTitle, forDesc);
       for (const bNode of bodyNodes) {
         await this.traverseNode(bNode, graph, context);
       }
@@ -10869,7 +10881,15 @@ var InjectJavascriptBlockHandler = class extends BaseBlockHandler {
   async execute(node, context) {
     const code = context.state.interpolate(node.data.code);
     const args = (node.data.args || []).map((arg) => context.state.get(arg));
-    const result = await context.driver.injectScript(code, node.data.context, args);
+    const allVars = context.state.getAll();
+    const result = await context.driver.injectScript(code, node.data.context, args, allVars);
+    if (typeof result === "object" && result !== null && !Array.isArray(result)) {
+      for (const [key, val] of Object.entries(result)) {
+        if (key !== "result" && key !== "executed" && key !== "context" && key !== "timestamp") {
+          context.state.set(key, val);
+        }
+      }
+    }
     if (node.data.saveResultToVar) {
       context.state.set(node.data.saveResultToVar, result);
     }
@@ -22547,6 +22567,7 @@ ${es5Code}
 // src/driver/ChromeBrowserDriver.ts
 var ChromeBrowserDriver = class {
   activeTabId;
+  scriptCounter = 0;
   constructor(initialTabId) {
     this.activeTabId = initialTabId;
   }
@@ -22556,12 +22577,15 @@ var ChromeBrowserDriver = class {
   isStudioPage(url) {
     if (!url)
       return false;
+    const isExtensionUrl = url.startsWith("chrome-extension://") || url.startsWith("moz-extension://");
+    if (!isExtensionUrl)
+      return false;
     return url.includes("editor.html") || url.includes("settings.html") || url.includes("analyzer.html");
   }
   isRestrictedTab(tab) {
     if (!tab?.url)
-      return false;
-    return tab.url.startsWith("chrome-extension://") || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://") || tab.url.startsWith("devtools://") || tab.url.startsWith("view-source:") || this.isStudioPage(tab.url);
+      return true;
+    return tab.url === "about:blank" || tab.url.startsWith("about:") || tab.url.startsWith("chrome-extension://") || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://") || tab.url.startsWith("devtools://") || tab.url.startsWith("view-source:") || this.isStudioPage(tab.url);
   }
   async getTargetTabId() {
     if (this.activeTabId) {
@@ -22596,7 +22620,7 @@ var ChromeBrowserDriver = class {
       return activeTab.id;
     }
     if (chrome.tabs?.create) {
-      const newTab = await chrome.tabs.create({ url: "about:blank", active: false });
+      const newTab = await chrome.tabs.create({ url: "https://example.com", active: false });
       this.activeTabId = newTab.id;
       return newTab.id;
     }
@@ -22990,43 +23014,259 @@ var ChromeBrowserDriver = class {
     });
     return res2?.result || [];
   }
-  async injectScript(code, context, args = []) {
+  async injectScript(code, context, args = [], vars = {}) {
+    const serializeFunctions = (data2) => {
+      if (typeof data2 === "function") {
+        return {
+          __wa_func: true,
+          name: data2.name || "",
+          code: data2.toString()
+        };
+      }
+      if (typeof Element !== "undefined" && data2 instanceof Element) {
+        return {
+          tagName: data2.tagName,
+          id: data2.id,
+          className: data2.className,
+          textContent: data2.textContent?.slice(0, 500) || ""
+        };
+      }
+      if (Array.isArray(data2)) {
+        return data2.map(serializeFunctions);
+      }
+      if (data2 && typeof data2 === "object") {
+        const out = {};
+        for (const [k, v] of Object.entries(data2)) {
+          out[k] = serializeFunctions(v);
+        }
+        return out;
+      }
+      return data2;
+    };
+    const deserializeFunctions = (data2) => {
+      if (data2 && typeof data2 === "object" && data2.__wa_func && data2.code) {
+        try {
+          const trimmed = data2.code.trim();
+          return new Function(`return (${trimmed});`)();
+        } catch {
+          return data2;
+        }
+      }
+      if (Array.isArray(data2)) {
+        return data2.map(deserializeFunctions);
+      }
+      if (data2 && typeof data2 === "object") {
+        const out = {};
+        for (const [k, v] of Object.entries(data2)) {
+          out[k] = deserializeFunctions(v);
+        }
+        return out;
+      }
+      return data2;
+    };
+    const createScopeVars = (dArgs, dVars) => {
+      const scopeVars = {
+        args: dArgs,
+        $args: dArgs,
+        $vars: dVars,
+        chrome: void 0,
+        browser: void 0,
+        document: typeof document !== "undefined" ? document : void 0
+      };
+      if (Array.isArray(dArgs)) {
+        dArgs.forEach((val, idx) => {
+          scopeVars[`arg${idx}`] = val;
+        });
+      }
+      return scopeVars;
+    };
     if (context === "background") {
-      const fn = new Function(...args.map((_, i) => `arg${i}`), code);
-      return fn(...args);
+      const deserializedArgs2 = deserializeFunctions(serializeFunctions(args));
+      const deserializedVars2 = deserializeFunctions(serializeFunctions(vars));
+      const evalRes = SafeJsEvaluator.evaluate(
+        `"use strict"; return (function(args, $args, $vars, window, globalThis, parent, top) {
+${code}
+})(args, $args, $vars, undefined, undefined, undefined, undefined);`,
+        createScopeVars(deserializedArgs2, deserializedVars2),
+        true
+      );
+      return evalRes !== void 0 ? deserializeFunctions(evalRes) : { success: true, executed: true };
     }
     const tabId = await this.getTargetTabId();
-    const tab = await chrome.tabs.get(tabId).catch(() => null);
-    const isExtensionPage = !tab?.url || this.isRestrictedTab(tab);
-    if (isExtensionPage) {
-      const evalRes = SafeJsEvaluator.evaluate(`(function(args, $args) {
-${code}
-})(args, args)`, {
-        args,
-        $args: args,
-        chrome: void 0,
-        browser: void 0
-      });
-      return evalRes !== void 0 ? evalRes : { success: true, executed: true };
+    const scriptId = `script${String(this.scriptCounter++).padStart(3, "0")}`;
+    const serializedArgs = serializeFunctions(args);
+    const serializedVars = serializeFunctions(vars);
+    if (chrome.tabs?.sendMessage) {
+      try {
+        const resp = await new Promise((resolve, reject) => {
+          chrome.tabs.sendMessage(
+            tabId,
+            { action: "INJECT_SCRIPT", payload: { code, args: serializedArgs, vars: serializedVars, scriptId } },
+            (response) => {
+              if (chrome.runtime?.lastError) {
+                return reject(new Error(chrome.runtime.lastError.message));
+              }
+              resolve(response);
+            }
+          );
+        });
+        if (resp?.success && resp.data) {
+          return deserializeFunctions(resp.data.result !== void 0 ? resp.data.result : { success: true, executed: true });
+        }
+      } catch {
+      }
     }
     const [result] = await chrome.scripting.executeScript({
       target: { tabId },
-      world: "MAIN",
-      func: (scriptCode, scriptArgs) => {
+      func: (scriptCode, userArgs, userVars, targetScriptId) => {
         try {
-          const fn = new Function("args", scriptCode);
-          return fn(scriptArgs);
+          const targetParent = document.head || document.documentElement || document.body;
+          let scriptEl = document.getElementById(targetScriptId);
+          if (!scriptEl) {
+            scriptEl = document.createElement("script");
+            scriptEl.id = targetScriptId;
+            const isExt = typeof window !== "undefined" && (window.location.protocol === "chrome-extension:" || window.location.protocol === "moz-extension:");
+            const docNonce = typeof document !== "undefined" ? document.querySelector("script[nonce]")?.getAttribute("nonce") || document.currentScript?.nonce : void 0;
+            if (docNonce) {
+              scriptEl.setAttribute("nonce", docNonce);
+              scriptEl.nonce = docNonce;
+              scriptEl.type = "text/javascript";
+            } else if (isExt) {
+              scriptEl.type = "text/plain";
+              scriptEl.setAttribute("data-script-type", "javascript");
+            } else {
+              scriptEl.type = "text/javascript";
+            }
+            scriptEl.className = `wa-injected-script ${targetScriptId}`;
+            scriptEl.setAttribute("data-script-id", targetScriptId);
+            scriptEl.setAttribute("data-injected-at", (/* @__PURE__ */ new Date()).toISOString());
+            scriptEl.setAttribute("data-wa-stage", "executing");
+            scriptEl.textContent = `/* WebAutomations Injected Block: ${targetScriptId} */
+try {
+  (function(args, $args, $vars, window, globalThis, parent, top) {
+    "use strict";
+    ${scriptCode}
+  })(${JSON.stringify(userArgs)}, ${JSON.stringify(userArgs)}, ${JSON.stringify(userVars)}, undefined, undefined, undefined, undefined);
+} catch(e) {}
+`;
+            if (targetParent) {
+              try {
+                targetParent.appendChild(scriptEl);
+              } catch {
+                scriptEl.type = "text/plain";
+                targetParent.appendChild(scriptEl);
+              }
+            }
+          }
+          const deserialize = (val) => {
+            if (val && typeof val === "object" && val.__wa_func && val.code) {
+              try {
+                return new Function(`return (${val.code.trim()});`)();
+              } catch {
+                return val;
+              }
+            }
+            if (Array.isArray(val))
+              return val.map(deserialize);
+            if (val && typeof val === "object") {
+              const o = {};
+              for (const [k, v] of Object.entries(val)) {
+                o[k] = deserialize(v);
+              }
+              return o;
+            }
+            return val;
+          };
+          const scopeArgs = deserialize(Array.isArray(userArgs) ? userArgs : []);
+          const scopeVars = deserialize(userVars || {});
+          const fn = new Function(
+            "args",
+            "$args",
+            "$vars",
+            "window",
+            "globalThis",
+            "parent",
+            "top",
+            "document",
+            `"use strict";
+${scriptCode}`
+          );
+          const evalResult = fn(
+            scopeArgs,
+            scopeArgs,
+            scopeVars,
+            void 0,
+            void 0,
+            void 0,
+            void 0,
+            document
+          );
+          if (scriptEl) {
+            scriptEl.setAttribute("data-wa-stage", "executed");
+          }
+          const serialize = (val) => {
+            if (typeof val === "function") {
+              return { __wa_func: true, name: val.name || "", code: val.toString() };
+            }
+            if (typeof Element !== "undefined" && val instanceof Element) {
+              return {
+                tagName: val.tagName,
+                id: val.id,
+                className: val.className,
+                textContent: val.textContent?.slice(0, 500) || ""
+              };
+            }
+            if (Array.isArray(val))
+              return val.map(serialize);
+            if (val && typeof val === "object") {
+              const o = {};
+              for (const [k, v] of Object.entries(val)) {
+                o[k] = serialize(v);
+              }
+              return o;
+            }
+            return val;
+          };
+          return { success: true, result: serialize(evalResult) };
         } catch (err) {
-          return { __isError: true, message: err?.message || String(err), stack: err?.stack };
+          const s = document.getElementById(targetScriptId);
+          if (s) {
+            s.setAttribute("data-wa-stage", "error");
+            s.setAttribute("data-error", err?.message || String(err));
+          }
+          return { __isError: true, message: err?.message || String(err) };
         }
       },
-      args: [code, args]
+      args: [code, serializedArgs, serializedVars, scriptId]
     });
     const res2 = result?.result;
     if (res2 && res2.__isError) {
       throw new Error(res2.message);
     }
-    return res2;
+    if (res2 && res2.result !== void 0) {
+      return deserializeFunctions(res2.result);
+    }
+    const deserializedArgs = deserializeFunctions(serializedArgs);
+    const deserializedVars = deserializeFunctions(serializedVars);
+    try {
+      const evalRes = SafeJsEvaluator.evaluate(
+        `"use strict"; return (function(args, $args, $vars, window, globalThis, parent, top) {
+${code}
+})(args, $args, $vars, undefined, undefined, undefined, undefined);`,
+        createScopeVars(deserializedArgs, deserializedVars),
+        true
+      );
+      return evalRes !== void 0 ? deserializeFunctions(evalRes) : { success: true, executed: true };
+    } catch (err) {
+      if (typeof document !== "undefined") {
+        const lastScript = document.querySelector("script.wa-injected-script:last-of-type") || document.querySelector('script[data-wa-stage="executed"]:last-of-type');
+        if (lastScript) {
+          lastScript.setAttribute("data-wa-stage", "error");
+          lastScript.setAttribute("data-error", err?.message || String(err));
+        }
+      }
+      throw err;
+    }
   }
   async injectHtml(html, targetSelector, position, selectorType) {
     const tabId = await this.getTargetTabId();
@@ -23206,6 +23446,255 @@ var DEFAULT_AUTOMATION = {
     { id: "e5", source: "node_extract", target: "node_inject_banner" }
   ],
   viewport: { x: 0, y: 0, zoom: 1 }
+};
+var ALL_BLOCKS_TEST_AUTOMATION = {
+  schemaVersion: "1.0.0",
+  metadata: {
+    id: "auto_test_all_blocks_showcase",
+    name: "Teste de Todos os Blocos",
+    description: "Fluxo completo de teste contendo todos os 27 tipos de blocos dispon\xEDveis no cat\xE1logo.",
+    version: "1.0.0",
+    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    tags: ["teste", "completo", "todos-os-blocos", "catalogo"]
+  },
+  settings: {
+    stopOnError: false,
+    defaultTimeoutMs: 1e4,
+    logLevel: "debug",
+    parallelBranchesEnabled: false
+  },
+  variables: {
+    contador: 5,
+    urlTeste: "https://example.com",
+    termoBusca: "Automa\xE7\xE3o Web",
+    resultadoExtraido: "",
+    itensLista: []
+  },
+  nodes: [
+    {
+      id: "node_start",
+      type: "start",
+      category: "flow_logic",
+      position: { x: 40, y: 80 },
+      data: { label: "1. In\xEDcio", triggerType: "manual" }
+    },
+    {
+      id: "node_note",
+      type: "note",
+      category: "flow_logic",
+      position: { x: 40, y: 220 },
+      data: { label: "Nota Informativa", noteText: "Fluxo contendo todos os 27 blocos do sistema para testes e valida\xE7\xE3o." }
+    },
+    {
+      id: "node_set_var",
+      type: "set_variable",
+      category: "data_network",
+      position: { x: 260, y: 80 },
+      data: { label: "2. Definir Vari\xE1vel", varName: "contador", evaluationType: "literal", valueExpression: "5" }
+    },
+    {
+      id: "node_delay",
+      type: "delay",
+      category: "flow_logic",
+      position: { x: 480, y: 80 },
+      data: { label: "3. Aguardar (Delay)", durationMs: 500 }
+    },
+    {
+      id: "node_navigate",
+      type: "navigate",
+      category: "browser_navigation",
+      position: { x: 700, y: 80 },
+      data: { label: "4. Navegar", url: "https://example.com", waitUntil: "domcontentloaded", timeoutMs: 1e4 }
+    },
+    {
+      id: "node_tab_action",
+      type: "tab_action",
+      category: "browser_navigation",
+      position: { x: 920, y: 80 },
+      data: { label: "5. A\xE7\xE3o de Aba", action: "query_tab", active: true, queryType: "url", queryValue: "example.com" }
+    },
+    {
+      id: "node_history_nav",
+      type: "history_navigation",
+      category: "browser_navigation",
+      position: { x: 1140, y: 80 },
+      data: { label: "6. Hist\xF3rico Navegador", action: "reload" }
+    },
+    {
+      id: "node_inject_html",
+      type: "inject_html",
+      category: "injection_customization",
+      position: { x: 1140, y: 240 },
+      data: {
+        label: "7. Injetar HTML",
+        html: '<div id="test-sandbox" style="padding:10px;background:#1e293b;color:#fff;"><button id="test-btn">Clique Teste</button><input id="test-input" placeholder="Digite aqui" /></div>',
+        targetSelector: "body",
+        position: "beforeend"
+      }
+    },
+    {
+      id: "node_inject_css",
+      type: "inject_css",
+      category: "injection_customization",
+      position: { x: 920, y: 240 },
+      data: { label: "8. Injetar CSS", css: "#test-sandbox { border: 2px solid #6366f1; border-radius: 8px; }" }
+    },
+    {
+      id: "node_inject_js",
+      type: "inject_javascript",
+      category: "injection_customization",
+      position: { x: 700, y: 240 },
+      data: { label: "9. Injetar JS", code: 'console.log("Teste WebAutomations executando com sucesso!"); return { ok: true };' }
+    },
+    {
+      id: "node_web_component",
+      type: "web_component",
+      category: "injection_customization",
+      position: { x: 480, y: 240 },
+      data: { label: "10. Web Component", tagName: "custom-automation-widget", template: "<div>Widget Ativo</div>" }
+    },
+    {
+      id: "node_wait_el",
+      type: "wait_for_element",
+      category: "dom_interaction",
+      position: { x: 260, y: 240 },
+      data: { label: "11. Esperar Elemento", selector: "body", selectorType: "css", state: "visible", timeoutMs: 5e3 }
+    },
+    {
+      id: "node_hover",
+      type: "hover_focus",
+      category: "dom_interaction",
+      position: { x: 40, y: 400 },
+      data: { label: "12. Foco / Hover", selector: "h1", selectorType: "css", action: "hover", timeoutMs: 3e3 }
+    },
+    {
+      id: "node_type_input",
+      type: "type_input",
+      category: "dom_interaction",
+      position: { x: 260, y: 400 },
+      data: { label: "13. Digitar Input", selector: "input", selectorType: "css", text: "Teste de Digita\xE7\xE3o", mode: "instant", timeoutMs: 3e3 }
+    },
+    {
+      id: "node_press_key",
+      type: "press_key",
+      category: "dom_interaction",
+      position: { x: 480, y: 400 },
+      data: { label: "14. Pressionar Tecla", key: "Enter", selector: "body", selectorType: "css" }
+    },
+    {
+      id: "node_click",
+      type: "click_element",
+      category: "dom_interaction",
+      position: { x: 700, y: 400 },
+      data: { label: "15. Clicar Elemento", selector: "a, button", selectorType: "css", clickType: "single", timeoutMs: 3e3 }
+    },
+    {
+      id: "node_scroll",
+      type: "scroll",
+      category: "dom_interaction",
+      position: { x: 920, y: 400 },
+      data: { label: "16. Rolar P\xE1gina", target: "bottom", deltaY: 300, smooth: true }
+    },
+    {
+      id: "node_extract",
+      type: "extract_data",
+      category: "data_network",
+      position: { x: 1140, y: 400 },
+      data: { label: "17. Extrair Dados", selector: "h1", selectorType: "css", extractType: "innerText", saveToVar: "resultadoExtraido" }
+    },
+    {
+      id: "node_scrape_list",
+      type: "scrape_list",
+      category: "data_network",
+      position: { x: 1140, y: 560 },
+      data: { label: "18. Scrape de Lista", selector: "p", selectorType: "css", fields: [{ name: "texto", subSelector: "", extractType: "innerText", attributeName: "" }], saveToVar: "itensLista", maxItems: 10 }
+    },
+    {
+      id: "node_http_request",
+      type: "http_request",
+      category: "data_network",
+      position: { x: 920, y: 560 },
+      data: { label: "19. Requisi\xE7\xE3o HTTP", url: "https://httpbin.org/get", method: "GET", responseType: "json", saveResponseToVar: "httpResp" }
+    },
+    {
+      id: "node_export_file",
+      type: "export_file",
+      category: "data_network",
+      position: { x: 700, y: 560 },
+      data: { label: "20. Exportar Arquivo", format: "json", fileName: "dados_teste.json", dataExpression: "{{itensLista}}" }
+    },
+    {
+      id: "node_if_exists",
+      type: "if_element_exists",
+      category: "flow_logic",
+      position: { x: 480, y: 560 },
+      data: { label: "21. Elemento Existe?", selector: "h1", selectorType: "css", timeoutMs: 2e3 }
+    },
+    {
+      id: "node_switch",
+      type: "switch",
+      category: "flow_logic",
+      position: { x: 260, y: 560 },
+      data: { label: "22. Switch Condicional", expression: "{{contador}}", cases: [{ value: "5", label: "Caso 5" }, { value: "10", label: "Caso 10" }], defaultCaseEnabled: true }
+    },
+    {
+      id: "node_for_loop",
+      type: "for_loop",
+      category: "flow_logic",
+      position: { x: 40, y: 560 },
+      data: { label: "23. Loop For", loopType: "count", countExpression: 3, itemVarName: "i", indexVarName: "idx", maxIterations: 10 }
+    },
+    {
+      id: "node_while_loop",
+      type: "while_loop",
+      category: "flow_logic",
+      position: { x: 40, y: 720 },
+      data: { label: "24. Loop While", conditionExpression: "{{contador}} < 3", maxIterations: 5 }
+    },
+    {
+      id: "node_try_catch",
+      type: "try_catch",
+      category: "flow_logic",
+      position: { x: 260, y: 720 },
+      data: { label: "25. Try / Catch", continueOnCatch: true, saveErrorToVar: "ultimoErro" }
+    },
+    {
+      id: "node_group",
+      type: "group",
+      category: "flow_logic",
+      position: { x: 480, y: 720 },
+      data: { label: "26. Grupo de A\xE7\xF5es", collapsed: false, color: "#3b82f6" }
+    }
+  ],
+  edges: [
+    { id: "e1", source: "node_start", target: "node_set_var" },
+    { id: "e2", source: "node_set_var", target: "node_delay" },
+    { id: "e3", source: "node_delay", target: "node_navigate" },
+    { id: "e4", source: "node_navigate", target: "node_tab_action" },
+    { id: "e5", source: "node_tab_action", target: "node_history_nav" },
+    { id: "e6", source: "node_history_nav", target: "node_inject_html" },
+    { id: "e7", source: "node_inject_html", target: "node_inject_css" },
+    { id: "e8", source: "node_inject_css", target: "node_inject_js" },
+    { id: "e9", source: "node_inject_js", target: "node_web_component" },
+    { id: "e10", source: "node_web_component", target: "node_wait_el" },
+    { id: "e11", source: "node_wait_el", target: "node_hover" },
+    { id: "e12", source: "node_hover", target: "node_type_input" },
+    { id: "e13", source: "node_type_input", target: "node_press_key" },
+    { id: "e14", source: "node_press_key", target: "node_click" },
+    { id: "e15", source: "node_click", target: "node_scroll" },
+    { id: "e16", source: "node_scroll", target: "node_extract" },
+    { id: "e17", source: "node_extract", target: "node_scrape_list" },
+    { id: "e18", source: "node_scrape_list", target: "node_http_request" },
+    { id: "e19", source: "node_http_request", target: "node_export_file" },
+    { id: "e20", source: "node_export_file", target: "node_if_exists" },
+    { id: "e21", source: "node_if_exists", target: "node_switch" },
+    { id: "e22", source: "node_switch", target: "node_for_loop" },
+    { id: "e23", source: "node_for_loop", target: "node_while_loop" },
+    { id: "e24", source: "node_while_loop", target: "node_try_catch" },
+    { id: "e25", source: "node_try_catch", target: "node_group" }
+  ],
+  viewport: { x: 0, y: 0, zoom: 0.8 }
 };
 
 // src/editor/modules/executionHistoryManager.ts
@@ -23880,7 +24369,14 @@ var ExtensionController = class {
       initialVariables,
       finalVariables: ctx.state ? ctx.state.getAll() : {},
       blockSnapshots,
-      logs: ctx.logs || []
+      logs: (ctx.logs || []).map((l) => ({
+        timestamp: l.timestamp || Date.now(),
+        level: l.level || "info",
+        message: l.message || "",
+        nodeId: l.nodeId,
+        nodeTitle: l.nodeTitle,
+        nodeDescription: l.nodeDescription
+      }))
     };
     await ExecutionHistoryManager.save(historyItem);
     ctx.historyItem = historyItem;
